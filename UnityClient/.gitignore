@@ -1,0 +1,36 @@
+# ================================
+# Unity 전용 필수 제외 목록
+# ================================
+/[Ll]ibrary/
+/[Tt]emp/
+/[Oo]bj/
+/[Bb]uild/
+/[Bb]uilds/
+/[Ll]ogs/
+/[Uu]ser[Ss]ettings/
+/[Mm]emoryCaptures/
+
+# Asset Store 패키지 임시 파일
+AssetStoreTools*
+
+# Visual Studio / VS Code / Rider 등 IDE 임시 파일
+.vs/
+.idea/
+.vscode/
+*.csproj
+*.unityproj
+*.sln
+*.suo
+*.user
+*.userprefs
+*.pidb
+*.booproj
+
+# 빌드 결과물 (APK 등 대용량 파일)
+*.apk
+*.aab
+*.unitypackage
+
+# OS 생성 임시 파일
+.DS_Store
+Thumbs.db

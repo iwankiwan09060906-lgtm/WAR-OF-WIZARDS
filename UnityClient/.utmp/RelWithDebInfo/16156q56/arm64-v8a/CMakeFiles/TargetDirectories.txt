@@ -1,0 +1,5 @@
+C:/Users/Kiwan/Desktop/20/3-1/XRProject/2/XRProject/.utmp/RelWithDebInfo/16156q56/arm64-v8a/CMakeFiles/edit_cache.dir
+C:/Users/Kiwan/Desktop/20/3-1/XRProject/2/XRProject/.utmp/RelWithDebInfo/16156q56/arm64-v8a/CMakeFiles/rebuild_cache.dir
+C:/Users/Kiwan/Desktop/20/3-1/XRProject/2/XRProject/.utmp/RelWithDebInfo/16156q56/arm64-v8a/GameActivity/CMakeFiles/game.dir
+C:/Users/Kiwan/Desktop/20/3-1/XRProject/2/XRProject/.utmp/RelWithDebInfo/16156q56/arm64-v8a/GameActivity/CMakeFiles/edit_cache.dir
+C:/Users/Kiwan/Desktop/20/3-1/XRProject/2/XRProject/.utmp/RelWithDebInfo/16156q56/arm64-v8a/GameActivity/CMakeFiles/rebuild_cache.dir
