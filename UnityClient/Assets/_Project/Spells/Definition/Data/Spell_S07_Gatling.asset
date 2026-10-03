@@ -1,0 +1,34 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: db754457205836d429bb6e51702b7605, type: 3}
+  m_Name: Spell_S07_Gatling
+  m_EditorClassIdentifier: Assembly-CSharp::SpellboundVR.Spells.SpellDefinition
+  SpellId: 7
+  DisplayName: Gatling
+  VfxName: Gatling
+  ThemeColor: {r: 1, g: 0.9, b: 0.3, a: 1}
+  Tier: 0
+  Targeting: 0
+  Executor: 0
+  Behavior: 1
+  Dodgeable: 1
+  BaseDamage: 22
+  Radius: 0.4
+  MaxDepth: 1
+  ProjectileSpeed: 12
+  ShotCount: 8
+  ShotInterval: 0.12
+  StatusEffectId: 
+  EffectDuration: 0
+  ShieldAmount: 0
+  RegenDelay: 3
+  RegenPerSecond: 0

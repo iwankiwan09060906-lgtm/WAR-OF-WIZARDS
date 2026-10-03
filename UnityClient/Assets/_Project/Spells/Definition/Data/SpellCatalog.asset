@@ -1,0 +1,18 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e96f53c2e3f973043b6797ed8f7121a5, type: 3}
+  m_Name: SpellCatalog
+  m_EditorClassIdentifier: Assembly-CSharp::SpellboundVR.Spells.SpellCatalog
+  Spells:
+  - {fileID: 11400000, guid: 5b1f9e7acef5b6a4fbfa6d1f577c1874, type: 2}
+  - {fileID: 11400000, guid: 4a62886b286bf7141b07ab4adc7de69a, type: 2}
+  - {fileID: 11400000, guid: 027cf9c940c3267419cb1cc25833de46, type: 2}

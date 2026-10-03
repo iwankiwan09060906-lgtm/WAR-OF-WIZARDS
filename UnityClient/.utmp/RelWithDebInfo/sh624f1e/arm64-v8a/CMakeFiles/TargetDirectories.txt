@@ -1,0 +1,8 @@
+C:/Users/Kiwan/Desktop/20/3-1/XRProject/WAR-OF-WIZARDS/UnityClient/.utmp/RelWithDebInfo/sh624f1e/arm64-v8a/CMakeFiles/edit_cache.dir
+C:/Users/Kiwan/Desktop/20/3-1/XRProject/WAR-OF-WIZARDS/UnityClient/.utmp/RelWithDebInfo/sh624f1e/arm64-v8a/CMakeFiles/rebuild_cache.dir
+C:/Users/Kiwan/Desktop/20/3-1/XRProject/WAR-OF-WIZARDS/UnityClient/.utmp/RelWithDebInfo/sh624f1e/arm64-v8a/GameActivity/CMakeFiles/game.dir
+C:/Users/Kiwan/Desktop/20/3-1/XRProject/WAR-OF-WIZARDS/UnityClient/.utmp/RelWithDebInfo/sh624f1e/arm64-v8a/GameActivity/CMakeFiles/edit_cache.dir
+C:/Users/Kiwan/Desktop/20/3-1/XRProject/WAR-OF-WIZARDS/UnityClient/.utmp/RelWithDebInfo/sh624f1e/arm64-v8a/GameActivity/CMakeFiles/rebuild_cache.dir
+C:/Users/Kiwan/Desktop/20/3-1/XRProject/WAR-OF-WIZARDS/UnityClient/.utmp/RelWithDebInfo/sh624f1e/arm64-v8a/FramePacing/CMakeFiles/swappywrapper.dir
+C:/Users/Kiwan/Desktop/20/3-1/XRProject/WAR-OF-WIZARDS/UnityClient/.utmp/RelWithDebInfo/sh624f1e/arm64-v8a/FramePacing/CMakeFiles/edit_cache.dir
+C:/Users/Kiwan/Desktop/20/3-1/XRProject/WAR-OF-WIZARDS/UnityClient/.utmp/RelWithDebInfo/sh624f1e/arm64-v8a/FramePacing/CMakeFiles/rebuild_cache.dir

@@ -1,0 +1,55 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b39bab8cca3ece2479a2ce55c63550ce, type: 3}
+  m_Name: MatchRuleConfig
+  m_EditorClassIdentifier: Assembly-CSharp::SpellboundVR.Core.MatchRuleConfig
+  CountdownSeconds: 3
+  AutoRestartDelay: 10
+  BotFillWaitSeconds: 10
+  LocalTickInterval: 0.033333335
+  PlayerMaxHp: 1000
+  NormalCooldown: 5
+  HighPowerCooldown: 20
+  HighPowerUsesPerGame: 3
+  MaxHighPowerInDeck: 2
+  AllowPartialDeck: 1
+  TowerAliveSkillDamageRatio: 0.2
+  TowerDestroyedAttackBonus: 0.2
+  NexusDestroyedAttackBonus: 0.4
+  NexusRegenInterval: 10
+  NexusRegenAmount: 25
+  ScalingInterval: 300
+  ScalingAttackPerStage: 0.15
+  ScalingCooldownReductionPerStage: 0.1
+  MinCooldownRatio: 0.5
+  AfkForfeitSeconds: 30
+  AfkWarningSeconds: 20
+  AimDurationSeconds: 1
+  RuneReadyTimeoutSeconds: 5
+  MoveCooldownSeconds: 0.35
+  BaseAccuracy: 1
+  WaveInterval: 10
+  FirstWaveDelay: 5
+  MeleePerWave: 2
+  RangedPerWave: 1
+  BruteEveryNWaves: 3
+  MaxAliveUnitsPerTeam: 20
+  MinionMaxLifetime: 90
+  TowerMaxHp: 1500
+  TowerDamage: 35
+  TowerAttacksPerSecond: 1.2
+  TowerRange: 7
+  TowerComboBonusPerHit: 0.1
+  TowerComboMaxStacks: 5
+  StructureRadius: 1
+  NexusMaxHp: 2000
+  BreachPointOffset: 1.5

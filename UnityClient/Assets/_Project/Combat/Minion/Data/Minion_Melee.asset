@@ -1,0 +1,25 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c3ae6883eedc1de408433e55ae77bc30, type: 3}
+  m_Name: Minion_Melee
+  m_EditorClassIdentifier: Assembly-CSharp::SpellboundVR.Combat.MinionDefinition
+  Kind: 0
+  MaxHp: 120
+  Damage: 14
+  AttackInterval: 1
+  AttackRange: 0.9
+  MoveSpeed: 1.6
+  DetectRange: 6
+  BodyRadius: 0.35
+  StructureDamageMultiplier: 1
+  PrefersStructures: 0
+  TowerTargetPriority: 1

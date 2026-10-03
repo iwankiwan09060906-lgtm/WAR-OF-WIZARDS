@@ -1,0 +1,84 @@
+###############################################
+# Project Spellbound VR — .gitignore
+# Unity 프로젝트 루트는 UnityClient/ (모노레포 하위 폴더)
+# 패턴은 리딩 슬래시가 없으면 모든 깊이에서 매칭되므로
+# UnityClient/ 하위 폴더도 그대로 걸린다.
+###############################################
+
+## ---------- Unity가 자동 생성하는 폴더 ----------
+[Ll]ibrary/
+[Tt]emp/
+[Oo]bj/
+[Ll]ogs/
+[Mm]emoryCaptures/
+[Rr]ecordings/
+[Uu]ser[Ss]ettings/
+[Aa]ssets/AssetStoreTools*
+[Aa]ssets/Plugins/Editor/JetBrains*
+
+# Visual Studio / Rider / VS Code가 Unity 프로젝트에 대해 생성하는 파일
+.vs/
+.vsconfig
+*.pidb.meta
+*.pdb.meta
+*.mdb.meta
+*.booproj
+*.svd
+*.sln.docstates
+*.pidb
+*.suo
+*.user
+*.userprefs
+*.unityproj
+*.csproj
+*.sln
+
+# Unity 크래시 로그
+sysinfo.txt
+
+# Crashlytics
+crashlytics-build.properties
+
+# Unity Package Manager 캐시(폴더 트리는 유지)
+UnityClient/Packages/*
+!UnityClient/Packages/.keep
+
+## ---------- 빌드 산출물 ----------
+# §28: Builds/Quest, Builds/Server 폴더 트리는 유지하되 실제 산출물은 커밋하지 않는다
+Builds/Quest/*
+!Builds/Quest/.keep
+Builds/Server/*
+!Builds/Server/.keep
+*.apk
+*.aab
+*.unitypackage
+
+## ---------- GestureTools (Python) ----------
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+## ---------- Supabase CLI ----------
+Supabase/.branches/
+Supabase/.temp/
+.env
+.env.local
+*.env
+
+## ---------- OS ----------
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+## ---------- 에디터 / IDE ----------
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo

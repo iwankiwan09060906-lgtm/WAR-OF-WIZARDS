@@ -1,0 +1,68 @@
+###############################################
+# Project Spellbound VR — .gitattributes
+# §30 Git 협업 규칙: Unity YAML Smart Merge + Git LFS
+###############################################
+
+* text=auto eol=lf
+
+## ---------- 코드 ----------
+*.cs text diff=csharp eol=lf
+*.shader text eol=lf
+*.cginc text eol=lf
+*.hlsl text eol=lf
+*.py text eol=lf
+*.sql text eol=lf
+*.md text eol=lf
+*.json text eol=lf
+
+## ---------- Unity YAML 파일: Smart Merge (UnityYAMLMerge) ----------
+*.unity merge=unityyamlmerge eol=lf text
+*.prefab merge=unityyamlmerge eol=lf text
+*.asset merge=unityyamlmerge eol=lf text
+*.meta merge=unityyamlmerge eol=lf text
+*.anim merge=unityyamlmerge eol=lf text
+*.controller merge=unityyamlmerge eol=lf text
+*.mat merge=unityyamlmerge eol=lf text
+*.physicMaterial merge=unityyamlmerge eol=lf text
+*.physicsMaterial2D merge=unityyamlmerge eol=lf text
+*.preset merge=unityyamlmerge eol=lf text
+*.renderTexture merge=unityyamlmerge eol=lf text
+*.spriteatlas merge=unityyamlmerge eol=lf text
+
+## ---------- Git LFS: 3D 모델 ----------
+*.fbx filter=lfs diff=lfs merge=lfs -text
+*.blend filter=lfs diff=lfs merge=lfs -text
+*.obj filter=lfs diff=lfs merge=lfs -text
+*.dae filter=lfs diff=lfs merge=lfs -text
+*.3ds filter=lfs diff=lfs merge=lfs -text
+*.max filter=lfs diff=lfs merge=lfs -text
+
+## ---------- Git LFS: 이미지 / 텍스처 ----------
+*.png filter=lfs diff=lfs merge=lfs -text
+*.jpg filter=lfs diff=lfs merge=lfs -text
+*.jpeg filter=lfs diff=lfs merge=lfs -text
+*.tga filter=lfs diff=lfs merge=lfs -text
+*.tif filter=lfs diff=lfs merge=lfs -text
+*.tiff filter=lfs diff=lfs merge=lfs -text
+*.psd filter=lfs diff=lfs merge=lfs -text
+*.exr filter=lfs diff=lfs merge=lfs -text
+*.gif filter=lfs diff=lfs merge=lfs -text
+*.hdr filter=lfs diff=lfs merge=lfs -text
+
+## ---------- Git LFS: 오디오 / 비디오 ----------
+*.wav filter=lfs diff=lfs merge=lfs -text
+*.mp3 filter=lfs diff=lfs merge=lfs -text
+*.ogg filter=lfs diff=lfs merge=lfs -text
+*.mp4 filter=lfs diff=lfs merge=lfs -text
+*.mov filter=lfs diff=lfs merge=lfs -text
+
+## ---------- Git LFS: 폰트 / 패키지 / 빌드 산출물 ----------
+*.ttf filter=lfs diff=lfs merge=lfs -text
+*.otf filter=lfs diff=lfs merge=lfs -text
+*.unitypackage filter=lfs diff=lfs merge=lfs -text
+*.apk filter=lfs diff=lfs merge=lfs -text
+*.aab filter=lfs diff=lfs merge=lfs -text
+*.exe filter=lfs diff=lfs merge=lfs -text
+
+## ---------- 항상 LF 강제 (배치 스크립트 제외) ----------
+*.bat text eol=crlf
