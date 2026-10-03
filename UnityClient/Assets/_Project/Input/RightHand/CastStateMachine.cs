@@ -48,6 +48,9 @@ namespace SpellboundVR.Input
         private SpellDefinition _selectedSpell;
 
         public CastState State { get; private set; } = CastState.Idle;
+
+        /// <summary>마지막으로 그린 룬 궤적 (룬 샘플 녹화용 — Spellbound > Runes 메뉴)</summary>
+        public Vector2[] LastStroke { get; private set; }
         public int SelectedSlot => _selectedSlot;
         public SpellDefinition SelectedSpell => _selectedSpell;
         public float TimeInState => Time.time - _stateEnterTime;
@@ -130,6 +133,7 @@ namespace SpellboundVR.Input
         private void HandlePinchEnded(Vector2[] stroke)
         {
             if (State != CastState.Drawing) return;
+            LastStroke = stroke;
             if (!_input.IsRightHandTracked)
             {
                 Cancel(CastCancelReason.TrackingLost);

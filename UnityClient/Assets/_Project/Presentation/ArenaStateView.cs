@@ -23,7 +23,13 @@ namespace SpellboundVR.Presentation
             public Transform HpFill;
             public Vector3 Target;
             public int SeenFrame;
+            /// <summary>모델 프리팹의 Animator (int 파라미터 "State"가 있을 때만)</summary>
+            public Animator Animator;
+            public int LastState = -1;
         }
+
+        /// <summary>Animator int 파라미터: 0 이동 · 1 공격 · 2 돌파(이동) · 3 빙결 (UnitVisualState)</summary>
+        private static readonly int AnimStateHash = Animator.StringToHash("State");
 
         private sealed class StructureView
         {
@@ -47,13 +53,17 @@ namespace SpellboundVR.Presentation
         private readonly Dictionary<int, GameObject> _projectiles = new Dictionary<int, GameObject>(64);
         private readonly List<int> _removeBuffer = new List<int>(64);
         private readonly ObjectPool[,] _unitPools = new ObjectPool[2, 3];
-        private ObjectPool _projectilePool;
+        private readonly Dictionary<int, ObjectPool> _projectilePools = new Dictionary<int, ObjectPool>();
+        private Transform _poolRoot;
         private readonly StructureView[] _structures = new StructureView[4];
         private Transform _opponentAvatar;
         private Transform _opponentShield;
         private Transform _selfShieldRing;
         private MaterialPropertyBlock _block;
         private int _frame;
+
+        /// <summary>Commander 발판 윗면 높이 (ArenaLayout.commanderPlatformHeight)</summary>
+        private float PlatformHeight => _session.Layout != null ? _session.Layout.commanderPlatformHeight : 0f;
 
         public void Initialize(ClientSession session, VFXCatalog catalog, Transform head)
         {
@@ -72,7 +82,7 @@ namespace SpellboundVR.Presentation
                 _unitPools[t, 1] = new ObjectPool(() => CreateUnitVisual(team, MinionKind.Ranged), poolRoot, rangedPrewarm, "Unit_" + team + "_Ranged");
                 _unitPools[t, 2] = new ObjectPool(() => CreateUnitVisual(team, MinionKind.Brute), poolRoot, brutePrewarm, "Unit_" + team + "_Brute");
             }
-            _projectilePool = new ObjectPool(CreateProjectileVisual, poolRoot, projectilePrewarm, "Projectile");
+            _poolRoot = poolRoot;
 
             BuildStructures();
             BuildPlatforms();
@@ -102,6 +112,39 @@ namespace SpellboundVR.Presentation
             FallbackVisuals.ApplyTint(go, FallbackVisuals.TeamColor(team), _block);
             AttachHpBar(go.transform, kind == MinionKind.Brute ? 2.0f : 1.4f, 0.6f);
             return go;
+        }
+
+        private static Animator FindStateAnimator(GameObject go)
+        {
+            var anim = go.GetComponentInChildren<Animator>();
+            if (anim == null || anim.runtimeAnimatorController == null) return null;
+            var ps = anim.parameters;
+            for (int i = 0; i < ps.Length; i++)
+                if (ps[i].nameHash == AnimStateHash && ps[i].type == AnimatorControllerParameterType.Int) return anim;
+            return null;
+        }
+
+        /// <summary>스킬별 비행 탄환: VFX_{SkillId}_{Name}_Projectile 프리팹(+Z = 진행 방향), 없으면 테마색 구체</summary>
+        private ObjectPool GetProjectilePool(int spellId)
+        {
+            if (_projectilePools.TryGetValue(spellId, out var pool)) return pool;
+            var def = _session.Catalog.Get(spellId);
+            if (def != null && _catalog != null && _catalog.TryGet(def.GetVfxPrefabName(VfxPart.Projectile), out var prefab))
+            {
+                pool = new ObjectPool(prefab, _poolRoot, projectilePrewarm);
+            }
+            else
+            {
+                var color = def != null ? def.ThemeColor : new Color(1f, 0.9f, 0.3f);
+                pool = new ObjectPool(() =>
+                {
+                    var go = CreateProjectileVisual();
+                    go.GetComponent<Renderer>().sharedMaterial = FallbackVisuals.Opaque(color);
+                    return go;
+                }, _poolRoot, projectilePrewarm, "Projectile_" + spellId);
+            }
+            _projectilePools.Add(spellId, pool);
+            return pool;
         }
 
         private static GameObject CreateProjectileVisual()
@@ -182,7 +225,7 @@ namespace SpellboundVR.Presentation
                     var pad = FallbackVisuals.Primitive(PrimitiveType.Cylinder, "Pad_" + team + "_" + c,
                                                         FallbackVisuals.Transparent(FallbackVisuals.TeamColor(team) * new Color(1f, 1f, 1f, 0.35f)));
                     pad.transform.SetParent(root, false);
-                    pad.transform.position = _arena.ToWorld(_arena.PlayerPosition(team, c), 0.02f);
+                    pad.transform.position = _arena.ToWorld(_arena.PlayerPosition(team, c), PlatformHeight + 0.02f);
                     pad.transform.localScale = new Vector3(1.6f, 0.01f, 1.6f);
                 }
             }
@@ -248,7 +291,7 @@ namespace SpellboundVR.Presentation
                     int team = Mathf.Clamp(u.Team, 0, 1);
                     int kind = Mathf.Clamp(u.Kind, 0, 2);
                     var go = _unitPools[team, kind].Get(target, _arena.FacingRotation((Team)team));
-                    view = new UnitView { Go = go, HpFill = go.transform.Find("HpBar/Fill"), Target = target };
+                    view = new UnitView { Go = go, HpFill = go.transform.Find("HpBar/Fill"), Target = target, Animator = FindStateAnimator(go) };
                     _units.Add(u.Id, view);
                 }
                 view.SeenFrame = _frame;
@@ -260,6 +303,11 @@ namespace SpellboundVR.Presentation
                 view.Go.transform.position = next;
                 SetFill(view.HpFill, u.MaxHp > 0 ? (float)u.Hp / u.MaxHp : 0f);
                 Billboard(view.HpFill);
+                if (view.Animator != null && view.LastState != u.State)
+                {
+                    view.LastState = u.State;
+                    view.Animator.SetInteger(AnimStateHash, u.State);
+                }
             }
 
             _removeBuffer.Clear();
@@ -283,13 +331,13 @@ namespace SpellboundVR.Presentation
                 Vector3 pos = _arena.ToWorld(p.U, p.V, p.Height);
                 if (!_projectiles.TryGetValue(p.Id, out var go))
                 {
-                    go = _projectilePool.Get(pos, Quaternion.identity);
+                    go = GetProjectilePool(p.SpellId).Get(pos, Quaternion.identity);
                     _projectiles.Add(p.Id, go);
-                    var def = _session.Catalog.Get(p.SpellId);
-                    var r = go.GetComponent<Renderer>();
-                    if (r != null && def != null) r.sharedMaterial = FallbackVisuals.Opaque(def.ThemeColor);
                 }
-                go.transform.position = Vector3.Lerp(go.transform.position, pos, 0.6f);
+                Vector3 next = Vector3.Lerp(go.transform.position, pos, 0.6f);
+                Vector3 dir = next - go.transform.position;
+                if (dir.sqrMagnitude > 1e-6f) go.transform.rotation = Quaternion.LookRotation(dir, Vector3.up);
+                go.transform.position = next;
             }
 
             _removeBuffer.Clear();
@@ -362,7 +410,7 @@ namespace SpellboundVR.Presentation
             if (_opponentAvatar.gameObject.activeSelf != show) _opponentAvatar.gameObject.SetActive(show);
             if (show)
             {
-                Vector3 target = _arena.ToWorld(_arena.PlayerPosition(opp, o.WorldColumn));
+                Vector3 target = _arena.ToWorld(_arena.PlayerPosition(opp, o.WorldColumn), PlatformHeight);
                 _opponentAvatar.position = Vector3.Lerp(_opponentAvatar.position, target, 1f - Mathf.Exp(-20f * Time.deltaTime));
                 _opponentAvatar.rotation = _arena.FacingRotation(opp);
                 _opponentShield.gameObject.SetActive(o.Shield > 0);
@@ -373,7 +421,7 @@ namespace SpellboundVR.Presentation
             ref var me = ref s.Players[(int)local];
             bool shield = me.Shield > 0;
             if (_selfShieldRing.gameObject.activeSelf != shield) _selfShieldRing.gameObject.SetActive(shield);
-            if (shield) _selfShieldRing.position = _arena.ToWorld(_arena.PlayerPosition(local, me.WorldColumn), 0.05f);
+            if (shield) _selfShieldRing.position = _arena.ToWorld(_arena.PlayerPosition(local, me.WorldColumn), PlatformHeight + 0.05f);
         }
 
         private static void SetFill(Transform fill, float ratio)

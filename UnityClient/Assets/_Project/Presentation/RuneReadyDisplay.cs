@@ -1,5 +1,7 @@
 // §6.2 RuneReady — 인식된 룬이 손 위에 표시된다. Armed · Aiming 단계 안내도 함께 보여준다.
 
+using System.Collections.Generic;
+using SpellboundVR.Gesture;
 using SpellboundVR.Input;
 using UnityEngine;
 
@@ -16,12 +18,16 @@ namespace SpellboundVR.Presentation
         private TextMesh _text;
         private Transform _orb;
         private Transform _root;
+        private RuneTemplateLibrary _runes;
+        private Renderer _icon;
+        private readonly Dictionary<int, Material> _iconMaterials = new Dictionary<int, Material>();
 
-        public void Initialize(CastStateMachine cast, ISpellInputSource input, Transform head)
+        public void Initialize(CastStateMachine cast, ISpellInputSource input, Transform head, RuneTemplateLibrary runes)
         {
             _cast = cast;
             _input = input;
             _head = head;
+            _runes = runes;
 
             _root = new GameObject("RuneReadyDisplay").transform;
             _root.SetParent(transform, false);
@@ -30,6 +36,13 @@ namespace SpellboundVR.Presentation
             _orb.localScale = Vector3.one * 0.05f;
             _text = FallbackVisuals.Text(_root, "", textSize, Color.white);
             _text.transform.localPosition = new Vector3(0f, 0.06f, 0f);
+            // 룬 아이콘 (RuneTemplate.Icon) — 오브 위 쿼드, 머리 쪽을 향함
+            var quad = FallbackVisuals.Primitive(PrimitiveType.Quad, "RuneIcon", FallbackVisuals.Transparent(Color.white));
+            quad.transform.SetParent(_root, false);
+            quad.transform.localPosition = new Vector3(0f, 0.13f, 0f);
+            quad.transform.localScale = Vector3.one * 0.07f;
+            _icon = quad.GetComponent<Renderer>();
+            _icon.gameObject.SetActive(false);
             _root.gameObject.SetActive(false);
         }
 
@@ -50,6 +63,9 @@ namespace SpellboundVR.Presentation
 
             var def = _cast.SelectedSpell;
             var color = def.ThemeColor;
+            var iconMat = GetIconMaterial(def.SpellId);
+            if (_icon.gameObject.activeSelf != (iconMat != null)) _icon.gameObject.SetActive(iconMat != null);
+            if (iconMat != null) _icon.sharedMaterial = iconMat;
             _orb.GetComponent<Renderer>().sharedMaterial = FallbackVisuals.Transparent(new Color(color.r, color.g, color.b, 0.75f));
             float pulse = 1f + 0.15f * Mathf.Sin(Time.time * 8f);
             _orb.localScale = Vector3.one * 0.05f * pulse;
@@ -63,6 +79,19 @@ namespace SpellboundVR.Presentation
             }
             _text.text = def.DisplayName + "\n" + hint;
             _text.color = color;
+        }
+
+        private Material GetIconMaterial(int spellId)
+        {
+            if (_iconMaterials.TryGetValue(spellId, out var m)) return m;
+            var rune = _runes != null ? _runes.Find(spellId) : null;
+            if (rune != null && rune.Icon != null)
+            {
+                var shader = Shader.Find("Sprites/Default");
+                m = new Material(shader != null ? shader : Shader.Find("Unlit/Transparent")) { mainTexture = rune.Icon, name = "RuneIcon_" + spellId };
+            }
+            _iconMaterials[spellId] = m; // 없으면 null도 캐시
+            return m;
         }
 
         private static readonly string[] s_bars =

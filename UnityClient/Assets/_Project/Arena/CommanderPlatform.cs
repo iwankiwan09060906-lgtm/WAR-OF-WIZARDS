@@ -13,6 +13,8 @@ namespace SpellboundVR.Arena
         public Transform playerRig;
         [Tooltip("리그 원점의 지면 기준 높이 (비우면 시작 시 리그 높이 사용)")]
         public float rigHeight = -1f;
+        [Tooltip("리그 아래쪽 기울기 (헤드셋 없는 데스크톱 테스트 전용, VR에서는 0)")]
+        public float viewPitch = 0f;
 
         private ArenaLayout _layout;
         private Team _team = Team.Home;
@@ -46,7 +48,7 @@ namespace SpellboundVR.Arena
             if (playerRig == null || _layout == null) return;
             var g = _layout.Geometry;
             Vector3 pos = g.ToWorld(g.PlayerPosition(_team, _worldColumn), rigHeight);
-            playerRig.SetPositionAndRotation(pos, g.FacingRotation(_team));
+            playerRig.SetPositionAndRotation(pos, g.FacingRotation(_team) * Quaternion.Euler(viewPitch, 0f, 0f));
             if (withEffect) OnSnapped?.Invoke();
         }
     }

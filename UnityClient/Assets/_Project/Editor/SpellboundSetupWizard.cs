@@ -240,14 +240,15 @@ namespace SpellboundVR.EditorTools
                 layout = go.AddComponent<ArenaLayout>();
                 Undo.RegisterCreatedObjectUndo(go, "ArenaLayout");
             }
-            var center = GameObject.Find("Commander_Slot_2");
+            var center = GameObject.Find("Home_Commander_C");
+            if (center == null) center = GameObject.Find("Commander_Slot_2");
             if (layout.homeBaseAnchor == null && center != null) layout.homeBaseAnchor = center.transform;
             // 사람이 배치한 구조물 자리 (Arena/Cube z=5, Arena/Cylinder z=8) → Home 넥서스 · 타워 비주얼
             var arenaRoot = GameObject.Find("Arena");
             if (arenaRoot != null)
             {
-                var cube = arenaRoot.transform.Find("Cube");
-                var cylinder = arenaRoot.transform.Find("Cylinder");
+                var cube = arenaRoot.transform.Find("Home/Home_Nexus") ?? arenaRoot.transform.Find("Cube");
+                var cylinder = arenaRoot.transform.Find("Home/Home_Tower") ?? arenaRoot.transform.Find("Cylinder");
                 if (layout.homeNexusVisual == null && cube != null) layout.homeNexusVisual = cube;
                 if (layout.homeTowerVisual == null && cylinder != null) layout.homeTowerVisual = cylinder;
             }

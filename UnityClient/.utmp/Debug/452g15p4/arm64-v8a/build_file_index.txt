@@ -1,0 +1,3 @@
+C:\Users\Kiwan\Desktop\20\3-1\XRProject\WAR-OF-WIZARDS\UnityClient\Library\Bee\Android\Prj\IL2CPP\Gradle\unityLibrary\src\main\cpp\CMakeLists.txt
+C:\Users\Kiwan\Desktop\20\3-1\XRProject\WAR-OF-WIZARDS\UnityClient\Library\Bee\Android\Prj\IL2CPP\Gradle\unityLibrary\src\main\cpp\FramePacing\CMakeLists.txt
+C:\Users\Kiwan\Desktop\20\3-1\XRProject\WAR-OF-WIZARDS\UnityClient\Library\Bee\Android\Prj\IL2CPP\Gradle\unityLibrary\src\main\cpp\GameActivity\CMakeLists.txt

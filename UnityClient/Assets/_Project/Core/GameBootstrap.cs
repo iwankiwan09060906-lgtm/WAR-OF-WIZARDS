@@ -76,6 +76,8 @@ namespace SpellboundVR.Core
 
         [Header("입력")]
         public InputMode inputMode = InputMode.Auto;
+        [Tooltip("키보드(데스크톱) 모드에서 시점을 아래로 기울이는 각도 — 헤드셋에서는 사용 안 함")]
+        public float desktopViewPitch = 28f;
 
         [Header("로컬 모드")]
         public Team localTeam = Team.Home;
@@ -235,7 +237,7 @@ namespace SpellboundVR.Core
             // 표시
             var lineGo = new GameObject("[MagicLine]", typeof(LineRenderer));
             lineGo.AddComponent<MagicLineRenderer>().Initialize(input, cast, input is KeyboardInput ? 0.004f : 0.006f);
-            gameObject.AddComponent<RuneReadyDisplay>().Initialize(cast, input, head);
+            gameObject.AddComponent<RuneReadyDisplay>().Initialize(cast, input, head, runeLibrary);
             var presentation = new GameObject("[Presentation]");
             presentation.AddComponent<VFXPlayer>().Initialize(_session, vfxCatalog);
             presentation.AddComponent<ArenaStateView>().Initialize(_session, vfxCatalog, head);
@@ -243,9 +245,11 @@ namespace SpellboundVR.Core
             var hud = gameObject.AddComponent<BattleHudView>();
             if (input is KeyboardInput)
             {
-                // 데스크톱 화면: 전장을 가리지 않도록 화면 하단에 작게
-                hud.localPosition = new Vector3(0f, -0.36f, 1.0f);
-                hud.worldScale = 0.0006f;
+                // 데스크톱 화면(헤드셋 없음): 고개를 숙일 수 없으니 시점을 아래로 기울이고 HUD는 화면 하단에 작게
+                platform.viewPitch = desktopViewPitch;
+                hud.localPosition = new Vector3(0f, -0.43f, 1.0f);
+                hud.tiltDegrees = 10f;
+                hud.worldScale = 0.0005f;
             }
             hud.localPosition += head.parent != null ? head.localPosition : Vector3.zero; // 시작 시 머리 높이 기준
             hud.Initialize(_session, head.parent != null ? head.parent : playerRig);

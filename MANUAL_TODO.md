@@ -43,26 +43,28 @@
 | 2-2 | 메뉴 `Spellbound > Build > Quest APK (Offline vs Bot)` → `Builds/Quest/Spellbound_Offline.apk` 설치 (MQDH 또는 `adb install -r`) | 플랫폼이 Android가 아니면 자동 전환 |
 | 2-3 | 실기에서 **손 자세 임계값 튜닝** (W1 실기 검증 항목) | 아래 표 |
 | 2-4 | 실제 손으로 그린 룬 궤적으로 **템플릿 · 인식 임계값 튜닝** | 아래 2.2 |
-| 2-5 | HUD 위치 · 크기 확인 (`BattleHudView.localPosition / tiltDegrees / worldScale`) | 현재: 머리 기준 아래 0.55m · 앞 1.35m |
-| 2-6 | 이동 비네팅 강도 확인 (`SnapVignette.maxAlpha / duration`) — 멀미 여부 | 완전 암전 아님 |
+| 2-5 | HUD 위치 · 크기 확인 (`UI/C12_HUD/BattleHudView.cs`의 `localPosition / tiltDegrees / worldScale` 초기값) | 현재: 머리 기준 아래 0.55m · 앞 1.35m |
+| 2-6 | 이동 비네팅 강도 확인 (`Presentation/SnapVignette.cs`의 `maxAlpha / duration` 초기값) — 멀미 여부 | 완전 암전 아님 |
 
-### 2.1 튜닝할 값 (모두 런타임 수정 가능)
+### 2.1 튜닝할 값
 
-| 컴포넌트 | 필드 | 기본값 | 의미 |
+대부분 **Play 시 코드가 생성하는 컴포넌트**라 씬 인스펙터에 없다 → **파일의 필드 초기값을 고치고 APK를 다시 빌드**한다.
+씬 인스펙터에서 바로 바꿀 수 있는 것은 `HandJointProvider`(손 프리팹에 붙어 있음)뿐이다.
+
+| 파일 (`Assets/_Project/`) | 필드 | 기본값 | 의미 |
 | --- | --- | --- | --- |
-| `HandPoseDetector` | `ExtendedMaxDeg` / `CurledMinDeg` / `HoldSeconds` | 55° / 95° / 0.08s | 손가락 펴짐 · 굽힘 판정 각도 |
-| `PinchDetector` | `StartStrength` / `EndStrength` | 0.85 / 0.45 | 핀치 시작 · 종료 (히스테리시스) |
-| `MoveGestureDetector` | `MinDistance` / `MinPeakSpeed` / `CooldownSeconds` | 0.14m / 0.9m/s / 0.5s | 왼손 휘두르기 이동 |
-| `HandTrackingInput` | `aimSmoothing` / `useIndexFingerRay` | 0.6 / true | 검지 조준 레이 (false면 OVR 시스템 포인터) |
-| `HandJointProvider` | `lostGraceSeconds` | 0.2s | 트래킹 깜빡임 유예 (넘으면 시전 취소) |
-
-> 앞의 세 클래스는 MonoBehaviour가 아닌 일반 클래스라 `HandTrackingInput` 내부에서 생성된다. 값을 바꿀 땐 `HandTrackingInput.cs` 필드 초기값 또는 생성 코드를 수정한다.
+| `XR/HandPoseDetector.cs` | `ExtendedMaxDeg` / `CurledMinDeg` / `HoldSeconds` | 55° / 95° / 0.08s | 손가락 펴짐 · 굽힘 판정 각도 |
+| `XR/PinchDetector.cs` | `StartStrength` / `EndStrength` | 0.85 / 0.45 | 핀치 시작 · 종료 (히스테리시스) |
+| `Input/LeftHand/MoveGestureDetector.cs` | `MinDistance` / `MinPeakSpeed` / `CooldownSeconds` | 0.14m / 0.9m/s / 0.5s | 왼손 휘두르기 이동 |
+| `Input/HandTrackingInput.cs` | `aimSmoothing` / `useIndexFingerRay` | 0.6 / true | 검지 조준 레이 (false면 OVR 시스템 포인터) |
+| 씬 `OVRHandPrefab_Left/Right` > `HandJointProvider` | `lostGraceSeconds` | 0.2s | 트래킹 깜빡임 유예 (넘으면 시전 취소) — 인스펙터 수정 가능 |
 
 ### 2.2 룬 인식 튜닝
 
 - 현재 템플릿은 **절차 생성 도형**(원 · Z · 역삼각형)이다: `Assets/_Project/Gesture/Templates/Data/Rune_S0x_*.asset`.
 - 인식할 때마다 콘솔에 `[CastStateMachine] $P+ → S03 d=2.41 2nd=S08 d2=5.80 → None` 형식으로 거리가 찍힌다.
-- 판정 임계값: `[Spellbound]`의 `CastStateMachine > Recognition` — `MaxAcceptDistance 7.0`, `MinSecondBestRatio 1.08` (합성 노이즈 300회 실험값: 정확도 원 100% · Z 100% · ▽ 99%).
+- 판정 임계값: `Gesture/Runtime/GestureValidator.cs`의 `GestureValidationSettings` 초기값 — `MaxAcceptDistance 7.0`, `MinSecondBestRatio 1.08` (합성 노이즈 300회 실험값: 정확도 원 100% · Z 100% · ▽ 99%).
+- Quest에서 인식 로그 보기: PC에 USB 연결 후 `adb logcat -s Unity | findstr CastStateMachine` (Development 빌드라 로그가 나온다).
 - 실제 손 궤적을 샘플로 추가하려면 `RuneTemplate.AddSample(label, points)`를 쓰거나 인스펙터에서 `Samples`에 직접 점을 넣는다. (녹화 UI는 아직 없음 — `GestureRecorder.LastStroke`에 마지막 궤적이 남는다.)
 - **ㅇㅎㅅ와 19종 룬 디자인 확정 시 유사도 검증 필수 (§9).** 원(○)과 U자, 삼각형과 ^(캐럿)처럼 닮은 쌍은 피한다.
 
@@ -90,29 +92,12 @@
 
 | # | 할 일 | 이유 |
 | --- | --- | --- |
-| 4-1 | `Arena/Lane_Left`(x=+5)와 `Arena/Lane_Right`(x=-5) **이름 맞바꾸기** | 플레이어는 +Z를 보므로 x=+5가 **오른쪽**이다. 코드는 이름을 쓰지 않아 동작엔 영향 없음 |
-| 4-2 | 루트 `NetworkPrefabs` 오브젝트(씬 NetworkObject) 삭제 권장 | 용도 없음. 씬 없이 시작하는 런너라 스폰되지 않으며 혼동만 준다 |
-| 4-3 | 루트 `Minion` 테스트 캡슐(NavMeshAgent) 삭제 또는 `MDL_Minion_Melee` 프리팹 원본으로 사용 | 실제 미니언은 코드가 풀로 생성한다 |
-| 4-4 | Away 진영 발판 · 타워 · 넥서스 배치 (선택) | 지금은 코드가 대체 큐브/실린더를 만든다. 배치하면 `[ArenaLayout]`의 `awayTowerVisual / awayNexusVisual`에 연결 |
-| 4-5 | `Arena/Cube`(z=5)=Home **넥서스**, `Arena/Cylinder`(z=8)=Home **타워**로 연결했다 | 반대 의도였다면 `[ArenaLayout]`에서 바꾼다 (§5: 발판 → 넥서스 → 타워 순) |
-| 4-6 | 아트 프리팹 공급 후 메뉴 `Spellbound > 3. Refresh VFX Catalog` | 이름만 맞으면 자동 연결 |
-
-### 4.1 이름 규칙으로 자동 연결되는 아트 (ㅇㅎㅅ, 코드 없이 프리팹만)
-
-| 프리팹 이름 | 쓰이는 곳 |
-| --- | --- |
-| `VFX_S03_Fireball_Cast` / `_Projectile` / `_Impact` | 파이어볼 (Impact는 반경 1m 기준 제작 → 코드가 `Radius` 배율 적용) |
-| `VFX_S07_Gatling_Cast` / `_Impact` | 총난사 발사 · 피격 |
-| `VFX_S08_Shield_Cast` / `_Loop` | 쉴드 (Loop는 쉴드가 깨지거나 끝나면 회수) |
-| `MDL_Minion_Melee` / `_Ranged` / `_Brute` | 미니언 (발바닥 피벗, +Z 전방, `_Color`/`_BaseColor`/`_TeamColor` 중 하나로 팀 컬러) |
-| `MDL_Structure_Tower` / `MDL_Structure_Nexus` | Away 구조물 (Home은 씬 오브젝트 사용) |
-| `MDL_Avatar_Wizard` | 상대 플레이어 아바타 |
-
-- 일회성 VFX는 **Stop Action = Disable** 필수 (풀 반환). 없어도 4초 뒤 강제 회수된다.
-- 총난사 **비행 중 탄환**은 지금 노란 구체(코드 생성)다. 탄환 모델을 바꾸려면 `ArenaStateView.CreateProjectileVisual`을 수정한다.
-- 프리팹이 없으면 색 구체로 대체 연출한다 — 지금 화면이 그 상태다.
-
----
+| 4-1 | ✅ 완료 — `Lane_Left`(x=-5) / `Lane_Right`(x=+5)로 이름 교체 | 플레이어는 +Z를 보므로 x=+5가 **오른쪽**이다. 코드는 이름을 쓰지 않아 동작엔 영향 없음 |
+| 4-2 | ✅ 비활성화 — 루트 `NetworkPrefabs`(씬 NetworkObject) | 용도 없음. 확인 후 삭제해도 된다 |
+| 4-3 | ✅ 비활성화 — 루트 `Minion` 테스트 캡슐 | 실제 미니언은 코드가 풀로 생성한다. 확인 후 삭제하거나 `MDL_Minion_Melee` 원본으로 사용 |
+| 4-4 | ✅ 완료 — `Spellbound > 5. Build Placeholder Arena`로 Home/Away 발판 · 타워 · 넥서스 · 레인 · 바닥을 임시 배치하고 `[ArenaLayout]`에 연결 | 발판 이름 `Home_Commander_L/C/R`, `Away_Commander_L/C/R`. 눈높이 5m |
+| 4-5 | ✅ `Arena/Home/Home_Nexus`(z=5) · `Home_Tower`(z=8), 모양은 각 `Body` 자식 | §5: 발판 → 넥서스 → 타워 순 |
+| 4-6 | 아트 투입 → **`Docs/Art/AssetIntegrationGuide.md`** (파일명 · 폴더 · 피벗 · 등록 메뉴) | 이름만 맞으면 코드 수정 없이 자동 연결 |
 
 ## 5. 계약서(Contracts) 변경 — 4인 합의 필요 (§25.1)
 

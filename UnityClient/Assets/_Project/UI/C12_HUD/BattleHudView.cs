@@ -152,6 +152,14 @@ namespace SpellboundVR.UI
                 int spellId = _session.LocalDeck[i];
                 var def = spellId > 0 ? _session.Catalog.Get(spellId) : null;
                 string name = def != null ? def.DisplayName : (spellId > 0 ? "?" : "-");
+                // 룬 아이콘 (RuneTemplate.Icon, 있으면 슬롯 배경에 은은하게)
+                var rune = spellId > 0 && _session.Runes != null ? _session.Runes.Find(spellId) : null;
+                if (rune != null && rune.Icon != null)
+                {
+                    var icon = Panel((RectTransform)bg.transform, "Icon", new Vector2(0f, 6f), new Vector2(cellH - 14f, cellH - 14f), new Color(1f, 1f, 1f, 0.45f));
+                    icon.sprite = Sprite.Create(rune.Icon, new Rect(0f, 0f, rune.Icon.width, rune.Icon.height), new Vector2(0.5f, 0.5f));
+                    icon.preserveAspect = true;
+                }
                 var label = Label((RectTransform)bg.transform, "Label", new Vector2(0f, 22f), new Vector2(cellW - 10f, 50f), 26,
                                   TextAnchor.MiddleCenter, def != null ? def.ThemeColor : Color.gray);
                 label.text = (i + 1) + ". " + SpellIds.Code(spellId) + "\n" + name;

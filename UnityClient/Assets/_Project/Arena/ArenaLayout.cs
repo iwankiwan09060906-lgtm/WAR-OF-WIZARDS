@@ -22,6 +22,8 @@ namespace SpellboundVR.Arena
         public float towerDepth = 8f;
         [Tooltip("미니언 스폰 깊이 (자기 발판 기준)")]
         public float spawnDepth = 6f;
+        [Tooltip("Commander 발판 윗면 높이 (표시 전용 — 상대 아바타 · 쉴드 링을 이 높이에 올린다)")]
+        public float commanderPlatformHeight = 0f;
 
         [Header("씬 구조물 비주얼 (선택) — 연결 시 위치에서 깊이를 읽고, 표시용으로 재사용")]
         public Transform homeTowerVisual;
