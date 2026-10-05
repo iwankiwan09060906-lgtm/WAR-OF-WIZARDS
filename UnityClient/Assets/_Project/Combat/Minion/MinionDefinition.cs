@@ -15,7 +15,7 @@ namespace SpellboundVR.Combat
     public sealed class MinionDefinition : ScriptableObject
     {
         public MinionKind Kind = MinionKind.Melee;
-        public float MaxHp = 120f;
+        public float MaxHp = 180f;
         public float Damage = 15f;
         [Tooltip("공격 간격 (초)")]
         public float AttackInterval = 1f;
@@ -40,17 +40,17 @@ namespace SpellboundVR.Combat
             switch (kind)
             {
                 case MinionKind.Melee:
-                    d.MaxHp = 120f; d.Damage = 14f; d.AttackInterval = 1f; d.AttackRange = 0.9f;
+                    d.MaxHp = 180f; d.Damage = 14f; d.AttackInterval = 1f; d.AttackRange = 0.9f;
                     d.MoveSpeed = 1.6f; d.DetectRange = 6f; d.BodyRadius = 0.35f;
                     d.StructureDamageMultiplier = 1f; d.PrefersStructures = false; d.TowerTargetPriority = 1;
                     break;
                 case MinionKind.Ranged:
-                    d.MaxHp = 80f; d.Damage = 11f; d.AttackInterval = 1.2f; d.AttackRange = 4f;
+                    d.MaxHp = 120f; d.Damage = 11f; d.AttackInterval = 1.2f; d.AttackRange = 4f;
                     d.MoveSpeed = 1.5f; d.DetectRange = 7f; d.BodyRadius = 0.3f;
                     d.StructureDamageMultiplier = 1f; d.PrefersStructures = false; d.TowerTargetPriority = 2;
                     break;
                 default:
-                    d.MaxHp = 420f; d.Damage = 30f; d.AttackInterval = 1.4f; d.AttackRange = 1.1f;
+                    d.MaxHp = 630f; d.Damage = 30f; d.AttackInterval = 1.4f; d.AttackRange = 1.1f;
                     d.MoveSpeed = 1.2f; d.DetectRange = 6f; d.BodyRadius = 0.55f;
                     d.StructureDamageMultiplier = 2f; d.PrefersStructures = true; d.TowerTargetPriority = 0;
                     break;

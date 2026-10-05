@@ -12,4 +12,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: b247aeda300a60040959b6841ab25cea, type: 3}
   m_Name: VFXCatalog
   m_EditorClassIdentifier: Assembly-CSharp::SpellboundVR.Presentation.VFXCatalog
-  Prefabs: []
+  Prefabs:
+  - {fileID: 2196088459390722511, guid: 42157ffff20b96548953e7f34e8eb3e9, type: 3}
+  - {fileID: 5134976762994282693, guid: d2c32a3486ef81f4680563e0c404ac7e, type: 3}
+  - {fileID: 2285939574431062664, guid: a749adc06b137534798cf8c42946dcbe, type: 3}

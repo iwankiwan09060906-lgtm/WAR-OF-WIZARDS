@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: Minion_Melee
   m_EditorClassIdentifier: Assembly-CSharp::SpellboundVR.Combat.MinionDefinition
   Kind: 0
-  MaxHp: 120
+  MaxHp: 180
   Damage: 14
   AttackInterval: 1
   AttackRange: 0.9

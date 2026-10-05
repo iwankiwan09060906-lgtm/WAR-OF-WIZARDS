@@ -2,17 +2,17 @@
 //
 // 구조 (모든 로직 앵커는 "빈 부모 = 바닥 피벗", 모양은 Body 자식 → 아트가 오면 Body만 교체)
 //   Arena
-//   ├─ Ground                       바닥 (24 × 30m)
+//   ├─ Ground                       바닥
 //   ├─ Lanes/Lane_Left|Mid|Right    레인 표시 (Home 시점 좌 · 중 · 우, 두께 2cm)
 //   ├─ Home (z = 0, +Z를 봄)
 //   │   ├─ Home_Commander_L|C|R     발판 (x = -5 / 0 / +5)
-//   │   ├─ Home_Nexus  (z = 5, 높이 1.6m)  / Body
-//   │   └─ Home_Tower  (z = 8, 높이 2.4m)  / Body
-//   │   (플레이어 눈높이 5m — 자기 구조물 너머로 상대 진영이 보이도록)
-//   └─ Away (z = 20, -Z를 봄 — Away 시점의 L은 월드 +X)
+//   │   ├─ Home_Nexus  (z = 3, 높이 1.6m)   / Body
+//   │   └─ Home_Tower  (z = 13, 높이 2.4m) / Body
+//   │   (플레이어 눈높이 10m — 자기 구조물 너머로 상대 진영이 보이도록)
+//   └─ Away (z = 41, -Z를 봄 — Away 시점의 L은 월드 +X)
 //       ├─ Away_Commander_L|C|R     발판 (x = +5 / 0 / -5)
-//       ├─ Away_Nexus  (z = 15) / Body
-//       └─ Away_Tower  (z = 12) / Body
+//       ├─ Away_Nexus  (z = 38) / Body
+//       └─ Away_Tower  (z = 28) / Body
 // 치수는 대략값이다 (아트 교체 전제). 여러 번 실행해도 같은 결과가 나온다.
 
 using SpellboundVR.Arena;
@@ -26,12 +26,13 @@ namespace SpellboundVR.EditorTools
     {
         private const string MaterialFolder = "Assets/_Project/Arena/Placeholder";
         private const float Spacing = 5f;
-        private const float FieldLength = 20f;
-        private const float NexusDepth = 5f;
-        private const float TowerDepth = 8f;
+        /// <summary>전장 길이. 양 타워 사이 = 41 - 13 × 2 = 15m</summary>
+        private const float FieldLength = 41f;
+        private const float NexusDepth = 3f;
+        private const float TowerDepth = 13f;
         private const float PlatformHeight = 0.3f;
-        /// <summary>플레이어 눈높이 (지면 기준). 자기 타워 · 넥서스 너머로 상대 진영까지 보이도록 높게 잡는다.</summary>
-        private const float EyeHeight = 5f;
+        /// <summary>플레이어 눈높이 (지면 기준, 플레이어 크기 2배 기준 10m). 자기 타워 · 넥서스 너머로 상대 진영까지 보이도록 높게 잡는다.</summary>
+        private const float EyeHeight = 10f;
         private const float TowerHeight = 2.4f;
         private const float NexusHeight = 1.6f;
 
@@ -61,7 +62,7 @@ namespace SpellboundVR.EditorTools
             var ground = FindOrRename(arena, "Ground", "Plane") ?? Prim(arena, "Ground", PrimitiveType.Plane);
             Place(ground, new Vector3(0f, 0f, FieldLength * 0.5f), Quaternion.identity, new Vector3(2.4f, 1f, 3.0f), matGround);
 
-            // 레인 (표시 전용 얇은 판 — 유닛이 묻히지 않게)
+            // 레인 (표시 전용 얇은 판 — 유닛이 묻히지 않게, 레인 사이 빈틈 없음)
             var lanes = Child(arena, "Lanes");
             Place(lanes, Vector3.zero, Quaternion.identity, Vector3.one, null);
             string[] laneNames = { "Lane_Left", "Lane_Mid", "Lane_Right" };
@@ -70,7 +71,7 @@ namespace SpellboundVR.EditorTools
                 var lane = FindAnywhere(arena, laneNames[c]) ?? Prim(lanes, laneNames[c], PrimitiveType.Cube);
                 lane.SetParent(lanes, true);
                 Place(lane, new Vector3((c - 1) * Spacing, 0.01f, FieldLength * 0.5f), Quaternion.identity,
-                      new Vector3(Spacing * 0.92f, 0.02f, FieldLength), matLane);
+                      new Vector3(Spacing, 0.02f, FieldLength), matLane);
             }
 
             // Home (기존 Commander_Slot_1=+5(R) / 2=0(C) / 3=-5(L) 이름 정리)

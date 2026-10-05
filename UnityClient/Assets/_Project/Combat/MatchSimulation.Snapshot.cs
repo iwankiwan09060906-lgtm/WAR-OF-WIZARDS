@@ -79,6 +79,8 @@ namespace SpellboundVR.Combat
                 ss.MaxHp = Mathf.CeilToInt(st.MaxHp);
                 ss.U = st.Position.x;
                 ss.V = st.Position.y;
+                ss.ShotCount = st.ShotCount;
+                ss.ShotTargetId = st.LastTargetId;
             }
 
             int uc = 0;

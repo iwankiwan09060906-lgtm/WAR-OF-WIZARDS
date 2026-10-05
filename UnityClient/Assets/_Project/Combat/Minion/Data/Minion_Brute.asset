@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: Minion_Brute
   m_EditorClassIdentifier: Assembly-CSharp::SpellboundVR.Combat.MinionDefinition
   Kind: 2
-  MaxHp: 420
+  MaxHp: 630
   Damage: 30
   AttackInterval: 1.4
   AttackRange: 1.1

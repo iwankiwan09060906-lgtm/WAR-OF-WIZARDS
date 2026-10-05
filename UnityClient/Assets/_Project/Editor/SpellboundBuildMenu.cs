@@ -1,6 +1,7 @@
 // 빌드 메뉴 (§2.3 테스트 환경: Quest 3 + PC 서버)
 //   Spellbound > Build > Quest APK (Fusion Client)  → Builds/Quest/Spellbound.apk
 //   Spellbound > Build > Quest APK (Offline vs Bot) → Builds/Quest/Spellbound_Offline.apk
+//   Spellbound > Build > Quest APK (Offline vs Bot, Clean Build) → 같은 파일, 빌드 캐시를 비우고 처음부터 (기기에서 시작 직후 꺼질 때)
 //   Spellbound > Build > PC Server (Windows)         → Builds/Server/SpellboundServer.exe + RunServer.bat
 // 빌드 직전에 GameBootstrap.bootMode를 바꾸고, 빌드 후 원래 값으로 되돌린다.
 
@@ -29,6 +30,12 @@ namespace SpellboundVR.EditorTools
             BuildQuest(BootMode.LocalVsBot, "Spellbound_Offline.apk");
         }
 
+        [MenuItem("Spellbound/Build/Quest APK (Offline vs Bot, Clean Build)", priority = 43)]
+        public static void BuildQuestOfflineClean()
+        {
+            BuildQuest(BootMode.LocalVsBot, "Spellbound_Offline.apk", clean: true);
+        }
+
         [MenuItem("Spellbound/Build/PC Server (Windows)", priority = 42)]
         public static void BuildServer()
         {
@@ -43,15 +50,15 @@ namespace SpellboundVR.EditorTools
             }
         }
 
-        private static void BuildQuest(BootMode mode, string fileName)
+        private static void BuildQuest(BootMode mode, string fileName, bool clean = false)
         {
             string dir = Path.Combine(RepoRoot, "Builds", "Quest");
             Directory.CreateDirectory(dir);
-            if (Build(BuildTarget.Android, BuildTargetGroup.Android, Path.Combine(dir, fileName), mode))
+            if (Build(BuildTarget.Android, BuildTargetGroup.Android, Path.Combine(dir, fileName), mode, clean))
                 Debug.Log("[Spellbound Build] Quest APK 빌드 완료: " + Path.Combine(dir, fileName));
         }
 
-        private static bool Build(BuildTarget target, BuildTargetGroup group, string output, BootMode mode)
+        private static bool Build(BuildTarget target, BuildTargetGroup group, string output, BootMode mode, bool clean = false)
         {
             var scene = EditorSceneManager.OpenScene(SpellboundSetupWizard.BattleScenePath, OpenSceneMode.Single);
             var bootstrap = Object.FindFirstObjectByType<GameBootstrap>();
@@ -77,7 +84,7 @@ namespace SpellboundVR.EditorTools
                     locationPathName = output,
                     target = target,
                     targetGroup = group,
-                    options = BuildOptions.Development,
+                    options = BuildOptions.Development | (clean ? BuildOptions.CleanBuildCache : BuildOptions.None),
                 };
                 var report = BuildPipeline.BuildPlayer(options);
                 bool ok = report.summary.result == BuildResult.Succeeded;

@@ -22,6 +22,8 @@ namespace SpellboundVR.Combat
         public float AttackTimer;
         public int LastTargetId;
         public int ComboCount;
+        /// <summary>누적 발사 횟수 (표시용 — 클라이언트 총알)</summary>
+        public int ShotCount;
 
         public StructureState(Team team, bool isNexus)
         {
@@ -42,6 +44,7 @@ namespace SpellboundVR.Combat
             AttackTimer = 0f;
             LastTargetId = 0;
             ComboCount = 0;
+            ShotCount = 0;
         }
     }
 }

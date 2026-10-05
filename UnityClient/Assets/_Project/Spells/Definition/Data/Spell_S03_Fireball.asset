@@ -21,7 +21,7 @@ MonoBehaviour:
   Executor: 1
   Behavior: 2
   Dodgeable: 0
-  BaseDamage: 120
+  BaseDamage: 150
   Radius: 2.6
   MaxDepth: 1
   ProjectileSpeed: 20

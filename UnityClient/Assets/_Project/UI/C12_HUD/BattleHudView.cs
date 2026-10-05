@@ -21,10 +21,12 @@ namespace SpellboundVR.UI
         private const float CanvasWidth = 1000f;
         private const float CanvasHeight = 620f;
 
-        [Tooltip("HUD 위치 (부모 = 플레이어 리그 기준)")]
-        public Vector3 localPosition = new Vector3(0f, -0.55f, 1.35f);
-        public float tiltDegrees = 28f;
-        public float worldScale = 0.0011f;
+        [Tooltip("HUD 위치 (부모 = 플레이어 리그 기준). VR: 눈 아래 약 57° · 1m — 내려다보는 전장(레인)을 가리지 않도록 발판 쪽에 둔다")]
+        public Vector3 localPosition = new Vector3(0f, -0.85f, 0.55f);
+        [Tooltip("눈을 향하도록 기울임 (≈ atan(아래 / 앞))")]
+        public float tiltDegrees = 57f;
+        [Tooltip("캔버스 1px = 이 값(m). 0.0006 → 폭 0.6m")]
+        public float worldScale = 0.0006f;
 
         private struct SlotView
         {

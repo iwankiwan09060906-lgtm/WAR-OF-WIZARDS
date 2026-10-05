@@ -14,7 +14,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::SpellboundVR.Core.MatchRuleConfig
   CountdownSeconds: 3
   AutoRestartDelay: 10
-  BotFillWaitSeconds: 10
+  BotFillWaitSeconds: 30
   LocalTickInterval: 0.033333335
   PlayerMaxHp: 1000
   NormalCooldown: 5
@@ -33,22 +33,22 @@ MonoBehaviour:
   MinCooldownRatio: 0.5
   AfkForfeitSeconds: 30
   AfkWarningSeconds: 20
-  AimDurationSeconds: 1
+  AimDurationSeconds: 2
   RuneReadyTimeoutSeconds: 5
   MoveCooldownSeconds: 0.35
   BaseAccuracy: 1
-  WaveInterval: 10
+  WaveInterval: 15
   FirstWaveDelay: 5
-  MeleePerWave: 2
-  RangedPerWave: 1
+  MeleePerLane: 1
+  RangedPerLane: 1
   BruteEveryNWaves: 3
-  MaxAliveUnitsPerTeam: 20
+  MaxAliveUnitsPerTeam: 40
   MinionMaxLifetime: 90
   TowerMaxHp: 1500
-  TowerDamage: 35
-  TowerAttacksPerSecond: 1.2
+  TowerDamage: 88
+  TowerAttacksPerSecond: 1
   TowerRange: 7
-  TowerComboBonusPerHit: 0.1
+  TowerComboBonusPerHit: 0
   TowerComboMaxStacks: 5
   StructureRadius: 1
   NexusMaxHp: 2000

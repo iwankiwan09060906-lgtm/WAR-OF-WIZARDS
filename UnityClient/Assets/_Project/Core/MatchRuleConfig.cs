@@ -1,6 +1,6 @@
 // §3.3 수치 원칙 — 확정 수치는 기본값으로 고정, 그 외는 "추후 설정" 값을 SO로 노출한다.
 // 확정 수치: 쿨타임 5/20, 고위력 3회·덱 2장, 구조물 보너스 +20%/+40%, 타워 생존 시 피해 20%,
-//            넥서스 회복 10초, 강화 5분, 기권 30초, 조준 1초, 웨이브 10초(근접2+원거리1, 3웨이브마다 Brute)
+//            넥서스 회복 10초, 강화 5분, 기권 30초, 조준 2초, 웨이브 15초(레인마다 근접1+원거리1, 3웨이브마다 Brute), 생존 상한 40
 
 using UnityEngine;
 
@@ -15,7 +15,7 @@ namespace SpellboundVR.Core
         [Tooltip("경기 종료 후 다음 경기 자동 시작까지 (초). 0 이하면 자동 재시작 안 함")]
         public float AutoRestartDelay = 10f;
         [Tooltip("서버 모드: 첫 사람 입장 후 이 시간 안에 두 번째 사람이 없으면 봇 매칭 (§22.1)")]
-        public float BotFillWaitSeconds = 10f;
+        public float BotFillWaitSeconds = 30f;
         [Tooltip("서버 시뮬레이션 고정 틱 간격 (로컬 모드)")]
         public float LocalTickInterval = 1f / 30f;
 
@@ -51,8 +51,9 @@ namespace SpellboundVR.Core
         public float AfkForfeitSeconds = 30f;
         public float AfkWarningSeconds = 20f;
 
-        [Header("입력 (§6) — 조준 1초 확정")]
-        public float AimDurationSeconds = 1f;
+        [Header("입력 (§6)")]
+        [Tooltip("조준(검지 포인팅) 후 시전까지 대기 시간 (초)")]
+        public float AimDurationSeconds = 2f;
         public float RuneReadyTimeoutSeconds = 5f;
         [Tooltip("이동 재입력 제한 (초)")]
         public float MoveCooldownSeconds = 0.35f;
@@ -61,23 +62,25 @@ namespace SpellboundVR.Core
         public float BaseAccuracy = 1f;
 
         [Header("웨이브 (§15) — 확정")]
-        public float WaveInterval = 10f;
+        public float WaveInterval = 15f;
         public float FirstWaveDelay = 5f;
-        public int MeleePerWave = 2;
-        public int RangedPerWave = 1;
+        [Tooltip("웨이브마다 레인(3개) 하나당 근접 수")]
+        public int MeleePerLane = 1;
+        [Tooltip("웨이브마다 레인(3개) 하나당 원거리 수")]
+        public int RangedPerLane = 1;
         public int BruteEveryNWaves = 3;
         [Tooltip("진영당 동시 생존 상한 (§15.1)")]
-        public int MaxAliveUnitsPerTeam = 20;
+        public int MaxAliveUnitsPerTeam = 40;
         public float MinionMaxLifetime = 90f;
 
         [Header("타워 (§18)")]
         public float TowerMaxHp = 1500f;
-        public float TowerDamage = 35f;
-        [Tooltip("초당 약 1.2회")]
-        public float TowerAttacksPerSecond = 1.2f;
+        [Tooltip("1회 피해. 기본값 88 = Spell_S07_Gatling 총 피해(1.25배 상향 전 22 × 8발)의 절반을 초당 1회")]
+        public float TowerDamage = 88f;
+        public float TowerAttacksPerSecond = 1f;
         public float TowerRange = 7f;
         [Tooltip("같은 대상 연속 타격 1회당 피해 증가 비율")]
-        public float TowerComboBonusPerHit = 0.1f;
+        public float TowerComboBonusPerHit = 0f;
         public int TowerComboMaxStacks = 5;
         public float StructureRadius = 1.0f;
 

@@ -103,7 +103,7 @@ namespace SpellboundVR.Spells
             d.Executor = SpellExecutorType.Area;
             d.Behavior = SpellBehaviorType.Splash;
             d.Dodgeable = false;
-            d.BaseDamage = 120f;
+            d.BaseDamage = 150f;
             d.Radius = 2.6f;
             d.MaxDepth = 1f;
             return d;
@@ -116,7 +116,7 @@ namespace SpellboundVR.Spells
             d.Executor = SpellExecutorType.Projectile;
             d.Behavior = SpellBehaviorType.MultiShotFrontFirst;
             d.Dodgeable = true;
-            d.BaseDamage = 22f;
+            d.BaseDamage = 27.5f;
             d.ProjectileSpeed = 12f;
             d.ShotCount = 8;
             d.ShotInterval = 0.12f;

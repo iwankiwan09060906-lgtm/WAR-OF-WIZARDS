@@ -91,6 +91,10 @@ namespace SpellboundVR.Network
         public int MaxHp;
         public float U;
         public float V;
+        /// <summary>타워 발사 누적 횟수 — 클라이언트가 늘어난 것을 보고 총알을 그린다</summary>
+        public int ShotCount;
+        /// <summary>마지막 발사 대상 유닛 Id</summary>
+        public int ShotTargetId;
     }
 
     public struct UnitSnap : INetworkStruct
@@ -123,7 +127,8 @@ namespace SpellboundVR.Network
         public const int PlayerCount = 2;
         public const int SlotsPerPlayer = 8;
         public const int StructureCount = 4;
-        public const int MaxUnits = 48;
+        /// <summary>팀당 생존 상한 40 × 2 + 여유</summary>
+        public const int MaxUnits = 96;
         public const int MaxProjectiles = 40;
 
         public MatchHeaderNet Header;

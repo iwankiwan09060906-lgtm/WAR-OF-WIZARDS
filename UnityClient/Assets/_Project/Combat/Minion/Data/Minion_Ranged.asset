@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: Minion_Ranged
   m_EditorClassIdentifier: Assembly-CSharp::SpellboundVR.Combat.MinionDefinition
   Kind: 1
-  MaxHp: 80
+  MaxHp: 120
   Damage: 11
   AttackInterval: 1.2
   AttackRange: 4

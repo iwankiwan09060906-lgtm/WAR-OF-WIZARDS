@@ -17,6 +17,9 @@ namespace SpellboundVR.Presentation
 
         public static Color TeamColor(Contracts.Team team) => team == Contracts.Team.Home ? HomeColor : AwayColor;
 
+        /// <summary>팀 색을 흰색 쪽으로 연하게 — 텍스처 모델(미니언)에 곱해도 원래 색이 살아 있도록</summary>
+        public static Color LightTeamColor(Contracts.Team team) => Color.Lerp(Color.white, TeamColor(team), 0.45f);
+
         public static Font DefaultFont
         {
             get

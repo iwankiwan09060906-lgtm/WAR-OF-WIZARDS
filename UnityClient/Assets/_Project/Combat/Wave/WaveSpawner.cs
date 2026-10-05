@@ -1,4 +1,4 @@
-// §15 미니언 웨이브 — 10초마다 각 진영 Melee ×2 + Ranged ×1, 3번째 웨이브마다 Brute ×1 (waveIndex % 3 == 0)
+// §15 미니언 웨이브 — 15초마다 각 진영 레인 3개에 Melee ×1 + Ranged ×1씩 (총 6), 3번째 웨이브마다 Brute ×1 (waveIndex % 3 == 0, 레인 순환)
 // 유닛은 스폰 시 열(레인)을 배정받는다. 상한 도달 시 그 진영 웨이브는 스킵(누적 금지).
 
 using SpellboundVR.Contracts;
@@ -44,14 +44,16 @@ namespace SpellboundVR.Combat
                 return;
             }
 
-            int laneBase = WaveIndex % 3;
-            int order = 0;
-            for (int i = 0; i < rules.MeleePerWave; i++, order++)
-                TrySpawn(sim, team, MinionKind.Melee, (laneBase + order) % 3, order);
-            for (int i = 0; i < rules.RangedPerWave; i++, order++)
-                TrySpawn(sim, team, MinionKind.Ranged, (laneBase + order) % 3, order);
+            for (int lane = 0; lane < 3; lane++)
+            {
+                int order = 0;
+                for (int i = 0; i < rules.MeleePerLane; i++, order++)
+                    TrySpawn(sim, team, MinionKind.Melee, lane, order);
+                for (int i = 0; i < rules.RangedPerLane; i++, order++)
+                    TrySpawn(sim, team, MinionKind.Ranged, lane, order);
+            }
             if (rules.BruteEveryNWaves > 0 && WaveIndex % rules.BruteEveryNWaves == 0)
-                TrySpawn(sim, team, MinionKind.Brute, (WaveIndex / rules.BruteEveryNWaves) % 3, order);
+                TrySpawn(sim, team, MinionKind.Brute, (WaveIndex / rules.BruteEveryNWaves) % 3, 2);
         }
 
         private static void TrySpawn(MatchSimulation sim, Team team, MinionKind kind, int lane, int order)

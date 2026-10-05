@@ -1,5 +1,6 @@
 // 서버 상태의 월드 표시 (§16 "클라이언트는 위치 보간 · 애니메이션 · VFX", §21.4)
-//   · 미니언 · 투사체 · 구조물 · 상대 플레이어 아바타 · 발판을 스냅샷에서 읽어 그린다 (표시 전용, 판정 없음).
+//   · 미니언 · 투사체 · 구조물 · 상대 플레이어 아바타 · 타워 총알을 스냅샷에서 읽어 그린다 (표시 전용, 판정 없음).
+//   · Commander 발판은 씬 아트(scaffold)가 담당한다 — 코드가 그리던 팀 색 패드는 없앰.
 //   · 유닛 위치는 매 프레임 목표 위치로 보간한다.
 //   · 아트 프리팹(MDL_*)이 카탈로그에 있으면 쓰고, 없으면 캡슐 · 큐브 대체 비주얼을 쓴다 (§25.4).
 //   · 전투 중 생성 · 파괴 대신 풀을 쓴다 (§17).
@@ -37,13 +38,33 @@ namespace SpellboundVR.Presentation
             public Transform HpFill;
             public bool WasAlive = true;
             public Vector3 OriginalScale;
+            public Team Team;
+            /// <summary>총알이 나가는 높이 (비주얼 윗면의 80%)</summary>
+            public float MuzzleHeight;
+            public int LastShotCount = -1;
+        }
+
+        /// <summary>타워 총알 (표시 전용 — 피해는 서버가 발사 순간 이미 줬다)</summary>
+        private sealed class TowerShot
+        {
+            public GameObject Go;
+            public ObjectPool Pool;
+            public Vector3 From;
+            public Vector3 To;
+            public int TargetId;
+            public float Elapsed;
+            public float Duration;
         }
 
         public float unitLerpSpeed = 10f;
         public int meleePrewarm = 24;
-        public int rangedPrewarm = 12;
+        public int rangedPrewarm = 20;
         public int brutePrewarm = 4;
         public int projectilePrewarm = 24;
+        [Tooltip("플레이어 크기 배율 — 상대 아바타 · 쉴드 링 (눈높이는 OVRCameraRig 높이)")]
+        public float playerScale = 2f;
+        [Tooltip("타워 총알 속도 (m/s)")]
+        public float towerShotSpeed = 30f;
 
         private ClientSession _session;
         private VFXCatalog _catalog;
@@ -56,6 +77,8 @@ namespace SpellboundVR.Presentation
         private readonly Dictionary<int, ObjectPool> _projectilePools = new Dictionary<int, ObjectPool>();
         private Transform _poolRoot;
         private readonly StructureView[] _structures = new StructureView[4];
+        private readonly ObjectPool[] _shotPools = new ObjectPool[2];
+        private readonly List<TowerShot> _shots = new List<TowerShot>(16);
         private Transform _opponentAvatar;
         private Transform _opponentShield;
         private Transform _selfShieldRing;
@@ -83,9 +106,13 @@ namespace SpellboundVR.Presentation
                 _unitPools[t, 2] = new ObjectPool(() => CreateUnitVisual(team, MinionKind.Brute), poolRoot, brutePrewarm, "Unit_" + team + "_Brute");
             }
             _poolRoot = poolRoot;
+            for (int t = 0; t < 2; t++)
+            {
+                var team = (Team)t;
+                _shotPools[t] = new ObjectPool(() => CreateTowerShotVisual(team), poolRoot, 6, "TowerShot_" + team);
+            }
 
             BuildStructures();
-            BuildPlatforms();
             BuildOpponentAvatar();
         }
 
@@ -109,8 +136,8 @@ namespace SpellboundVR.Presentation
                 body.transform.localScale = new Vector3(s, s * (kind == MinionKind.Ranged ? 0.6f : 0.75f), s);
                 body.transform.localPosition = new Vector3(0f, s * 0.75f, 0f);
             }
-            FallbackVisuals.ApplyTint(go, FallbackVisuals.TeamColor(team), _block);
-            AttachHpBar(go.transform, kind == MinionKind.Brute ? 2.0f : 1.4f, 0.6f);
+            FallbackVisuals.ApplyTint(go, FallbackVisuals.LightTeamColor(team), _block);
+            AttachHpBar(go.transform, kind == MinionKind.Brute ? 2.4f : 1.4f, 0.6f);
             return go;
         }
 
@@ -145,6 +172,22 @@ namespace SpellboundVR.Presentation
             }
             _projectilePools.Add(spellId, pool);
             return pool;
+        }
+
+        /// <summary>타워 총알: 작은 발광 구체 + 짧은 꼬리 (팀 색을 연하게)</summary>
+        private static GameObject CreateTowerShotVisual(Team team)
+        {
+            Color c = Color.Lerp(FallbackVisuals.LightTeamColor(team), new Color(1f, 0.95f, 0.6f), 0.5f);
+            var go = FallbackVisuals.Primitive(PrimitiveType.Sphere, "TowerShot", FallbackVisuals.Opaque(c));
+            go.transform.localScale = Vector3.one * 0.16f;
+            var trail = go.AddComponent<TrailRenderer>();
+            trail.time = 0.12f;
+            trail.startWidth = 0.12f;
+            trail.endWidth = 0f;
+            trail.sharedMaterial = FallbackVisuals.Transparent(new Color(c.r, c.g, c.b, 0.6f));
+            trail.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            trail.receiveShadows = false;
+            return go;
         }
 
         private static GameObject CreateProjectileVisual()
@@ -205,30 +248,24 @@ namespace SpellboundVR.Presentation
                     var view = new StructureView
                     {
                         Root = visual,
-                        HpFill = AttachHpBar(holder, isNexus ? 3.2f : 3.8f, 1.6f),
+                        HpFill = AttachHpBar(holder, isNexus ? 3.2f : 5.4f, 1.6f), // 아트 높이: 넥서스 2.4m · 타워 4.8m
                         OriginalScale = visual.localScale,
+                        Team = team,
+                        MuzzleHeight = VisualHeight(visual) * 0.8f,
                     };
                     _structures[MatchSnapshot.StructureIndex(team, isNexus)] = view;
                 }
             }
         }
 
-        private void BuildPlatforms()
+        /// <summary>비주얼 피벗(바닥)에서 렌더러 윗면까지 높이. 렌더러가 없으면 2m</summary>
+        private static float VisualHeight(Transform visual)
         {
-            var root = new GameObject("[Commander Platforms]").transform;
-            root.SetParent(transform, false);
-            for (int t = 0; t < 2; t++)
-            {
-                var team = (Team)t;
-                for (int c = 0; c < 3; c++)
-                {
-                    var pad = FallbackVisuals.Primitive(PrimitiveType.Cylinder, "Pad_" + team + "_" + c,
-                                                        FallbackVisuals.Transparent(FallbackVisuals.TeamColor(team) * new Color(1f, 1f, 1f, 0.35f)));
-                    pad.transform.SetParent(root, false);
-                    pad.transform.position = _arena.ToWorld(_arena.PlayerPosition(team, c), PlatformHeight + 0.02f);
-                    pad.transform.localScale = new Vector3(1.6f, 0.01f, 1.6f);
-                }
-            }
+            var renderers = visual.GetComponentsInChildren<Renderer>();
+            if (renderers.Length == 0) return 2f;
+            float top = float.MinValue;
+            for (int i = 0; i < renderers.Length; i++) top = Mathf.Max(top, renderers[i].bounds.max.y);
+            return Mathf.Max(0.5f, top - visual.position.y);
         }
 
         private void BuildOpponentAvatar()
@@ -248,6 +285,7 @@ namespace SpellboundVR.Presentation
                 hat.transform.localScale = new Vector3(0.5f, 0.25f, 0.5f);
             }
             go.transform.SetParent(transform, false);
+            go.transform.localScale = Vector3.one * playerScale;
             _opponentAvatar = go.transform;
 
             _opponentShield = FallbackVisuals.Primitive(PrimitiveType.Sphere, "OpponentShield",
@@ -260,7 +298,7 @@ namespace SpellboundVR.Presentation
             _selfShieldRing = FallbackVisuals.Primitive(PrimitiveType.Cylinder, "SelfShieldRing",
                                                         FallbackVisuals.Transparent(new Color(0.35f, 0.75f, 1f, 0.35f))).transform;
             _selfShieldRing.SetParent(transform, false);
-            _selfShieldRing.localScale = new Vector3(2.2f, 0.01f, 2.2f);
+            _selfShieldRing.localScale = new Vector3(2.2f * playerScale, 0.01f, 2.2f * playerScale);
             _selfShieldRing.gameObject.SetActive(false);
         }
 
@@ -276,6 +314,7 @@ namespace SpellboundVR.Presentation
             UpdateUnits(s);
             UpdateProjectiles(s);
             UpdateStructures(s);
+            UpdateTowerShots();
             UpdatePlayers(s);
         }
 
@@ -371,6 +410,12 @@ namespace SpellboundVR.Presentation
                 ref var st = ref s.Structures[i];
                 bool alive = st.Alive != 0;
                 SetFill(view.HpFill, st.MaxHp > 0 ? (float)st.Hp / st.MaxHp : 0f);
+                // 타워 발사 횟수가 늘었으면 총알 표시 (첫 스냅샷 · 경기 재시작 때는 기록만)
+                if (st.IsNexus == 0 && st.ShotCount != view.LastShotCount)
+                {
+                    if (view.LastShotCount >= 0 && st.ShotCount > view.LastShotCount && alive) FireTowerShot(view, st.ShotTargetId);
+                    view.LastShotCount = st.ShotCount;
+                }
                 if (alive != view.WasAlive)
                 {
                     view.WasAlive = alive;
@@ -384,6 +429,45 @@ namespace SpellboundVR.Presentation
                     if (r != null) r.sharedMaterial = st.Locked != 0 ? LockedFill : NormalFill;
                 }
                 Billboard(view.HpFill);
+            }
+        }
+
+        private void FireTowerShot(StructureView tower, int targetId)
+        {
+            if (!_units.TryGetValue(targetId, out var target) || target.Go == null) return;
+            Vector3 from = tower.Root.position + Vector3.up * tower.MuzzleHeight;
+            Vector3 to = target.Go.transform.position + Vector3.up * 0.6f;
+            var pool = _shotPools[(int)tower.Team];
+            var go = pool.Get(from, Quaternion.LookRotation(to - from));
+            var trail = go.GetComponent<TrailRenderer>();
+            if (trail != null) trail.Clear();
+            _shots.Add(new TowerShot
+            {
+                Go = go,
+                Pool = pool,
+                From = from,
+                To = to,
+                TargetId = targetId,
+                Duration = Mathf.Max(0.05f, Vector3.Distance(from, to) / Mathf.Max(1f, towerShotSpeed)),
+            });
+        }
+
+        /// <summary>총알은 대상 유닛을 따라가다 도착하면 사라진다 (대상이 먼저 사라지면 마지막 위치까지)</summary>
+        private void UpdateTowerShots()
+        {
+            for (int i = _shots.Count - 1; i >= 0; i--)
+            {
+                var shot = _shots[i];
+                shot.Elapsed += Time.deltaTime;
+                if (_units.TryGetValue(shot.TargetId, out var target) && target.Go != null)
+                    shot.To = target.Go.transform.position + Vector3.up * 0.6f;
+                float k = Mathf.Clamp01(shot.Elapsed / shot.Duration);
+                Vector3 pos = Vector3.Lerp(shot.From, shot.To, k);
+                Vector3 dir = shot.To - shot.From;
+                shot.Go.transform.SetPositionAndRotation(pos, dir.sqrMagnitude > 1e-6f ? Quaternion.LookRotation(dir) : Quaternion.identity);
+                if (k < 1f) continue;
+                shot.Pool.Release(shot.Go);
+                _shots.RemoveAt(i);
             }
         }
 
@@ -415,7 +499,7 @@ namespace SpellboundVR.Presentation
                 _opponentAvatar.rotation = _arena.FacingRotation(opp);
                 _opponentShield.gameObject.SetActive(o.Shield > 0);
                 bool dead = o.Alive == 0;
-                _opponentAvatar.localScale = dead ? new Vector3(1f, 0.2f, 1f) : Vector3.one;
+                _opponentAvatar.localScale = dead ? new Vector3(playerScale, playerScale * 0.2f, playerScale) : Vector3.one * playerScale;
             }
 
             ref var me = ref s.Players[(int)local];

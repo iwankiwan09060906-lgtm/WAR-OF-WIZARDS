@@ -106,6 +106,8 @@
 | `MDL_Minion_Brute` | Brute | ~2.0m | 〃 |
 | `MDL_Avatar_Wizard` | 상대 플레이어(Away 발판 위) | ~1.8m, 발바닥 중앙 | (현재 미사용) |
 
+> 미니언 3종은 KayKit Adventurers(Knight · Rogue_Hooded · Barbarian)로 만들어져 있다. 메뉴 `Spellbound > Assets > Build KayKit Minion Models`가 프리팹(`Prefabs/Minion/`) · 컨트롤러(`Art/Models/Minion/AC_*`)를 다시 만들고 카탈로그까지 갱신한다. 캐릭터 · 키 · 무기 · 공격 클립은 `SpellboundMinionModelBuilder.cs`의 `Specs`에서 바꾼다.
+
 **미니언 Animator `State` 값** (코드가 상태가 바뀔 때마다 `SetInteger("State", …)`)
 
 | 값 | 의미 | 권장 클립 |
@@ -117,7 +119,7 @@
 
 - 파라미터 `State`가 없으면 코드는 Animator를 건드리지 않는다 (에러 없음).
 - **사망 시 유닛은 즉시 사라진다.** Death 클립은 지금 재생되지 않는다 → 필요하면 ㅊㄱㅇ에게 "사망 VFX/애니 훅" 요청.
-- **팀 컬러**: 코드가 렌더러에 `_Color` · `_BaseColor` · `_TeamColor`를 파랑(Home) / 빨강(Away)으로 곱한다 (§25.4). Standard 셰이더면 `_Color`가 텍스처에 곱해지므로, **팀 색이 들어갈 부분은 흰색~회색**으로 칠한다. 더 정교하게 하려면 마스크를 쓰는 Shader Graph에 `_TeamColor` 프로퍼티를 만든다.
+- **팀 컬러**: 코드가 렌더러에 `_Color` · `_BaseColor` · `_TeamColor`를 파랑(Home) / 빨강(Away)으로 곱한다 (§25.4). 미니언은 텍스처 색이 살도록 흰색 쪽으로 연하게 섞은 색(`FallbackVisuals.LightTeamColor`)을 쓴다. Standard 셰이더면 `_Color`가 텍스처에 곱해지므로, **팀 색이 들어갈 부분은 흰색~회색**으로 칠한다. 더 정교하게 하려면 마스크를 쓰는 Shader Graph에 `_TeamColor` 프로퍼티를 만든다.
 - **애니메이션 출처**: Mixamo 등에서 받을 때 Walk · Attack · Idle은 Loop Time 체크.
 
 ### 3.3 씬에 직접 배치하는 것 (이름이 아니라 위치로 연결)
@@ -126,15 +128,16 @@
 
 | 오브젝트 | 위치 (z) | 교체 방법 | 높이 권장 |
 | --- | --- | --- | --- |
-| `Arena/Home/Home_Nexus` | 5 | `Body`(큐브) 삭제 → 넥서스 모델을 자식으로, 로컬 (0,0,0) | **≤ 1.6m** |
-| `Arena/Home/Home_Tower` | 8 | `Body`(실린더) 삭제 → 타워 모델 | **≤ 2.4m** |
-| `Arena/Away/Away_Tower` · `Away_Nexus` | 12 · 15 | 같은 방식 (부모가 180° 돌아 있어 Home을 마주 봄) | Away 쪽은 높아도 됨 |
-| `Arena/Home/Home_Commander_L/C/R` | 0 (x = -5/0/+5) | 발판 메시 교체 | 윗면 0.3m (바꾸면 `[ArenaLayout] > Commander Platform Height`도 같이) |
-| `Arena/Away/Away_Commander_L/C/R` | 20 (x = +5/0/-5) | 〃 | 〃 |
-| `Arena/Ground`, `Arena/Lanes/*` | — | 자유롭게 교체 · 장식 (레인 폭 5m, 전장 길이 20m) | — |
+| `Arena/Home/Home_Nexus` | 3 (발판 바로 앞 — 위치가 곧 게임 로직의 넥서스 깊이) | `Body`(큐브) 삭제 → 넥서스 모델을 자식으로, 로컬 (0,0,0) | 현재 2.4m |
+| `Arena/Home/Home_Tower` | 13 (넥서스와 10m) | `Body`(실린더) 삭제 → 타워 모델 | 현재 4.8m |
+| `Arena/Away/Away_Tower` · `Away_Nexus` | 28 · 38 (전장 길이 41m — 양 타워 사이 15m) | 같은 방식 (부모가 180° 돌아 있어 Home을 마주 봄) | Home과 같은 크기 |
+| `Arena/Home/Home_Commander_L/C/R` | 0 (x = -5/0/+5) | 발판 메시 교체 (현재 scaffold_medium, 폭 3.6m — 플레이어 2배 기준) | 윗면 약 1.9m (바꾸면 `[ArenaLayout] > Commander Platform Height`도 같이 — 메뉴 6이 자동 갱신) |
+| `Arena/Away/Away_Commander_L/C/R` | 41 (x = +5/0/-5) | 〃 | 〃 |
+| `Arena/Ground`, `Arena/Lanes/*` | — | 자유롭게 교체 · 장식 (레인 폭 5m — 레인 사이 빈틈 없음, 전장 길이 41m) | — |
 
-- **Home 쪽 높이 제한 이유**: 플레이어 눈높이가 지면 5m라, 자기 타워 · 넥서스가 높으면 가운데 레인 교전이 가려진다. 지금 플레이스홀더도 중앙 칸에서는 타워 바로 뒤 미니언이 가려진다.
+- **Home 쪽 높이 주의**: 플레이어(크기 2배) 눈높이가 지면 10m라, 자기 타워 · 넥서스가 높으면 가운데 레인 교전이 가려진다. 현재 타워는 4.8m.
 - 파괴 연출: 코드는 파괴 시 **부모의 Y 스케일을 15%로 줄인다** → 모델 피벗이 바닥이어야 땅으로 무너지듯 보인다.
+- **현재 적용된 아트**: 메뉴 `Spellbound > 6. Apply KayKit Arena Art`가 넥서스 · 타워(Hexagon 팩 barracks 2.4m · tower_B 4.8m, blue = Home / red = Away), 전장 길이 41m · 타워 깊이 13m(타워 · Away 발판 · 넥서스 위치와 `fieldLength` · `towerDepth` 자동 갱신), 넥서스 위치(발판 앞 3m, `nexusDepth` 자동 갱신), Commander 발판(Dungeon 팩 `scaffold_medium`, 폭 3.6m로 서로 떨어진 순간이동 발판, 윗면 높이 → `Commander Platform Height` 자동 갱신), 플레이어 눈높이 10m(OVRCameraRig), 레인 타일(tileBrickB_largeCrackedA/B 실제 모델, 레인당 4 × 33장, 빈틈 없음, 연한 무광 머티리얼 `MAT_Lane_*`), 바닥(같은 타일을 한 장 5m로 크게 위에서 찍어 구운 `Art/Textures/Arena/TEX_Ground_Tiles.png`를 400m 바닥에 반복 — 레인보다 덜 연한 `MAT_Ground_*` 기준, 삼각형 2개), 18시 해질녘 하늘(`TEX_Sky_Dusk` 그라디언트) · 조명 · 안개를 적용한다. 만든 오브젝트는 `Art_` 접두라 다시 실행하면 갈아 끼운다. 씬 저장은 직접(Ctrl+S).
 - 배경 장식은 `Arena/Environment/` 같은 새 폴더에 넣는다. 콜라이더 불필요 (판정은 서버 수학으로 함).
 - 전체 배치를 플레이스홀더로 되돌리고 싶으면 `Spellbound > 5. Build Placeholder Arena` (Body가 없으면 다시 만든다).
 

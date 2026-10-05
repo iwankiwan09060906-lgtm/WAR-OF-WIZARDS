@@ -1,7 +1,7 @@
 // §18 타워
 //   · 플레이어를 공격하지 않음 (Rule 6), 적 유닛만
 //   · Target Priority: Brute → 먼저 진입한 유닛 → 근접 → 원거리
-//   · 공격: 초당 약 1.2회, 단일, 연속 타격 보너스
+//   · 공격: 초당 1회, 단일 — 1회 피해 = S07 Gatling 총 피해의 절반 (MatchRuleConfig.TowerDamage). 연속 타격 보너스는 기본 0
 
 using SpellboundVR.Contracts;
 using SpellboundVR.Core;
@@ -65,6 +65,7 @@ namespace SpellboundVR.Combat
             tower.AttackTimer += 1f / Mathf.Max(0.1f, rules.TowerAttacksPerSecond);
             tower.ComboCount = bestId == tower.LastTargetId ? Mathf.Min(tower.ComboCount + 1, rules.TowerComboMaxStacks) : 0;
             tower.LastTargetId = bestId;
+            tower.ShotCount++;
 
             float dmg = rules.TowerDamage * (1f + tower.ComboCount * rules.TowerComboBonusPerHit);
             var ctx = new DamageContext
