@@ -19,10 +19,10 @@ namespace SpellboundVR.Contracts
         /// <summary>오른손 엄지+검지 핀치 시작 → Drawing 진입(§6.2)</summary>
         event Action OnPinchStarted;
 
-        /// <summary>핀치 해제 + 그려진 궤적 → Recognizing($P+) 요청(§6.2)</summary>
+        /// <summary>핀치 해제 + 그려진 궤적 한 획. 여러 획 룬은 주먹까지 획을 모은다(§6.2)</summary>
         event Action<Vector2[]> OnPinchEnded;
 
-        /// <summary>오른손 주먹 → Armed 진입 / 조준 불필요 스킬은 즉시 시전(§6.2, §6.3)</summary>
+        /// <summary>오른손 주먹 → 그리기 끝 · Recognizing($P+) → Armed 진입 / 조준 불필요 스킬은 즉시 시전(§6.2, §6.3)</summary>
         event Action OnFistDetected;
 
         /// <summary>오른손 검지로 가리킴 → Aiming 진입, 1초 카운트 시작(§6.2)</summary>

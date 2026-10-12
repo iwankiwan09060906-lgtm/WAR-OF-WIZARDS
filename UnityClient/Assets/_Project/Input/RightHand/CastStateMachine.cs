@@ -1,16 +1,22 @@
 // §6.2 오른손 시전 상태 머신
 //
-//   Idle ──(엄지+검지 핀치)──▶ Drawing ──(핀치 해제)──▶ Recognizing ($P+, 사용 가능한 슬롯만)
-//     ▲                                                   │ 성공              실패 → Idle
-//     │                                                   ▼
-//     │                                               RuneReady ──(주먹)──▶ Armed ──(검지 포인팅)──▶ Aiming ──(2초)──▶ Cast
-//     │                                                   │ 자기/타워/전역 스킬: 주먹 즉시 Cast (§6.3)
+//   Idle ──(엄지+검지 핀치)──▶ Drawing ⟲ 핀치 해제 = 한 획 저장, 다시 핀치 = 다음 획 (한붓그리기가 아니어도 된다)
+//     ▲                          │ 주먹 = 그리기 끝
+//     │                          ▼
+//     │                      Recognizing ($P+ 다중 획, 사용 가능한 슬롯만) ── 실패 → Idle
+//     │                          │ 성공
+//     │                          ▼
+//     │                      RuneReady ──(같은 주먹)──▶ Armed ──(검지 포인팅)──▶ Aiming ──(2초)──▶ Cast
+//     │                          │ 자기/타워/전역 스킬: 주먹 즉시 Cast (§6.3)
 //     └──────────── 손바닥 펴기 · 5초 무입력 · 트래킹 손실 → 취소 (쿨타임 미소모, §6.4)
 //
 // 키보드 대체 입력(§6.6)은 슬롯 번호로 RuneReady를 건너뛰고 바로 Aiming(또는 즉시 시전)으로 간다.
+// 룬 인식 테스트(recognizeAllRunes): 덱에 없는 룬도 후보로 인식해 손 옆 아이콘 · 조준까지 진행하고, 시전 요청은 보내지 않는다 (로그만).
+//   덱에 있는 룬은 원래대로 시전한다.
 // 클라이언트는 요청만 보낸다 — 시전 가능 여부 · 결과는 서버가 결정한다(Rule 4).
 
 using System;
+using System.Collections.Generic;
 using SpellboundVR.Contracts;
 using SpellboundVR.Core;
 using SpellboundVR.Deck;
@@ -36,21 +42,28 @@ namespace SpellboundVR.Input
         public GestureValidationSettings recognition = new GestureValidationSettings();
         [Tooltip("인식 결과를 콘솔에 출력")]
         public bool logRecognition = true;
+        [Tooltip("룬 인식 테스트: 덱 · 쿨타임과 상관없이 라이브러리의 모든 룬을 후보로 인식한다. 덱 밖의 룬은 시전 요청 없이 로그만 남긴다")]
+        public bool recognizeAllRunes;
 
         private ClientSession _session;
         private ISpellInputSource _input;
         private EightSlotDeckManager _deck;
         private readonly ReadySlotTemplateSet _templates = new ReadySlotTemplateSet();
         private readonly CastCancelHandler _cancel = new CastCancelHandler();
+        private readonly List<Vector2[]> _strokes = new List<Vector2[]>(8);
         private bool _templatesDirty = true;
         private float _stateEnterTime;
         private int _selectedSlot = -1;
         private SpellDefinition _selectedSpell;
+        /// <summary>테스트용 임시 스킬 정의 (카탈로그에 없는 룬 — 이름 · 조준 표시용)</summary>
+        private readonly Dictionary<int, SpellDefinition> _testSpells = new Dictionary<int, SpellDefinition>();
 
         public CastState State { get; private set; } = CastState.Idle;
 
-        /// <summary>마지막으로 그린 룬 궤적 (룬 샘플 녹화용 — Spellbound > Runes 메뉴)</summary>
-        public Vector2[] LastStroke { get; private set; }
+        /// <summary>마지막으로 인식을 시도한 룬의 획들 (룬 샘플 녹화용 — Spellbound > Runes 메뉴)</summary>
+        public IReadOnlyList<Vector2[]> LastStrokes { get; private set; } = Array.Empty<Vector2[]>();
+        /// <summary>지금 그리는 룬에 저장된 획 수 (Drawing 중)</summary>
+        public int StrokeCount => _strokes.Count;
         public int SelectedSlot => _selectedSlot;
         public SpellDefinition SelectedSpell => _selectedSpell;
         public float TimeInState => Time.time - _stateEnterTime;
@@ -106,7 +119,7 @@ namespace SpellboundVR.Input
             if (_session == null || _input == null) return;
 
             var reason = _cancel.Evaluate(State, TimeInState, _session.Rules.RuneReadyTimeoutSeconds,
-                                          _input.IsRightHandTracked, _deck, _selectedSlot);
+                                          _input.IsRightHandTracked, _input.IsDrawing, _deck, _selectedSlot);
             if (reason != CastCancelReason.None)
             {
                 Cancel(reason);
@@ -125,6 +138,12 @@ namespace SpellboundVR.Input
 
         private void HandlePinchStarted()
         {
+            if (State == CastState.Drawing)
+            {
+                _stateEnterTime = Time.time; // 다음 획 — 무입력 타이머 재시작
+                _session.Client?.ReportActivity();
+                return;
+            }
             if (State != CastState.Idle) return; // RuneReady 이후의 핀치는 무시
             SetState(CastState.Drawing);
             _session.Client?.ReportActivity(); // §10 활동 = 룬 드로잉 시작
@@ -133,18 +152,23 @@ namespace SpellboundVR.Input
         private void HandlePinchEnded(Vector2[] stroke)
         {
             if (State != CastState.Drawing) return;
-            LastStroke = stroke;
             if (!_input.IsRightHandTracked)
             {
                 Cancel(CastCancelReason.TrackingLost);
                 return;
             }
-            SetState(CastState.Recognizing);
-            Recognize(stroke);
+            if (stroke != null && stroke.Length > 0) _strokes.Add(stroke);
+            _stateEnterTime = Time.time; // 획 사이 무입력 타이머 시작 (주먹을 쥘 때까지 Drawing 유지)
         }
 
         private void HandleFist()
         {
+            if (State == CastState.Drawing)
+            {
+                if (_input.IsDrawing) return; // 획을 긋는 중 — 핀치를 놓은 뒤에만 끝낼 수 있다
+                Recognize();
+                if (State != CastState.RuneReady) return; // 인식 실패 → Idle
+            }
             if (State != CastState.RuneReady || _selectedSpell == null) return;
             if (!_selectedSpell.RequiresAim)
             {
@@ -190,10 +214,16 @@ namespace SpellboundVR.Input
 
         // ── 단계 ─────────────────────────────────────────────
 
-        private void Recognize(Vector2[] stroke)
+        /// <summary>지금까지 그린 획 전부를 룬 하나로 인식한다 (주먹 = 그리기 끝).</summary>
+        private void Recognize()
         {
+            var strokes = _strokes.ToArray();
+            LastStrokes = strokes;
+            EndRune();
+            SetState(CastState.Recognizing);
+
             recognition.MinStrokeSize = _input.MinStrokeSize;
-            var strokeReject = GestureValidator.ValidateStroke(stroke, recognition);
+            var strokeReject = GestureValidator.ValidateStrokes(strokes, recognition);
             if (strokeReject != GestureRejectReason.None)
             {
                 Fail("Rune too short");
@@ -202,7 +232,8 @@ namespace SpellboundVR.Input
 
             if (_templatesDirty)
             {
-                _templates.Rebuild(_session.LocalDeck, _deck.GetState, _session.Runes);
+                if (recognizeAllRunes) _templates.RebuildAll(_session.Runes);
+                else _templates.Rebuild(_session.LocalDeck, _deck.GetState, _session.Runes);
                 _templatesDirty = false;
             }
             if (_templates.Candidates.Count == 0)
@@ -211,11 +242,11 @@ namespace SpellboundVR.Input
                 return;
             }
 
-            var match = _templates.Recognize(stroke);
+            var match = _templates.Recognize(strokes);
             var reject = GestureValidator.ValidateMatch(match, recognition);
             if (logRecognition)
                 Debug.Log($"[CastStateMachine] $P+ → {SpellIds.Code(match.SpellId)} d={match.Distance:0.00} " +
-                          $"2nd={SpellIds.Code(match.SecondSpellId)} d2={(match.SecondDistance < float.MaxValue ? match.SecondDistance.ToString("0.00") : "-")} → {reject}");
+                          $"2nd={SpellIds.Code(match.SecondSpellId)} d2={(match.SecondDistance < float.MaxValue ? match.SecondDistance.ToString("0.00") : "-")} → {reject} ({strokes.Length}획)");
             if (reject != GestureRejectReason.None)
             {
                 Fail(reject == GestureRejectReason.Ambiguous ? "Rune unclear" : "Rune not recognized");
@@ -224,6 +255,16 @@ namespace SpellboundVR.Input
 
             int slot = _deck.FindSlot(match.SpellId);
             var def = _session.Catalog.Get(match.SpellId);
+            if (recognizeAllRunes && slot < 0)
+            {
+                // 덱 밖의 룬 — 테스트 진행 (아이콘 · 조준까지, 시전 요청 없음)
+                _selectedSlot = -1;
+                _selectedSpell = def != null ? def : TestSpell(match.SpellId);
+                Debug.Log($"[RuneTest] {SpellIds.Code(match.SpellId)} {_selectedSpell.DisplayName} 인식 (덱 밖 — 시전 요청 없이 테스트)");
+                SetState(CastState.RuneReady);
+                OnRuneRecognized?.Invoke(_selectedSpell, -1);
+                return;
+            }
             if (slot < 0 || def == null || !_deck.IsReady(slot))
             {
                 Fail("Rune not ready");
@@ -252,6 +293,11 @@ namespace SpellboundVR.Input
 
         private void CommitCast()
         {
+            if (_selectedSpell != null && _selectedSlot < 0 && recognizeAllRunes)
+            {
+                CommitTestCast();
+                return;
+            }
             if (_selectedSpell == null || _selectedSlot < 0)
             {
                 Cancel(CastCancelReason.SlotUnavailable);
@@ -291,6 +337,31 @@ namespace SpellboundVR.Input
             SetState(CastState.Idle);
         }
 
+        /// <summary>덱 밖 룬의 테스트 "시전" — 서버에 보내지 않고 조준 결과만 남긴다</summary>
+        private void CommitTestCast()
+        {
+            string target = "-";
+            if (_selectedSpell.RequiresAim && aimPointer != null)
+            {
+                var aim = aimPointer.Current;
+                if (aim.Valid) target = $"{aim.LocalColumn} 깊이 {aim.Depth:0.00}";
+                aimPointer.End();
+            }
+            Debug.Log($"[RuneTest] {_selectedSpell.Code} {_selectedSpell.DisplayName} 시전 테스트 완료 (조준: {target}) — 서버 요청 안 보냄");
+            ResetSelection();
+            SetState(CastState.Idle);
+        }
+
+        private SpellDefinition TestSpell(int spellId)
+        {
+            if (_testSpells.TryGetValue(spellId, out var def)) return def;
+            var rune = _session.Runes != null ? _session.Runes.Find(spellId) : null;
+            def = SpellDefinition.Create(spellId, rune != null ? rune.RuneName : SpellIds.Code(spellId), "Test", Color.white);
+            def.Targeting = SpellTargeting.Column; // 조준 단계까지 확인
+            _testSpells.Add(spellId, def);
+            return def;
+        }
+
         public void Cancel(CastCancelReason reason)
         {
             if (State == CastState.Idle) return;
@@ -307,9 +378,17 @@ namespace SpellboundVR.Input
             _selectedSpell = null;
         }
 
+        /// <summary>그리던 룬을 끝낸다 — 저장한 획을 비우고 다음 핀치는 새 룬 (그리기 평면 다시 잡기)</summary>
+        private void EndRune()
+        {
+            _strokes.Clear();
+            _input?.EndRune();
+        }
+
         private void SetState(CastState next)
         {
             if (next == State) return;
+            if (next == CastState.Idle) EndRune();
             var prev = State;
             State = next;
             _stateEnterTime = Time.time;

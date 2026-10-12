@@ -2,8 +2,8 @@
 //   헤드셋 없이 개발하거나, 에디터를 두 번째 사람 플레이어로 쓴 PvP · 친선전 테스트에 사용한다.
 //
 //   1 ~ 8          : 슬롯 번호로 바로 시전 (룬 드로잉 생략, §6.6)
-//   마우스 왼쪽 드래그 : 룬 그리기 (= 핀치 유지)
-//   F              : 주먹 (= Armed / 즉시 시전 스킬은 시전)
+//   마우스 왼쪽 드래그 : 룬 그리기 (= 핀치 유지, 여러 번 드래그 = 여러 획)
+//   F              : 주먹 (= 그리기 끝 → 인식 → Armed / 즉시 시전 스킬은 시전)
 //   G              : 검지 포인팅 (= Aiming 시작)
 //   X / 마우스 오른쪽 : 손바닥 펴기 (= 취소)
 //   A / D          : 왼쪽 / 오른쪽 이동
@@ -48,6 +48,9 @@ namespace SpellboundVR.Input
         public float MinStrokeSize => minStrokeSizePixels;
 
         private Camera Cam => viewCamera != null ? viewCamera : Camera.main;
+
+        /// <summary>화면 좌표는 고정 평면이라 획끼리 이미 같은 좌표계 — 할 일 없음</summary>
+        public void EndRune() { }
 
         private void Update()
         {

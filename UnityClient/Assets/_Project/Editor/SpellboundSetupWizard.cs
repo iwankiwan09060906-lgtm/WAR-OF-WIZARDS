@@ -1,7 +1,7 @@
 // 에디터 자동 셋업 도구 — 사람이 손으로 할 작업을 메뉴 한 번으로 처리한다.
 //   Spellbound > 1. Setup Battle Scene
 //     ① 데이터 에셋 생성 (이미 있으면 건드리지 않음)
-//        MatchRuleConfig / BotConfig / Minion_* / Spell_S03 · S07 · S08 / SpellCatalog / Rune_* / RuneTemplateLibrary / VFXCatalog
+//        MatchRuleConfig / BotConfig / Minion_* / Spell_S03 · S07 · S08 / SpellCatalog / Rune_* (19종) / RuneTemplateLibrary / VFXCatalog
 //     ② 네트워크 프리팹 생성: Prefabs/Network/NetworkMatchState, NetworkPlayer (+ Fusion 프리팹 테이블 갱신)
 //     ③ 04_Battle 씬 연결: [Spellbound](GameBootstrap) · ArenaLayout · OVRHandPrefab(좌/우) · 참조 할당 → 저장
 //   Spellbound > Mode > ... : GameBootstrap 실행 모드 전환
@@ -118,13 +118,13 @@ namespace SpellboundVR.EditorTools
             AddUnique(a.Catalog.Spells, shield);
             EditorUtility.SetDirty(a.Catalog);
 
-            var runeFire = LoadOrCreate(RuneData + "/Rune_S03_Fireball.asset", RuneTemplateLibrary.CreateFireballTemplate);
-            var runeGat = LoadOrCreate(RuneData + "/Rune_S07_Gatling.asset", RuneTemplateLibrary.CreateGatlingTemplate);
-            var runeShield = LoadOrCreate(RuneData + "/Rune_S08_Shield.asset", RuneTemplateLibrary.CreateShieldTemplate);
             a.Runes = LoadOrCreate(RuneData + "/RuneTemplateLibrary.asset", () => ScriptableObject.CreateInstance<RuneTemplateLibrary>());
-            AddUnique(a.Runes.Templates, runeFire);
-            AddUnique(a.Runes.Templates, runeGat);
-            AddUnique(a.Runes.Templates, runeShield);
+            foreach (var design in RuneDesigns.All)
+            {
+                var d = design;
+                var rune = LoadOrCreate($"{RuneData}/Rune_{SpellIds.Code(d.SpellId)}_{d.Name}.asset", () => RuneTemplateLibrary.CreateTemplate(d));
+                AddUnique(a.Runes.Templates, rune);
+            }
             EditorUtility.SetDirty(a.Runes);
 
             a.Vfx = LoadOrCreate(PresentationData + "/VFXCatalog.asset", VFXCatalog.CreateDefault);

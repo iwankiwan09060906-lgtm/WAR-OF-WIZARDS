@@ -13,6 +13,22 @@ MonoBehaviour:
   m_Name: RuneTemplateLibrary
   m_EditorClassIdentifier: Assembly-CSharp::SpellboundVR.Gesture.RuneTemplateLibrary
   Templates:
+  - {fileID: 11400000, guid: 96645934b2982c446bd9781f7239bfb9, type: 2}
+  - {fileID: 11400000, guid: baa4d9dc46f1cc44087513a9c854ca9b, type: 2}
   - {fileID: 11400000, guid: 40d3eb86a1d2d5f419e52fa280975b4c, type: 2}
+  - {fileID: 11400000, guid: f2f8ef7e983a4b44f993e8a15c847005, type: 2}
+  - {fileID: 11400000, guid: f623a57bfad2cdb4e9a0d7e24340bcb4, type: 2}
+  - {fileID: 11400000, guid: ec2c70fef57d70d4c88685b5912fc846, type: 2}
   - {fileID: 11400000, guid: f6e6afd9c01130d47b185f02b0f65791, type: 2}
   - {fileID: 11400000, guid: 7d9d89deab704664b958b74c9dd8d338, type: 2}
+  - {fileID: 11400000, guid: b1fbc33cbbcd05746a563d57f224bc73, type: 2}
+  - {fileID: 11400000, guid: 5b24e984b9f0cef408e461128a83434b, type: 2}
+  - {fileID: 11400000, guid: ae7ce40817627d247900d0ef6e0affa4, type: 2}
+  - {fileID: 11400000, guid: 59034e3af895f654b9124c043e5febcc, type: 2}
+  - {fileID: 11400000, guid: 4b3f6c11f0404e8439a954dafe6cffbb, type: 2}
+  - {fileID: 11400000, guid: 30d42aadba4c3fa47b8ffd2be62d80f8, type: 2}
+  - {fileID: 11400000, guid: 8f95350ca0322e64183eb737509efa6b, type: 2}
+  - {fileID: 11400000, guid: ad1762778cda1a445b97d6dfac89721c, type: 2}
+  - {fileID: 11400000, guid: 13f547aa005556b4186c83be639dc130, type: 2}
+  - {fileID: 11400000, guid: 985b2f8837d2d6f4eb3b0c79e5e30f33, type: 2}
+  - {fileID: 11400000, guid: 4e179e4bda8759243af937a31c960edc, type: 2}

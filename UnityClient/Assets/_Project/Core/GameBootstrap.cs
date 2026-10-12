@@ -85,6 +85,10 @@ namespace SpellboundVR.Core
         public bool localAfkEnabled = true;
         public bool showDebugPanels = true;
 
+        [Header("룬 인식 테스트")]
+        [Tooltip("true: 덱(스킬창)에 없는 룬 19종도 인식해 손 옆 아이콘 · 조준까지 진행 (시전 요청은 보내지 않고 [RuneTest] 로그만). 덱 안의 룬은 원래대로 시전")]
+        public bool recognizeAllRunes = true;
+
         [Header("내 덱 (SpellId, 0 = 빈 슬롯) — 마법서(C09) 연동 전 임시")]
         public int[] localDeck = { SpellIds.S03_Fireball, SpellIds.S07_Gatling, SpellIds.S08_Shield, 0, 0, 0, 0, 0 };
 
@@ -232,6 +236,7 @@ namespace SpellboundVR.Core
             aim.markerView = marker;
             var cast = gameObject.AddComponent<CastStateMachine>();
             cast.aimPointer = aim;
+            cast.recognizeAllRunes = recognizeAllRunes;
             cast.Initialize(_session, input, _deckManager);
 
             // 표시

@@ -53,6 +53,8 @@ namespace SpellboundVR.Input
         public HandPose LeftPose => _leftPose.Current;
         public HandPoseDetector RightPoseDetector => _rightPose;
 
+        public void EndRune() => _recorder.ReleaseFrame();
+
         public void Configure(HandJointProvider left, HandJointProvider right, Transform headTransform)
         {
             leftHand = left;

@@ -1,9 +1,5 @@
-// 19종 룬 템플릿 묶음. 에셋이 없으면 구현 대상 3종(S03 / S07 / S08)의 절차 생성 기본 템플릿을 쓴다.
-//
-// 기본 룬 디자인 (서로 닮지 않게 선택, §9 "19종 전체 룬 간 형태 유사도 검증 필수"):
-//   S03 파이어볼 : 원 (○)
-//   S07 총난사   : 지그재그 Z
-//   S08 방어 쉴드 : 역삼각형 (▽, 방패 모양)
+// 19종 룬 템플릿 묶음. 에셋이 없으면 RuneDesigns(디자인 이미지 Art/Runes/Designs 기준)의 절차 생성 템플릿을 쓴다.
+// 에셋은 Spellbound > Runes > Build Rune Templates가 만든다 (Gesture/Templates/Data/Rune_{SkillId}_{Name}.asset).
 
 using System.Collections.Generic;
 using SpellboundVR.Spells;
@@ -27,50 +23,22 @@ namespace SpellboundVR.Gesture
         {
             var lib = CreateInstance<RuneTemplateLibrary>();
             lib.name = "RuneTemplateLibrary (Runtime Default)";
-            lib.Templates.Add(CreateFireballTemplate());
-            lib.Templates.Add(CreateGatlingTemplate());
-            lib.Templates.Add(CreateShieldTemplate());
+            foreach (var design in RuneDesigns.All) lib.Templates.Add(CreateTemplate(design));
             return lib;
         }
 
-        // ── 절차 생성 기본 템플릿 ─────────────────────────────
-
-        public static RuneTemplate CreateFireballTemplate()
+        /// <summary>디자인 기본 도형 + 변형 샘플로 템플릿을 만든다</summary>
+        public static RuneTemplate CreateTemplate(RuneDesigns.Design design)
         {
             var t = CreateInstance<RuneTemplate>();
-            t.SpellId = SpellIds.S03_Fireball;
-            t.RuneName = "Circle";
-            t.name = "Rune_S03_Fireball";
-            t.AddSample("circle_cw", Ellipse(1f, 1f, 90f, -360f, 48));
-            t.AddSample("circle_ccw", Ellipse(1f, 1f, 90f, 360f, 48));
-            t.AddSample("ellipse_wide", Ellipse(1.3f, 1f, 90f, -360f, 48));
-            t.AddSample("ellipse_tall", Ellipse(1f, 1.25f, 0f, 360f, 48));
+            t.SpellId = design.SpellId;
+            t.RuneName = design.Name;
+            t.name = "Rune_" + SpellIds.Code(design.SpellId) + "_" + design.Name;
+            foreach (var (label, strokes) in RuneDesigns.Samples(design)) t.AddSample(label, strokes);
             return t;
         }
 
-        public static RuneTemplate CreateGatlingTemplate()
-        {
-            var t = CreateInstance<RuneTemplate>();
-            t.SpellId = SpellIds.S07_Gatling;
-            t.RuneName = "Zigzag";
-            t.name = "Rune_S07_Gatling";
-            t.AddSample("z", Polyline(new[] { new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0f, 0f), new Vector2(1f, 0f) }, 16));
-            t.AddSample("z_italic", Polyline(new[] { new Vector2(0.15f, 1f), new Vector2(1.15f, 1f), new Vector2(0f, 0f), new Vector2(1f, 0f) }, 16));
-            t.AddSample("z_wide", Polyline(new[] { new Vector2(0f, 1f), new Vector2(1.4f, 1f), new Vector2(0f, 0f), new Vector2(1.4f, 0f) }, 16));
-            return t;
-        }
-
-        public static RuneTemplate CreateShieldTemplate()
-        {
-            var t = CreateInstance<RuneTemplate>();
-            t.SpellId = SpellIds.S08_Shield;
-            t.RuneName = "Shield";
-            t.name = "Rune_S08_Shield";
-            t.AddSample("tri_down", Polyline(new[] { new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 0f), new Vector2(0f, 1f) }, 16));
-            t.AddSample("tri_down_tall", Polyline(new[] { new Vector2(0f, 1.3f), new Vector2(1f, 1.3f), new Vector2(0.5f, 0f), new Vector2(0f, 1.3f) }, 16));
-            t.AddSample("tri_down_wide", Polyline(new[] { new Vector2(0f, 1f), new Vector2(1.4f, 1f), new Vector2(0.7f, 0f), new Vector2(0f, 1f) }, 16));
-            return t;
-        }
+        // ── 도형 도우미 ──────────────────────────────────────
 
         public static Vector2[] Ellipse(float rx, float ry, float startDeg, float sweepDeg, int count)
         {

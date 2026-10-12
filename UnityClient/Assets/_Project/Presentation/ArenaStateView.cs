@@ -1,6 +1,7 @@
 // 서버 상태의 월드 표시 (§16 "클라이언트는 위치 보간 · 애니메이션 · VFX", §21.4)
 //   · 미니언 · 투사체 · 구조물 · 상대 플레이어 아바타 · 타워 총알을 스냅샷에서 읽어 그린다 (표시 전용, 판정 없음).
-//   · Commander 발판은 씬 아트(scaffold)가 담당한다 — 코드가 그리던 팀 색 패드는 없앰.
+//   · Commander 발판 · 구조물은 씬 아트가 담당한다. 아군 / 적군 색은 보는 사람 기준 (TeamArt — 진영 배정 시 다시 적용).
+//   · 타워 총알: VFX_Tower_Ally_Projectile / VFX_Tower_Enemy_Projectile (아군 · 적 타워), 없으면 작은 발광 구체.
 //   · 유닛 위치는 매 프레임 목표 위치로 보간한다.
 //   · 아트 프리팹(MDL_*)이 카탈로그에 있으면 쓰고, 없으면 캡슐 · 큐브 대체 비주얼을 쓴다 (§25.4).
 //   · 전투 중 생성 · 파괴 대신 풀을 쓴다 (§17).
@@ -63,8 +64,8 @@ namespace SpellboundVR.Presentation
         public int projectilePrewarm = 24;
         [Tooltip("플레이어 크기 배율 — 상대 아바타 · 쉴드 링 (눈높이는 OVRCameraRig 높이)")]
         public float playerScale = 2f;
-        [Tooltip("타워 총알 속도 (m/s)")]
-        public float towerShotSpeed = 30f;
+        [Tooltip("타워 총알 속도 (m/s) — 마법 불꽃이 날아가는 게 보이도록 느리게 (사거리 약 10m → 약 0.8초)")]
+        public float towerShotSpeed = 12f;
 
         private ClientSession _session;
         private VFXCatalog _catalog;
@@ -77,6 +78,7 @@ namespace SpellboundVR.Presentation
         private readonly Dictionary<int, ObjectPool> _projectilePools = new Dictionary<int, ObjectPool>();
         private Transform _poolRoot;
         private readonly StructureView[] _structures = new StructureView[4];
+        /// <summary>[0] = 아군 타워 총알, [1] = 적 타워 총알 (보는 사람 기준)</summary>
         private readonly ObjectPool[] _shotPools = new ObjectPool[2];
         private readonly List<TowerShot> _shots = new List<TowerShot>(16);
         private Transform _opponentAvatar;
@@ -106,12 +108,14 @@ namespace SpellboundVR.Presentation
                 _unitPools[t, 2] = new ObjectPool(() => CreateUnitVisual(team, MinionKind.Brute), poolRoot, brutePrewarm, "Unit_" + team + "_Brute");
             }
             _poolRoot = poolRoot;
-            for (int t = 0; t < 2; t++)
+            for (int i = 0; i < 2; i++)
             {
-                var team = (Team)t;
-                _shotPools[t] = new ObjectPool(() => CreateTowerShotVisual(team), poolRoot, 6, "TowerShot_" + team);
+                bool ally = i == 0;
+                _shotPools[i] = new ObjectPool(() => CreateTowerShotVisual(ally), poolRoot, 6, ally ? "TowerShot_Ally" : "TowerShot_Enemy");
             }
 
+            TeamArt.ApplyAll(LocalTeam);
+            _session.Events.OnLocalTeamAssigned += TeamArt.ApplyAll;
             BuildStructures();
             BuildOpponentAvatar();
         }
@@ -174,10 +178,21 @@ namespace SpellboundVR.Presentation
             return pool;
         }
 
-        /// <summary>타워 총알: 작은 발광 구체 + 짧은 꼬리 (팀 색을 연하게)</summary>
-        private static GameObject CreateTowerShotVisual(Team team)
+        private void OnDestroy()
         {
-            Color c = Color.Lerp(FallbackVisuals.LightTeamColor(team), new Color(1f, 0.95f, 0.6f), 0.5f);
+            if (_session != null) _session.Events.OnLocalTeamAssigned -= TeamArt.ApplyAll;
+        }
+
+        /// <summary>진영 배정 전(오프라인 · 서버 화면)에는 Home 시점</summary>
+        private Team LocalTeam => _session.Events.HasLocalTeam ? _session.Events.LocalTeam : Team.Home;
+
+        /// <summary>타워 총알: 카탈로그 VFX(마법 불꽃)가 있으면 쓰고, 없으면 작은 발광 구체 + 짧은 꼬리 (진영 색을 연하게)</summary>
+        private GameObject CreateTowerShotVisual(bool ally)
+        {
+            string vfxName = ally ? "VFX_Tower_Ally_Projectile" : "VFX_Tower_Enemy_Projectile";
+            if (_catalog != null && _catalog.TryGet(vfxName, out var prefab)) return Instantiate(prefab);
+
+            Color c = Color.Lerp(FallbackVisuals.LightTeamColor(ally ? Team.Home : Team.Away), new Color(1f, 0.95f, 0.6f), 0.5f);
             var go = FallbackVisuals.Primitive(PrimitiveType.Sphere, "TowerShot", FallbackVisuals.Opaque(c));
             go.transform.localScale = Vector3.one * 0.16f;
             var trail = go.AddComponent<TrailRenderer>();
@@ -437,10 +452,16 @@ namespace SpellboundVR.Presentation
             if (!_units.TryGetValue(targetId, out var target) || target.Go == null) return;
             Vector3 from = tower.Root.position + Vector3.up * tower.MuzzleHeight;
             Vector3 to = target.Go.transform.position + Vector3.up * 0.6f;
-            var pool = _shotPools[(int)tower.Team];
+            var pool = _shotPools[tower.Team == LocalTeam ? 0 : 1];
             var go = pool.Get(from, Quaternion.LookRotation(to - from));
             var trail = go.GetComponent<TrailRenderer>();
             if (trail != null) trail.Clear();
+            var particles = go.GetComponent<ParticleSystem>();
+            if (particles != null)
+            {
+                particles.Clear(true); // 풀에서 재사용 — 지난 발사의 불꽃이 남지 않게
+                particles.Play(true);
+            }
             _shots.Add(new TowerShot
             {
                 Go = go,

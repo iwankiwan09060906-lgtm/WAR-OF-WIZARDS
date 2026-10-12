@@ -28,27 +28,26 @@
 | 항목 | 값 |
 | --- | --- |
 | 폴더 | `UnityClient/Assets/Art/Runes/Icons/` |
-| 파일명 | **`Icon_{SkillId}_{Name}.png`** — 예) `Icon_S03_Fireball.png`, `Icon_S07_Gatling.png`, `Icon_S08_Shield.png`, `Icon_H02_Laser.png` |
-| 규격 | PNG, 투명 배경, 정사각형 256×256 권장, 밝은 선(어두운 HUD 위에 표시됨) |
-| 등록 | 메뉴 `Spellbound > Assets > Assign Rune Icons` → 각 `Rune_Sxx_*.asset`의 `Icon`에 자동 할당 (알파 · Clamp 설정도 자동) |
-| 쓰이는 곳 | HUD 8슬롯 배경, 룬 인식 성공 시 오른손 위 표시 |
-
-> 규칙은 "파일명이 `Icon_` + 스킬 코드로 시작"이다. `Icon_S03.png`도 인식한다.
+| 파일명 | **`{SkillId}_s.png`** — 현재 19종 (`S01_s.png` ~ `H06_s.png`). `Icon_{SkillId}_{Name}.png`도 인식한다 |
+| 규격 | PNG, 투명 배경 위 선 (현재 500×500 검은 선). 표시할 때 선을 스킬 색으로 칠하고 뒤에 반투명 원판을 깐다 (`Presentation/Resources/RuneIcon.shader`) |
+| 등록 | 메뉴 `Spellbound > Runes > Build Rune Templates` 또는 `Spellbound > Assets > Assign Rune Icons` → 각 `Rune_*.asset`의 `Icon`에 자동 할당 (알파 · Clamp · 밉맵 · 최대 512 설정도 자동) |
+| 쓰이는 곳 | HUD 8슬롯 배경, 룬 인식 후 RuneReady · Armed · Aiming 동안 오른손 옆 (원본 가로세로 비율 유지, 긴 변 10cm, 천천히 회전) |
 
 ### 1.2 룬 모양 (인식 템플릿)
 
 | 항목 | 값 |
 | --- | --- |
 | 저장 위치 | `UnityClient/Assets/_Project/Gesture/Templates/Data/Rune_{SkillId}_{Name}.asset` (점 목록) |
-| 디자인 원본(참고용) | `UnityClient/Assets/Art/Runes/Designs/Rune_S03_Fireball.png` — 코드는 읽지 않음, 팀 공유용 |
-| 현재 기본 모양 | S03 = 원 ○, S07 = Z, S08 = 역삼각형 ▽ (코드가 만든 도형) |
+| 디자인 원본 | `UnityClient/Assets/Art/Runes/Designs/{SkillId}.png` (19종) — 코드는 이미지를 읽지 않는다. 같은 모양을 `Gesture/Runtime/RuneDesigns.cs`에 획 단위로 옮겨 적었다 |
+| 현재 기본 모양 | 19종 디자인 도형 + 변형 3개(가로 · 세로로 늘림, 기울임). 메뉴 `Spellbound > Runes > Build Rune Templates`가 에셋 19개 · 라이브러리 · 아이콘을 만든다 (녹화 샘플은 유지) |
+| 인식 테스트 | `GameBootstrap > Recognize All Runes`(기본 켜짐) — 덱 밖 룬도 인식해 아이콘 · 조준까지 진행하고 시전 요청 대신 `[RuneTest]` 로그. 메뉴 `Spellbound > Debug > Test All 19 Runes`로 19종 자동 확인 |
 
 **새 모양 등록 방법 (디자인 확정 후)**
 1. 04_Battle Play → Game 뷰 클릭.
-2. 마우스 왼쪽 드래그로 **한 획**에 룬을 그린다 (손으로 그릴 순서 · 방향 그대로).
-3. 메뉴 `Spellbound > Runes > Record Last Stroke → S03 Fireball` (해당 스킬 선택).
+2. 마우스 왼쪽 드래그로 룬을 그린다 (손으로 그릴 순서 · 방향 그대로). 여러 획 룬은 획마다 드래그를 나눠 그리고, 다 그렸으면 `F`(주먹)로 그리기를 끝낸다 — 인식에 실패해도 궤적은 남는다.
+3. 메뉴 `Spellbound > Runes > Record Last Stroke > S03 Fireball` (해당 스킬 선택, 19종 모두 있음).
 4. 2~3을 **스킬당 5~10번** 반복 (조금씩 다르게: 크게/작게/기울여서).
-5. 기본 도형을 빼고 싶으면 `Rune_S03_*.asset` 인스펙터의 `Samples`에서 `circle_*` 항목을 지운다.
+5. 기본 도형을 빼고 싶으면 `Rune_S03_*.asset` 인스펙터의 `Samples`에서 `base` · `wide` · `tall` · `italic` 항목을 지운다.
 6. 잘못 녹화했으면 `Spellbound > Runes > Clear Recorded Samples` (녹화분만 삭제).
 
 **디자인 규칙 (§9 유사도 검증)**
@@ -131,13 +130,20 @@
 | `Arena/Home/Home_Nexus` | 3 (발판 바로 앞 — 위치가 곧 게임 로직의 넥서스 깊이) | `Body`(큐브) 삭제 → 넥서스 모델을 자식으로, 로컬 (0,0,0) | 현재 2.4m |
 | `Arena/Home/Home_Tower` | 13 (넥서스와 10m) | `Body`(실린더) 삭제 → 타워 모델 | 현재 4.8m |
 | `Arena/Away/Away_Tower` · `Away_Nexus` | 28 · 38 (전장 길이 41m — 양 타워 사이 15m) | 같은 방식 (부모가 180° 돌아 있어 Home을 마주 봄) | Home과 같은 크기 |
-| `Arena/Home/Home_Commander_L/C/R` | 0 (x = -5/0/+5) | 발판 메시 교체 (현재 scaffold_medium, 폭 3.6m — 플레이어 2배 기준) | 윗면 약 1.9m (바꾸면 `[ArenaLayout] > Commander Platform Height`도 같이 — 메뉴 6이 자동 갱신) |
+| `Arena/Home/Home_Commander_L/C/R` | 0 (x = -5/0/+5) | 발판 메시 교체 (현재 Scene Teleportation Kit platform_blue/red, 폭 3.6m — 플레이어 2배 기준) | 가운데 디스크 윗면 (바꾸면 `[ArenaLayout] > Commander Platform Height`도 같이 — 메뉴 6이 자동 갱신) |
 | `Arena/Away/Away_Commander_L/C/R` | 41 (x = +5/0/-5) | 〃 | 〃 |
-| `Arena/Ground`, `Arena/Lanes/*` | — | 자유롭게 교체 · 장식 (레인 폭 5m — 레인 사이 빈틈 없음, 전장 길이 41m) | — |
+| `Arena/Art_Bridge`, `Arena/Lanes/*` | — | 메뉴 6이 만드는 바닥 · 벽 · 절벽 · 장식 (레인 폭 5m — 레인 사이 빈틈 없음, 전장 길이 41m). 레인 판은 렌더러만 꺼져 있다 | — |
 
 - **Home 쪽 높이 주의**: 플레이어(크기 2배) 눈높이가 지면 10m라, 자기 타워 · 넥서스가 높으면 가운데 레인 교전이 가려진다. 현재 타워는 4.8m.
 - 파괴 연출: 코드는 파괴 시 **부모의 Y 스케일을 15%로 줄인다** → 모델 피벗이 바닥이어야 땅으로 무너지듯 보인다.
-- **현재 적용된 아트**: 메뉴 `Spellbound > 6. Apply KayKit Arena Art`가 넥서스 · 타워(Hexagon 팩 barracks 2.4m · tower_B 4.8m, blue = Home / red = Away), 전장 길이 41m · 타워 깊이 13m(타워 · Away 발판 · 넥서스 위치와 `fieldLength` · `towerDepth` 자동 갱신), 넥서스 위치(발판 앞 3m, `nexusDepth` 자동 갱신), Commander 발판(Dungeon 팩 `scaffold_medium`, 폭 3.6m로 서로 떨어진 순간이동 발판, 윗면 높이 → `Commander Platform Height` 자동 갱신), 플레이어 눈높이 10m(OVRCameraRig), 레인 타일(tileBrickB_largeCrackedA/B 실제 모델, 레인당 4 × 33장, 빈틈 없음, 연한 무광 머티리얼 `MAT_Lane_*`), 바닥(같은 타일을 한 장 5m로 크게 위에서 찍어 구운 `Art/Textures/Arena/TEX_Ground_Tiles.png`를 400m 바닥에 반복 — 레인보다 덜 연한 `MAT_Ground_*` 기준, 삼각형 2개), 18시 해질녘 하늘(`TEX_Sky_Dusk` 그라디언트) · 조명 · 안개를 적용한다. 만든 오브젝트는 `Art_` 접두라 다시 실행하면 갈아 끼운다. 씬 저장은 직접(Ctrl+S).
+- **현재 적용된 아트**: 메뉴 `Spellbound > 6. Apply Arena Art`가 다음을 적용한다. 만든 오브젝트는 `Art_` 접두라 다시 실행하면 갈아 끼운다. 씬 저장은 직접(Ctrl+S).
+  - 타워 `Turret.fbx`(4.8m) · 넥서스 `castle.fbx`(2.4m): 원본이 약 50만 삼각형이라 Unity Mesh LOD로 줄인 3단계(약 1만 · 2,700 · 700 삼각형, `Art/Models/Arena/MESH_Structure_*_LOD3/4/5.asset`, 압축 · 최적화)를 LODGroup으로 쓴다 — 가까운 자기 진영만 1만, 상대 진영은 2,700 이하. 원본 FBX는 씬이 참조하지 않아 빌드에 들어가지 않는다 (`StructureLodLevels` · `StructureLodHeights`, 처음 한 번 약 40초).
+  - 재질은 **보는 사람 기준**(`TeamArt` — 로컬 진영 = 아군): 타워 아군 `roughness` · 적 `basecolor`, 넥서스 본인 `basecolor` · 적 `roughness`, 발판 본인 `platform_blue` · 적 `platform_red`. 각 앵커 아래 `Art_Ally` / `Art_Enemy`.
+  - 전장 길이 41m · 타워 깊이 13m · 넥서스 발판 앞 3m (`fieldLength` · `towerDepth` · `nexusDepth` · `Commander Platform Height` 자동 갱신), 플레이어 눈높이 10m(OVRCameraRig).
+  - 바닥: Hand Painted Stone Texture `Stone_normal` 재질 하나 (색 = `Stone_Ambient_Occlusion`, `MAT_Arena_Floor`, 4m마다 반복) — 절벽 덩어리의 윗면 한 장. 둘레는 `bricks_01` · `brick_01_Variant`(0.4배) 낮은 벽.
+  - 낭떠러지: 바닥 아래 절차 생성 바위 덩어리(`MESH_Arena_CliffBody`, AEGIS `Rock mat`), 양옆 두 줄 협곡 벽(AEGIS 바위를 20~44배), 벽 안쪽 작은 바위 장식. 예전 400m `Ground`는 지운다.
+  - 타워 총알: `VFX_Tower_Ally_Projectile` / `VFX_Tower_Enemy_Projectile` (Hovl Magic fire pro blue / red를 0.8배, 검은 연기 끔, `Prefabs/VFX`). 속도는 `ArenaStateView.towerShotSpeed` 12m/s.
+  - 18시 해질녘 하늘(`TEX_Sky_Dusk` — 지평선 아래 = 안개색) · 조명 · 안개.
 - 배경 장식은 `Arena/Environment/` 같은 새 폴더에 넣는다. 콜라이더 불필요 (판정은 서버 수학으로 함).
 - 전체 배치를 플레이스홀더로 되돌리고 싶으면 `Spellbound > 5. Build Placeholder Arena` (Body가 없으면 다시 만든다).
 

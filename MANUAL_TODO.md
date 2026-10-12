@@ -27,7 +27,8 @@
 2. Game 뷰를 한 번 클릭해 포커스를 준다 (포커스가 없으면 Input System이 키보드를 무시한다).
 3. 조작 (자세한 표: `Docs/Bot/ManualControlKeys.md`)
    - `1` 파이어볼 · `2` 총난사 · `3` 방어 쉴드 (마우스 위치로 2초 조준 후 시전)
-   - 마우스 왼쪽 드래그로 룬 그리기 → 원(○)=파이어볼, Z=총난사, 역삼각형(▽)=쉴드 → `F`(주먹) → `G`(포인팅)
+   - 마우스 왼쪽 드래그로 룬 그리기 (모양: `Assets/Art/Runes/Designs/` 19종 — 덱 안은 S03 왕관 · S07 가로줄 5개 · S08 방패) → `F`(주먹 = 그리기 끝 · 인식) → `G`(포인팅)
+     (여러 획 룬: 드래그를 여러 번 한 뒤 `F`. 획 사이 5초 무입력이면 취소)
    - `A` / `D` 이동, `X` 또는 우클릭 취소
    - `F1`~`F8` 테스트 시나리오, `Alt`+키 봇 수동 조종
 4. Game 뷰 포커스 없이 재현하려면 메뉴 `Spellbound > Debug > ...` (룬 그리기 · 주먹 · 포인팅 · 조준 고정 · 이동).
@@ -61,7 +62,9 @@
 
 ### 2.2 룬 인식 튜닝
 
-- 현재 템플릿은 **절차 생성 도형**(원 · Z · 역삼각형)이다: `Assets/_Project/Gesture/Templates/Data/Rune_S0x_*.asset`.
+- 현재 템플릿은 **디자인 19종을 옮긴 절차 생성 도형**이다 (`Gesture/Runtime/RuneDesigns.cs` → `Assets/_Project/Gesture/Templates/Data/Rune_*.asset`, 메뉴 `Spellbound > Runes > Build Rune Templates`).
+- 합성 노이즈 200회 × 19종 실험: 정답 98.5% · 오인식 0.4% (노이즈 1.6배면 85% — #(S09) · 가로줄(S07) · 별표(H02)처럼 직선만 있는 룬끼리 가장 많이 헷갈린다). 실제 손 궤적 녹화로 보강할 것.
+- 덱 밖 룬 테스트: `GameBootstrap > Recognize All Runes`(기본 켜짐) — 시전 요청 대신 `[RuneTest]` 로그. 정식 플레이에서는 끈다.
 - 인식할 때마다 콘솔에 `[CastStateMachine] $P+ → S03 d=2.41 2nd=S08 d2=5.80 → None` 형식으로 거리가 찍힌다.
 - 판정 임계값: `Gesture/Runtime/GestureValidator.cs`의 `GestureValidationSettings` 초기값 — `MaxAcceptDistance 7.0`, `MinSecondBestRatio 1.08` (합성 노이즈 300회 실험값: 정확도 원 100% · Z 100% · ▽ 99%).
 - Quest에서 인식 로그 보기: PC에 USB 연결 후 `adb logcat -s Unity | findstr CastStateMachine` (Development 빌드라 로그가 나온다).

@@ -27,5 +27,8 @@ namespace SpellboundVR.Input
 
         /// <summary>이 입력 장치에서 룬으로 인정할 최소 크기 (손: m, 마우스: px)</summary>
         float MinStrokeSize { get; }
+
+        /// <summary>룬 하나가 끝남 (인식 · 취소) — 여러 획 룬의 그리기 평면을 풀고 다음 핀치부터 새 룬으로 받는다.</summary>
+        void EndRune();
     }
 }

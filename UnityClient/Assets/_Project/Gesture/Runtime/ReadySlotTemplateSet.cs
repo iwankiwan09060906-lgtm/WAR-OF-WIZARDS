@@ -29,11 +29,28 @@ namespace SpellboundVR.Gesture
             }
         }
 
-        public GestureMatch Recognize(UnityEngine.Vector2[] raw)
+        /// <summary>룬 하나 (한 획 이상, 같은 그리기 평면 좌표)를 인식한다.</summary>
+        /// <summary>룬 인식 테스트용: 덱 · 쿨타임과 상관없이 라이브러리의 모든 룬을 후보로</summary>
+        public void RebuildAll(RuneTemplateLibrary library)
         {
-            if (_candidates.Count == 0 || raw == null || raw.Length < 2)
+            _candidates.Clear();
+            if (library == null) return;
+            foreach (var template in library.Templates)
+            {
+                if (template == null) continue;
+                var clouds = template.GetClouds();
+                for (int i = 0; i < clouds.Count; i++) _candidates.Add(clouds[i]);
+            }
+        }
+
+        public GestureMatch Recognize(IReadOnlyList<UnityEngine.Vector2[]> strokes)
+        {
+            int total = 0;
+            for (int i = 0; strokes != null && i < strokes.Count; i++)
+                if (strokes[i] != null) total += strokes[i].Length;
+            if (_candidates.Count == 0 || total < 2)
                 return new GestureMatch { HasMatch = false, Distance = float.MaxValue, SecondDistance = float.MaxValue };
-            var cloud = PointCloud.FromStroke(0, "candidate", raw);
+            var cloud = PointCloud.FromStrokes(0, "candidate", strokes);
             return _recognizer.Recognize(cloud, _candidates);
         }
     }

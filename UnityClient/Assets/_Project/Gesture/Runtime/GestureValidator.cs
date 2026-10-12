@@ -4,6 +4,7 @@
 //   1 · 2순위 거리 비율 p5 ≈ 1.12                                → 최소 비율 1.08
 
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace SpellboundVR.Gesture
@@ -35,15 +36,28 @@ namespace SpellboundVR.Gesture
     {
         public static GestureRejectReason ValidateStroke(Vector2[] raw, GestureValidationSettings s)
         {
-            if (raw == null || raw.Length < s.MinRawPoints) return GestureRejectReason.TooFewPoints;
+            return ValidateStrokes(new[] { raw }, s);
+        }
+
+        /// <summary>여러 획 룬: 점 수는 전체 합, 크기는 모든 획을 감싸는 상자로 검사</summary>
+        public static GestureRejectReason ValidateStrokes(IReadOnlyList<Vector2[]> strokes, GestureValidationSettings s)
+        {
+            int total = 0;
             float minX = float.MaxValue, minY = float.MaxValue, maxX = float.MinValue, maxY = float.MinValue;
-            for (int i = 0; i < raw.Length; i++)
+            for (int k = 0; strokes != null && k < strokes.Count; k++)
             {
-                minX = Mathf.Min(minX, raw[i].x);
-                maxX = Mathf.Max(maxX, raw[i].x);
-                minY = Mathf.Min(minY, raw[i].y);
-                maxY = Mathf.Max(maxY, raw[i].y);
+                var raw = strokes[k];
+                if (raw == null) continue;
+                total += raw.Length;
+                for (int i = 0; i < raw.Length; i++)
+                {
+                    minX = Mathf.Min(minX, raw[i].x);
+                    maxX = Mathf.Max(maxX, raw[i].x);
+                    minY = Mathf.Min(minY, raw[i].y);
+                    maxY = Mathf.Max(maxY, raw[i].y);
+                }
             }
+            if (total < s.MinRawPoints) return GestureRejectReason.TooFewPoints;
             if (Mathf.Max(maxX - minX, maxY - minY) < s.MinStrokeSize) return GestureRejectReason.TooSmall;
             return GestureRejectReason.None;
         }

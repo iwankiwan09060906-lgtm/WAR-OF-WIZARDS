@@ -50,7 +50,7 @@ namespace SpellboundVR.Gesture
             }
         }
 
-        /// <summary>$P+: 각 점에서 진행 방향이 꺾이는 정도 (0 = 직진, 1 = 완전 반대)</summary>
+        /// <summary>$P+: 각 점에서 진행 방향이 꺾이는 정도 (0 = 직진, 1 = 완전 반대). 획의 시작 · 끝 점은 0</summary>
         public static void ComputeNormalizedTurningAngles(GesturePoint[] points)
         {
             int n = points.Length;
@@ -59,6 +59,12 @@ namespace SpellboundVR.Gesture
             points[n - 1].Angle = 0f;
             for (int i = 1; i < n - 1; i++)
             {
+                // 다른 획으로 건너가는 구간은 꺾임이 아니다 (펜을 뗀 이동)
+                if (points[i - 1].StrokeId != points[i].StrokeId || points[i + 1].StrokeId != points[i].StrokeId)
+                {
+                    points[i].Angle = 0f;
+                    continue;
+                }
                 float ax = points[i + 1].X - points[i].X;
                 float ay = points[i + 1].Y - points[i].Y;
                 float bx = points[i].X - points[i - 1].X;

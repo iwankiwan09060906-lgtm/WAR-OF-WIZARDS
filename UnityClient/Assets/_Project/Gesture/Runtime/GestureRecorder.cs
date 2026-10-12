@@ -1,5 +1,7 @@
 // §9 $P+ Pipeline 앞단 — 오른손 궤적 샘플링 · 노이즈 제거
-//   · 핀치 시작 순간 머리 기준 그리기 평면(오른쪽 · 위 축)을 고정한다.
+//   · 룬의 첫 획 핀치 시작 순간 머리 기준 그리기 평면(원점 · 오른쪽 · 위 축)을 고정한다.
+//     같은 룬의 다음 획도 이 평면에 투영 → 머리가 움직여도 획끼리 상대 위치가 유지된다 (여러 획 룬).
+//     룬이 끝나면(인식 · 취소) ReleaseFrame()으로 풀어 다음 룬에서 다시 잡는다.
 //   · 이전 샘플에서 MinSampleDistance 이상 움직였을 때만 기록 (떨림 제거)
 //   · 지수 평활(Smoothing)로 고주파 노이즈 감소
 //   · 버퍼는 미리 할당 (매 프레임 할당 0, §33). 획 종료 시에만 결과 배열을 만든다.
@@ -19,6 +21,7 @@ namespace SpellboundVR.Gesture
         private Vector3 _up;
         private Vector3 _smoothed;
         private bool _recording;
+        private bool _frameLocked;
 
         public float MinSampleDistance { get; set; } = 0.004f;
 
@@ -38,9 +41,13 @@ namespace SpellboundVR.Gesture
         {
             _recording = true;
             _count = 0;
-            _origin = firstPoint;
-            _right = planeRight.sqrMagnitude > 1e-6f ? planeRight.normalized : Vector3.right;
-            _up = planeUp.sqrMagnitude > 1e-6f ? planeUp.normalized : Vector3.up;
+            if (!_frameLocked)
+            {
+                _origin = firstPoint;
+                _right = planeRight.sqrMagnitude > 1e-6f ? planeRight.normalized : Vector3.right;
+                _up = planeUp.sqrMagnitude > 1e-6f ? planeUp.normalized : Vector3.up;
+                _frameLocked = true;
+            }
             _smoothed = firstPoint;
             _world[_count++] = firstPoint;
         }
@@ -67,10 +74,14 @@ namespace SpellboundVR.Gesture
             return result;
         }
 
+        /// <summary>룬 하나가 끝남 — 다음 획은 새 그리기 평면을 잡는다.</summary>
+        public void ReleaseFrame() => _frameLocked = false;
+
         public void Cancel()
         {
             _recording = false;
             _count = 0;
+            _frameLocked = false;
         }
     }
 }
