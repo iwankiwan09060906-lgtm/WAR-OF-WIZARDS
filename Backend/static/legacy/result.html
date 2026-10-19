@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>결과 · War of Wizards</title>
+  <link rel="stylesheet" href="css/common.css" />
+  <link rel="stylesheet" href="css/pages.css" />
+</head>
+<body>
+  <!-- 캔버스 13 · 결과 화면 -->
+  <div class="screen center" style="overflow-y:auto">
+    <div class="bg" id="bg"></div>
+    <div class="magic-bg" style="opacity:.15" data-magic="760"></div>
+    <div data-particles="14"></div>
+
+    <div class="stage col gap-l text-center hidden" style="align-items:center;padding:64px 0" id="view">
+      <div class="eyebrow" id="sub"></div>
+      <h1 class="display result-enter" style="font-weight:900;font-size:96px" id="title"></h1>
+      <p style="font-size:1.25rem;color:var(--purple-200);margin-top:-8px" id="reason"></p>
+
+      <div class="row wrap gap-s" style="justify-content:center" id="stats"></div>
+      <div class="row wrap gap-s" style="justify-content:center" id="badges"></div>
+
+      <div class="save-box" id="save"></div>
+
+      <div class="row gap-m mt-s">
+        <button id="btn-again" class="btn btn-primary btn-md">다시 대전</button>
+        <a href="mypage.html" class="btn btn-ghost btn-md text-center">전적 보기</a>
+        <a href="lobby.html" class="btn btn-secondary btn-md text-center">로비로</a>
+      </div>
+    </div>
+
+    <div class="stage col gap-l hidden" style="align-items:center" id="empty">
+      <div style="font-size:1.25rem;color:var(--purple-300)">표시할 대전 결과가 없습니다.</div>
+      <a href="lobby.html" class="btn btn-primary btn-md text-center">로비로</a>
+    </div>
+  </div>
+
+  <script src="js/data.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/common.js"></script>
+  <script src="js/pages/result.js"></script>
+</body>
+</html>

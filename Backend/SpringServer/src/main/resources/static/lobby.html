@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>메인 로비 · War of Wizards</title>
+  <link rel="stylesheet" href="css/common.css" />
+  <link rel="stylesheet" href="css/pages.css" />
+</head>
+<body>
+  <!-- 캔버스 2 · 메인 로비 -->
+  <div class="shell">
+    <div class="bg bg-top"></div>
+    <div data-particles="12"></div>
+
+    <header class="shell-header">
+      <div>
+        <div class="eyebrow">War of Wizards</div>
+        <h2 class="glow-text-purple">메인 로비</h2>
+      </div>
+      <div class="right">
+        <div class="text-right">
+          <div class="display" style="font-weight:700;font-size:1.25rem;color:var(--purple-100)" id="my-name">…</div>
+          <div id="my-tier" style="font-size:.9rem"></div>
+        </div>
+        <a href="admin.html" id="btn-admin" class="btn btn-ghost btn-sm hidden">관리자</a>
+        <button id="btn-logout" class="btn btn-ghost btn-sm">로그아웃</button>
+      </div>
+    </header>
+
+    <main class="shell-body">
+      <div class="motd max-1300 hidden" id="motd"></div>
+      <div class="lobby-grid max-1300">
+        <!-- 대전 -->
+        <section class="panel-dark battle-box">
+          <div class="battle-magic" data-magic="420"></div>
+          <div>
+            <div class="eyebrow" style="color:var(--cyan)">Battle</div>
+            <h3 class="display" style="font-weight:900;font-size:1.9rem;color:var(--purple-100)">1 : 1 마법 대전</h3>
+            <p class="dim mt-s" style="font-size:1.05rem">룬을 그려 마법을 시전하고, 상대 넥서스를 파괴해 돌파하세요.</p>
+          </div>
+          <div class="col stage">
+            <button id="btn-ranked" class="btn btn-primary btn-lg btn-block">랭킹전 매칭</button>
+            <div class="grid-2" style="gap:12px">
+              <a href="room.html" class="btn btn-secondary btn-md btn-block text-center">친선전</a>
+              <button id="btn-bot" class="btn btn-ghost btn-md btn-block">봇 연습전</button>
+            </div>
+          </div>
+          <div class="panel stage">
+            <div class="between" style="margin-bottom:12px">
+              <span class="label">내 마법서</span>
+              <a href="spellbook.html" class="link" style="text-decoration:none">편성하기 →</a>
+            </div>
+            <div id="deck-view"></div>
+          </div>
+        </section>
+
+        <!-- 메뉴 타일 -->
+        <nav class="tiles">
+          <a class="tile" href="spellbook.html">
+            <svg viewBox="0 0 24 24"><path d="M4 5a2 2 0 012-2h13v16H6a2 2 0 00-2 2z"/><path d="M4 21V5M9 7h6"/></svg>
+            <b>마법서</b><span>19종 중 8장 덱 편성</span>
+          </a>
+          <a class="tile" href="mypage.html">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"/></svg>
+            <b>마이페이지</b><span id="tile-record"></span>
+          </a>
+          <a class="tile" href="friends.html">
+            <svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><circle cx="17" cy="9" r="2.5"/><path d="M2 20c0-3.5 3-6 7-6s7 2.5 7 6M17 14c3 0 5 1.8 5 4.5"/></svg>
+            <b>친구</b><span id="tile-friends"></span>
+          </a>
+          <a class="tile" href="mailbox.html">
+            <svg viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 7l10 7 10-7"/></svg>
+            <b>우편함 · 공지</b><span id="tile-mail"></span>
+            <span class="badge tile-badge hidden" id="mail-badge"></span>
+          </a>
+          <a class="tile" href="ranking.html">
+            <svg viewBox="0 0 24 24"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 01-10 0z"/><path d="M17 5h3v2a3 3 0 01-3 3M7 5H4v2a3 3 0 003 3"/></svg>
+            <b>랭킹</b><span>랭킹전 레이팅 기준</span>
+          </a>
+          <a class="tile" href="settings.html">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></svg>
+            <b>환경설정</b><span>볼륨 · 비네팅 · 제스처</span>
+          </a>
+        </nav>
+      </div>
+    </main>
+  </div>
+
+  <script src="js/data.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/common.js"></script>
+  <script src="js/pages/lobby.js"></script>
+</body>
+</html>

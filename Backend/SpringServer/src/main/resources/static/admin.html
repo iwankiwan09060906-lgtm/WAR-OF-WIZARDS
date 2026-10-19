@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>관리자 · War of Wizards</title>
+  <link rel="stylesheet" href="css/common.css" />
+  <link rel="stylesheet" href="css/pages.css" />
+  <link rel="stylesheet" href="css/admin.css" />
+</head>
+<body>
+  <!-- 관리자 콘솔 (ROLE_ADMIN 만) — 통합 DB(WOW) + 모션 DB(WOW_MOTION) 관리
+       API 목록은 SpringServer/.../controller/AdminController.java 머리말 참고 -->
+  <div class="shell">
+    <div class="bg bg-top"></div>
+    <header class="shell-header">
+      <div>
+        <div class="eyebrow">War of Wizards · Admin Console</div>
+        <h2 class="glow-text-purple">관리자</h2>
+      </div>
+      <div class="right">
+        <span class="muted" id="admin-name"></span>
+        <a href="lobby.html" class="btn btn-ghost btn-sm">← 로비</a>
+      </div>
+    </header>
+
+    <nav class="admin-tabs" id="tabs">
+      <button data-tab="dashboard" class="active">대시보드</button>
+      <button data-tab="members">회원 관리</button>
+      <button data-tab="logins">로그인 기록</button>
+      <button data-tab="motion">모션 DB</button>
+      <button data-tab="live">Unity 연동</button>
+      <button data-tab="notice">공지 · 우편</button>
+      <button data-tab="audit">감사 로그</button>
+    </nav>
+
+    <main class="shell-body">
+      <!-- 대시보드 -->
+      <section class="tab-page" id="tab-dashboard">
+        <div class="kpis" id="kpis"></div>
+        <div class="grid-2" id="db-cards"></div>
+      </section>
+
+      <!-- 회원 관리 -->
+      <section class="tab-page hidden" id="tab-members">
+        <form class="row" id="member-search">
+          <input class="text-input grow" name="q" placeholder="이메일 또는 닉네임 검색" aria-label="회원 검색" />
+          <button class="btn btn-primary btn-sm" type="submit">검색</button>
+        </form>
+        <div class="table-wrap">
+          <table class="admin-table">
+            <thead><tr><th>ID</th><th>이메일</th><th>닉네임</th><th>권한</th><th>상태</th><th>레이팅</th><th>전적</th><th>가입일</th><th>마지막 로그인</th><th></th></tr></thead>
+            <tbody id="member-rows"></tbody>
+          </table>
+        </div>
+        <div class="between">
+          <span class="muted" id="member-count"></span>
+          <div class="row"><button class="btn btn-ghost btn-xs" id="prev-page">◀ 이전</button><span id="page-no"></span><button class="btn btn-ghost btn-xs" id="next-page">다음 ▶</button></div>
+        </div>
+        <div class="panel hidden" id="member-detail"></div>
+      </section>
+
+      <!-- 로그인 기록 -->
+      <section class="tab-page hidden" id="tab-logins">
+        <div class="row">
+          <select class="text-input" id="login-type" aria-label="종류">
+            <option value="">전체</option>
+            <option value="LOGIN_SUCCESS">로그인 성공</option>
+            <option value="LOGIN_FAIL">로그인 실패</option>
+            <option value="REGISTER">회원가입</option>
+            <option value="LOGOUT">로그아웃</option>
+            <option value="PASSWORD_CHANGE">비밀번호 변경</option>
+          </select>
+          <button class="btn btn-ghost btn-sm" id="login-refresh">새로고침</button>
+        </div>
+        <div class="table-wrap">
+          <table class="admin-table">
+            <thead><tr><th>시각</th><th>종류</th><th>이메일</th><th>회원 ID</th><th>사유</th><th>IP</th><th>기기</th></tr></thead>
+            <tbody id="login-rows"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- 모션 DB -->
+      <section class="tab-page hidden" id="tab-motion">
+        <div class="grid-2">
+          <div class="panel"><div class="label">룬 제스처 샘플 (라벨별)</div><div id="gesture-labels" class="label-bars"></div></div>
+          <div class="panel"><div class="label">손 모션 녹화 (라벨별)</div><div id="motion-labels" class="label-bars"></div></div>
+        </div>
+        <div class="panel">
+          <div class="label" style="margin-bottom:8px">최근 모션 녹화</div>
+          <div class="table-wrap"><table class="admin-table">
+            <thead><tr><th>ID</th><th>시각</th><th>플레이어 ID</th><th>라벨</th><th>손</th><th>프레임</th><th>관절</th><th>FPS</th><th>기기</th><th></th></tr></thead>
+            <tbody id="motion-rows"></tbody>
+          </table></div>
+        </div>
+        <div class="panel">
+          <div class="label" style="margin-bottom:8px">AI 모델 업로드 이력</div>
+          <div class="table-wrap"><table class="admin-table">
+            <thead><tr><th>시각</th><th>파일</th><th>종류</th><th>크기</th><th>학습 샘플 수</th><th>SHA-256</th></tr></thead>
+            <tbody id="model-rows"></tbody>
+          </table></div>
+        </div>
+      </section>
+
+      <!-- Unity 연동: DB 게임 설정 편집 + 실시간 전송 (/api/live/events 로 접속 중인 Unity·웹에 즉시 전달) -->
+      <section class="tab-page hidden" id="tab-live">
+        <div class="panel between">
+          <div>
+            <div class="label">실시간 연결</div>
+            <div class="muted" style="margin-top:4px">Unity(LiveEventStream) · 웹이 <code>/api/live/events</code> 로 연결되어 있으면 아래 변경이 즉시 전달됩니다.</div>
+          </div>
+          <div class="row"><b class="display" style="font-size:1.5rem;color:var(--cyan-300)" id="live-count">-</b><span class="muted">명 접속</span>
+            <button class="btn btn-ghost btn-xs" id="live-refresh">새로고침</button></div>
+        </div>
+
+        <div class="panel">
+          <div class="label" style="margin-bottom:8px">게임 설정 (game_configs) — 저장하면 모든 클라이언트에 config 이벤트 전송</div>
+          <div class="table-wrap"><table class="admin-table">
+            <thead><tr><th>분류</th><th>키</th><th>설명</th><th>값</th><th>버전</th><th></th></tr></thead>
+            <tbody id="config-rows"></tbody>
+          </table></div>
+        </div>
+
+        <div class="panel">
+          <form id="push-form" class="col gap-s">
+            <div class="label">Unity · 웹으로 데이터 보내기</div>
+            <div class="row wrap">
+              <select class="text-input" name="to" aria-label="받는 대상"><option value="">접속 중인 전체</option></select>
+              <input class="text-input" name="type" value="broadcast" maxlength="30" placeholder="type (예: broadcast, event_start)" aria-label="이벤트 종류" />
+            </div>
+            <input class="text-input" name="title" maxlength="100" placeholder="제목" required />
+            <input class="text-input" name="message" maxlength="500" placeholder="내용" />
+            <textarea class="text-input" name="payload" placeholder='payload (선택, JSON) 예: {"xp":2,"endsAt":"2026-10-05"}' style="min-height:80px;font-family:monospace"></textarea>
+            <button class="btn btn-secondary btn-md" type="submit">보내기</button>
+          </form>
+        </div>
+      </section>
+
+      <!-- 공지 · 우편 -->
+      <section class="tab-page hidden" id="tab-notice">
+        <div class="admin-grid">
+          <div class="panel">
+            <form id="notice-form">
+              <h3 class="display" style="font-size:1.25rem;color:var(--purple-100)">공지 등록</h3>
+              <p class="muted" style="font-size:.9rem">모든 플레이어의 우편함 · 공지사항 탭에 표시됩니다.</p>
+              <input class="text-input" name="title" maxlength="100" placeholder="제목" required />
+              <textarea class="text-input" name="body" maxlength="1000" placeholder="내용" required></textarea>
+              <button class="btn btn-primary btn-md" type="submit">공지 등록</button>
+            </form>
+          </div>
+          <div class="panel">
+            <form id="mail-form">
+              <h3 class="display" style="font-size:1.25rem;color:var(--purple-100)">우편 발송</h3>
+              <p class="muted" style="font-size:.9rem">받는 사람을 비우면 봇을 제외한 전체 플레이어에게 보냅니다.</p>
+              <select class="text-input" name="to" aria-label="받는 사람"><option value="">전체 플레이어</option></select>
+              <input class="text-input" name="title" maxlength="100" placeholder="제목" required />
+              <textarea class="text-input" name="body" maxlength="1000" placeholder="내용"></textarea>
+              <input class="text-input" name="reward" maxlength="50" placeholder="첨부 보상 (예: 골드 500) — 선택" />
+              <button class="btn btn-secondary btn-md" type="submit">우편 보내기</button>
+            </form>
+          </div>
+        </div>
+      </section>
+
+      <!-- 감사 로그 -->
+      <section class="tab-page hidden" id="tab-audit">
+        <div class="table-wrap">
+          <table class="admin-table">
+            <thead><tr><th>시각</th><th>관리자</th><th>작업</th><th>대상</th><th>내용</th></tr></thead>
+            <tbody id="audit-rows"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="js/data.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/common.js"></script>
+  <script src="js/pages/admin.js"></script>
+</body>
+</html>

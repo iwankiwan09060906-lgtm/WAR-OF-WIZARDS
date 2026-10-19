@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>친선전 룸 · War of Wizards</title>
+  <link rel="stylesheet" href="css/common.css" />
+  <link rel="stylesheet" href="css/pages.css" />
+</head>
+<body>
+  <!-- 캔버스 6 · 친선전 룸
+       서버 API: POST /api/rooms(생성) → /join(입장) → /ready(게스트 준비) → /start(방장 시작)
+       두 사람 모두 2초마다 GET /api/rooms/{code} 로 상태를 확인한다. room.html?code=ABC123 으로 바로 입장 가능 -->
+  <div class="shell">
+    <div class="bg bg-top"></div>
+    <div data-particles="12"></div>
+    <header class="shell-header">
+      <div>
+        <div class="eyebrow">War of Wizards</div>
+        <h2 class="glow-text-purple">친선전 룸</h2>
+      </div>
+      <div class="right"><a href="lobby.html" class="btn btn-ghost btn-sm">← 로비</a></div>
+    </header>
+
+    <main class="shell-body">
+      <div class="max-1000">
+        <!-- 룸 없음: 만들기 / 코드 입장 -->
+        <div id="view-none" class="grid-2 hidden">
+          <section class="panel-dark col gap-m">
+            <h3 class="display" style="font-size:1.5rem;color:var(--purple-100)">룸 만들기</h3>
+            <p class="dim" style="font-size:1.1rem">방을 만들면 6자리 코드가 발급됩니다. 친구를 초대하거나 봇으로 빈 자리를 채울 수 있어요.</p>
+            <button id="btn-create" class="btn btn-primary btn-md btn-block" style="margin-top:auto">룸 생성</button>
+          </section>
+          <form id="join-form" class="panel-dark panel-cyan col gap-m">
+            <h3 class="display" style="font-size:1.5rem;color:var(--purple-100)">코드로 입장</h3>
+            <input id="join-code" class="text-input code-input" placeholder="ABC123" aria-label="룸 코드" maxlength="6" autocomplete="off" />
+            <button type="submit" id="btn-join" class="btn btn-secondary btn-md btn-block" style="margin-top:auto" disabled>입장</button>
+          </form>
+        </div>
+
+        <!-- 방장 -->
+        <div id="view-host" class="col gap-l hidden">
+          <section class="panel-dark between">
+            <div>
+              <div class="label" style="color:var(--purple-500)">룸 코드</div>
+              <div class="room-code glow-text-cyan" id="host-code"></div>
+            </div>
+            <div class="row">
+              <button id="btn-copy" class="btn btn-ghost btn-sm">복사</button>
+              <button id="btn-close" class="btn btn-ghost btn-sm">룸 닫기</button>
+            </div>
+          </section>
+          <div class="row gap-m" id="host-slots"></div>
+          <div class="row">
+            <button id="btn-bot" class="btn btn-secondary btn-md">봇으로 채우기</button>
+            <button id="btn-kick" class="btn btn-ghost btn-md hidden">내보내기</button>
+            <div class="grow"></div>
+            <button id="btn-start" class="btn btn-primary btn-md" disabled>대전 시작</button>
+          </div>
+          <div class="warn deck-warn hidden"></div>
+          <section class="panel">
+            <div class="label" style="margin-bottom:12px">접속 중인 친구 초대</div>
+            <div id="invite-list"></div>
+          </section>
+        </div>
+
+        <!-- 게스트 -->
+        <div id="view-guest" class="col gap-l hidden">
+          <section class="panel-dark panel-cyan between">
+            <div>
+              <div class="label" style="color:var(--purple-500)">입장한 룸</div>
+              <div class="room-code" id="guest-code"></div>
+            </div>
+            <button id="btn-leave" class="btn btn-ghost btn-sm">나가기</button>
+          </section>
+          <div class="row gap-m" id="guest-slots"></div>
+          <div class="warn deck-warn hidden"></div>
+          <div class="row" style="justify-content:flex-end">
+            <button id="btn-ready" class="btn btn-primary btn-md">준비 완료</button>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="js/data.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/common.js"></script>
+  <script src="js/pages/room.js"></script>
+</body>
+</html>

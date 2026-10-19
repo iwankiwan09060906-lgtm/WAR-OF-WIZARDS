@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>회원가입 · War of Wizards</title>
+  <link rel="stylesheet" href="css/common.css" />
+  <link rel="stylesheet" href="css/pages.css" />
+</head>
+<body>
+  <!-- 캔버스 1 · 회원가입 -->
+  <div class="screen center">
+    <div class="bg bg-cyan"></div>
+    <div class="magic-bg" style="opacity:.15" data-magic="720"></div>
+    <div data-particles="12"></div>
+
+    <form id="signup-form" class="card corners auth-card auth-card-cyan stage" novalidate>
+      <div class="text-center col gap-s" style="align-items:center">
+        <div class="eyebrow">Join the Realm</div>
+        <h1 class="gradient-title gradient-cyan" style="font-size:30px">마법사 등록</h1>
+        <div class="deco-line"></div>
+        <p class="muted">새 계정을 생성하고 전장에 참여하세요</p>
+      </div>
+
+      <div class="col gap-m">
+        <div class="field" data-field="nickname">
+          <label for="nickname">마법사 이름 (닉네임)</label>
+          <div class="input-box">
+            <span class="icon" data-icon="user"></span>
+            <input id="nickname" placeholder="Arcane_Wizard" autocomplete="username" maxlength="12" />
+          </div>
+          <div class="field-error"></div>
+          <div class="field-hint" id="nick-hint">2–12자, 한글·영문·숫자·언더바(_) 사용 가능</div>
+        </div>
+        <div class="field" data-field="email">
+          <label for="email">이메일</label>
+          <div class="input-box">
+            <span class="icon" data-icon="email"></span>
+            <input id="email" type="email" placeholder="wizard@example.com" autocomplete="email" />
+          </div>
+          <div class="field-error"></div>
+        </div>
+        <div class="field" data-field="password">
+          <label for="password">비밀번호</label>
+          <div class="input-box">
+            <span class="icon" data-icon="lock"></span>
+            <input id="password" type="password" placeholder="••••••••" autocomplete="new-password" />
+            <button type="button" class="right-slot" data-toggle-pw="password" aria-label="비밀번호 보기"></button>
+          </div>
+          <div class="field-error"></div>
+          <div id="strength" class="strength hidden">
+            <div class="strength-bars"><i></i><i></i><i></i><i></i></div>
+            <span></span>
+          </div>
+        </div>
+        <div class="field" data-field="confirm">
+          <label for="confirm">비밀번호 확인</label>
+          <div class="input-box">
+            <span class="icon" data-icon="shield"></span>
+            <input id="confirm" type="password" placeholder="••••••••" autocomplete="new-password" />
+            <button type="button" class="right-slot" data-toggle-pw="confirm" aria-label="비밀번호 확인 보기"></button>
+          </div>
+          <div class="field-error"></div>
+        </div>
+      </div>
+
+      <div class="col gap-s" data-field="terms">
+        <div class="field-error"></div>
+        <label class="check-row"><input type="checkbox" id="agree-terms" />
+          <span><span class="dim">[필수]</span> 이용약관 및 개인정보처리방침에 동의합니다.</span></label>
+        <label class="check-row"><input type="checkbox" id="agree-marketing" />
+          <span class="muted">[선택] 마케팅 정보 수신에 동의합니다.</span></label>
+      </div>
+
+      <div id="server-error" class="alert" role="alert"></div>
+
+      <button type="submit" id="btn-signup" class="btn btn-secondary btn-md btn-block">마법사 등록하기</button>
+      <p class="text-center muted">이미 계정이 있으신가요? <a class="link" href="login.html">로그인</a></p>
+    </form>
+
+    <div class="frame-label">캔버스 1 · 회원가입</div>
+  </div>
+
+  <script src="js/data.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/common.js"></script>
+  <script src="js/pages/signup.js"></script>
+</body>
+</html>

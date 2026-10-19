@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>War of Wizards — 8단계 개발 로드맵 대시보드</title>
+  <style>
+    :root {
+      --bg: #0d1117;
+      --card-bg: #161b22;
+      --border: #30363d;
+      --primary: #58a6ff;
+      --success: #2ea043;
+      --warning: #d29922;
+      --danger: #f85149;
+      --text: #c9d1d9;
+      --heading: #f0f6fc;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+      padding: 20px;
+    }
+    .header {
+      max-width: 1200px;
+      margin: 0 auto 20px auto;
+      padding-bottom: 15px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .header h1 { font-size: 24px; color: var(--heading); }
+    .badge {
+      background: #1f6feb;
+      color: #fff;
+      padding: 4px 10px;
+      border-radius: 12px;
+      font-size: 13px;
+      font-weight: bold;
+    }
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+    @media (max-width: 900px) {
+      .container { grid-template-columns: 1fr; }
+    }
+    .stage-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .stage-card h3 {
+      font-size: 16px;
+      color: var(--heading);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .stage-num {
+      background: var(--primary);
+      color: #000;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: bold;
+    }
+    .stage-desc { font-size: 13px; color: #8b949e; }
+    .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+    button {
+      background: #21262d;
+      color: var(--heading);
+      border: 1px solid var(--border);
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    button:hover {
+      background: #30363d;
+      border-color: #8b949e;
+    }
+    button.btn-primary { background: #238636; border-color: rgba(240,246,252,0.1); color: #fff; }
+    button.btn-primary:hover { background: #2ea043; }
+    button.btn-danger { background: #da3633; color: #fff; }
+    input {
+      background: #0d1117;
+      border: 1px solid var(--border);
+      color: var(--heading);
+      padding: 6px 10px;
+      border-radius: 6px;
+      font-size: 13px;
+    }
+    .result-box {
+      background: #0d1117;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 8px 12px;
+      font-family: monospace;
+      font-size: 12px;
+      color: #7ee787;
+      max-height: 120px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+    }
+    canvas {
+      background: #0d1117;
+      border: 1px dashed var(--primary);
+      border-radius: 6px;
+      cursor: crosshair;
+      display: block;
+      margin: 0 auto;
+    }
+    .console-panel {
+      grid-column: 1 / -1;
+      background: #000;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+      font-family: monospace;
+      font-size: 13px;
+    }
+    .console-title { color: var(--primary); margin-bottom: 8px; font-weight: bold; }
+    .console-logs {
+      background: #0d1117;
+      padding: 10px;
+      border-radius: 4px;
+      height: 150px;
+      overflow-y: auto;
+      color: #58a6ff;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <div>
+      <h1>War of Wizards — 8단계 순차 개발 대시보드</h1>
+      <p style="font-size: 13px; color: #8b949e; margin-top: 4px;">
+        기본 전투부터 Photon, 백엔드, 동기화, AI 제스처, 판정 및 보안까지 8단계 파이썬 백엔드 통합 콘솔
+      </p>
+    </div>
+    <span class="badge" id="serverStatusBadge">서버 상태 확인 중...</span>
+  </div>
+
+  <div class="container">
+
+    <!-- 1단계 -->
+    <div class="stage-card">
+      <h3><span class="stage-num">1단계</span> Unity 기본 전투 (키보드 조작)</h3>
+      <p class="stage-desc">3D 맵 캐릭터 이동 / 키보드(1~8번) 마법 발사 키 매핑 및 19종 스킬 카탈로그 설정</p>
+      <div class="actions">
+        <button class="btn-primary" onclick="testStage1()">기본 전투 설정 가져오기</button>
+      </div>
+      <div class="result-box" id="res1">결과 대기 중...</div>
+    </div>
+
+    <!-- 2단계 -->
+    <div class="stage-card">
+      <h3><span class="stage-num">2단계</span> Photon 방 연결 (2인 접속)</h3>
+      <p class="stage-desc">두 플레이어가 같은 방에 접속하기 위한 Photon Custom Auth 토큰 발급 및 방 목록</p>
+      <div class="actions">
+        <button class="btn-primary" onclick="testStage2()">Photon 인증 토큰 발급</button>
+        <button onclick="testStage2Rooms()">Photon 활성 방 조회</button>
+      </div>
+      <div class="result-box" id="res2">결과 대기 중...</div>
+    </div>
+
+    <!-- 3단계 -->
+    <div class="stage-card">
+      <h3><span class="stage-num">3단계</span> 백엔드 연동 (회원/방 생성/입장)</h3>
+      <p class="stage-desc">회원가입, 로그인, 방 생성 요청 및 6자리 방 코드 입장 API 검증</p>
+      <div class="actions">
+        <button onclick="testStage3Register()">데모 회원가입</button>
+        <button onclick="testStage3Login()">로그인</button>
+        <button class="btn-primary" onclick="testStage3CreateRoom()">방 생성</button>
+        <input type="text" id="joinRoomCodeInput" placeholder="방 코드 (예: ABC123)" style="width: 110px;">
+        <button onclick="testStage3JoinRoom()">코드 입장</button>
+      </div>
+      <div class="result-box" id="res3">결과 대기 중...</div>
+    </div>
+
+    <!-- 4단계 -->
+    <div class="stage-card">
+      <h3><span class="stage-num">4단계</span> 대기실과 매칭 (참가자/준비/취소)</h3>
+      <p class="stage-desc">참가자 목록, 준비 버튼 토글, 매칭 큐 취소 및 접속 종료 처리</p>
+      <div class="actions">
+        <button onclick="testStage4Participants()">참가자 목록 조회</button>
+        <button class="btn-primary" onclick="testStage4Ready(true)">준비 완료 (Ready)</button>
+        <button onclick="testStage4Ready(false)">준비 취소</button>
+        <button class="btn-danger" onclick="testStage4Leave()">퇴장 처리</button>
+      </div>
+      <div class="result-box" id="res4">결과 대기 중...</div>
+    </div>
+
+    <!-- 5단계 -->
+    <div class="stage-card">
+      <h3><span class="stage-num">5단계</span> 마법 이벤트 동기화 (실시간 릴레이)</h3>
+      <p class="stage-desc">한쪽 플레이어의 마법 시전이 다른 플레이어의 화면에 실시간으로 나타나도록 릴레이</p>
+      <div class="actions">
+        <button class="btn-primary" onclick="testStage5Cast('S03', 'Center')">파이어볼(S03) 시전</button>
+        <button onclick="testStage5Cast('S05', 'Left')">번개(S05) 시전</button>
+        <button onclick="testStage5Cast('H01', 'Area')">블리자드(H01) 시전</button>
+      </div>
+      <div class="result-box" id="res5">결과 대기 중...</div>
+    </div>
+
+    <!-- 6단계 -->
+    <div class="stage-card">
+      <h3><span class="stage-num">6단계</span> AI 손동작 인식 ($P+ 룬 모델)</h3>
+      <p class="stage-desc">아래 캔버스에 마우스로 마법 문양을 그리면 AI가 실시간으로 19종 마법을 인식합니다.</p>
+      <canvas id="gestureCanvas" width="260" height="130"></canvas>
+      <div class="actions" style="justify-content: center;">
+        <button class="btn-primary" onclick="recognizeDrawnGesture()">AI 제스처 인식 실행</button>
+        <button onclick="clearCanvas()">캔버스 지우기</button>
+      </div>
+      <div class="result-box" id="res6">마우스를 드래그하여 문양을 그린 후 인식을 누르세요.</div>
+    </div>
+
+    <!-- 7단계 -->
+    <div class="stage-card">
+      <h3><span class="stage-num">7단계</span> 전투 판정과 전적 저장 (체력/승패/랭킹)</h3>
+      <p class="stage-desc">체력 0 판정 후 승패 결정 및 전적/MMR 랭킹(+20/-15) DB 영구 기록</p>
+      <div class="actions">
+        <button class="btn-primary" onclick="testStage7Record()">경기 종료 전적 기록 (데모마법사 승)</button>
+        <button onclick="testStage7Rankings()">랭킹 리더보드 조회</button>
+      </div>
+      <div class="result-box" id="res7">결과 대기 중...</div>
+    </div>
+
+    <!-- 8단계 -->
+    <div class="stage-card">
+      <h3><span class="stage-num">8단계</span> 보안 및 배포 (치트 방지/세션 복구)</h3>
+      <p class="stage-desc">쿨타임 미경과 패킷 차단, 서버 권한 판정 및 네트워크 단절 세션 복구</p>
+      <div class="actions">
+        <button class="btn-danger" onclick="testStage8Cheat()">쿨타임 치트 시도 (서버 거절 검증)</button>
+        <button class="btn-primary" onclick="testStage8Normal()">정상 시전 검증</button>
+        <button onclick="testStage8Recover()">세션 복구 테스트</button>
+      </div>
+      <div class="result-box" id="res8">결과 대기 중...</div>
+    </div>
+
+    <!-- 실시간 통합 콘솔 -->
+    <div class="console-panel">
+      <div class="console-title">[실시간 서버 로그 및 동기화 이벤트 모니터]</div>
+      <div class="console-logs" id="consoleLogs">> 서버 연결 대기 중...</div>
+    </div>
+
+  </div>
+
+  <script>
+    let currentRoomCode = "ROOM-DEMO";
+    let drawnPoints = [];
+    let isDrawing = false;
+
+    function log(msg) {
+      const el = document.getElementById("consoleLogs");
+      const time = new Date().toLocaleTimeString();
+      el.innerHTML += `<div>[${time}] ${msg}</div>`;
+      el.scrollTop = el.scrollHeight;
+    }
+
+    // 헬스체크
+    fetch('/api/health')
+      .then(r => r.json())
+      .then(d => {
+        document.getElementById("serverStatusBadge").innerText = "서버 정상 구동 중 (Port 8080)";
+        document.getElementById("serverStatusBadge").style.background = "#2ea043";
+        log("8단계 파이썬 백엔드 서버에 성공적으로 연결되었습니다.");
+      })
+      .catch(e => {
+        document.getElementById("serverStatusBadge").innerText = "서버 연결 실패";
+        document.getElementById("serverStatusBadge").style.background = "#da3633";
+      });
+
+    // 1단계 테스트
+    function testStage1() {
+      fetch('/api/stage1/combat-config')
+        .then(r => r.json())
+        .then(d => {
+          document.getElementById('res1').innerText = JSON.stringify(d, null, 2);
+          log("1단계: 키보드 조작 설정 및 19종 스킬 목록 확인 완료");
+        });
+    }
+
+    // 2단계 테스트
+    function testStage2() {
+      fetch('/api/stage2/photon/auth', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ userId: 'quest3_player' })
+      })
+        .then(r => r.json())
+        .then(d => {
+          document.getElementById('res2').innerText = JSON.stringify(d, null, 2);
+          log("2단계: Photon 인증 토큰 발급 승인됨");
+        });
+    }
+
+    function testStage2Rooms() {
+      fetch('/api/stage2/photon/rooms')
+        .then(r => r.json())
+        .then(d => {
+          document.getElementById('res2').innerText = JSON.stringify(d, null, 2);
+          log("2단계: 활성 Photon 방 목록 조회 완료");
+        });
+    }
+
+    // 3단계 테스트
+    function testStage3Register() {
+      const email = `player_${Date.now()}@wow.dev`;
+      fetch('/api/stage3/auth/register', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ email: email, password: 'password123', nickname: '신규마법사_' + Math.floor(Math.random()*100) })
+      })
+        .then(r => r.json())
+        .then(d => {
+          document.getElementById('res3').innerText = JSON.stringify(d, null, 2);
+          log("3단계: 신규 회원가입 및 JWT 발급 성공");
+        });
+    }
+
+    function testStage3Login() {
+      fetch('/api/stage3/auth/login', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ email: 'demo@wow.dev', password: 'demo1234' })
+      })
+        .then(r => r.json())
+        .then(d => {
+          document.getElementById('res3').innerText = JSON.stringify(d, null, 2);
+          log("3단계: 데모 계정 로그인 성공");
+        });
+    }
+
+    function testStage3CreateRoom() {
+      fetch('/api/stage3/rooms/create', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ nickname: '방장마법사' })
+      })
+        .then(r => r.json())
+        .then(d => {
+          currentRoomCode = d.roomCode;
+          document.getElementById('joinRoomCodeInput').value = currentRoomCode;
+          document.getElementById('res3').innerText = JSON.stringify(d, null, 2);
+          log(`3단계: 방 생성 완료 (코드: ${currentRoomCode})`);
+        });
+    }
+
+    function testStage3JoinRoom() {
+      const code = document.getElementById('joinRoomCodeInput').value.trim() || currentRoomCode;
+      fetch('/api/stage3/rooms/join', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ roomCode: code, nickname: '참가자 마법사' })
+      })
+        .then(r => r.json())
+        .then(d => {
+          document.getElementById('res3').innerText = JSON.stringify(d, null, 2);
+          log(`3단계: 방 [${code}] 코드 입장 완료`);
+        });
+    }
+
+    // 4단계 테스트
+    function testStage4Participants() {
+      fetch(`/api/stage4/rooms/${currentRoomCode}/participants`)
+        .then(r => r.json())
+        .then(d => {
+          document.getElementById('res4').innerText = JSON.stringify(d, null, 2);
+          log("4단계: 참가자 목록 조회 완료");
+        });
+    }
+
+    function testStage4Ready(isReady) {
+      fetch('/api/stage4/rooms/ready', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ roomCode: currentRoomCode, isReady: isReady })
+      })
+        .then(r => r.json())
+        .then(d => {
+          document.getElementById('res4').innerText = JSON.stringify(d, null, 2);
+          log(`4단계: 준비 상태 변경 -> ${isReady}`);
+        });
+    }
+
+    function testStage4Leave() {
+      fetch('/api/stage4/rooms/leave', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ roomCode: currentRoomCode })
+      })
+        .then(r => r.json())
+        .then(d => {
+          document.getElementById('res4').innerText = JSON.stringify(d, null, 2);
+          log(`4단계: 방 [${currentRoomCode}] 퇴장 처리 완료`);
+        });
+    }
+
+    // 5단계 테스트
+    function testStage5Cast(spellId, column) {
+      fetch('/api/stage5/spells/cast', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ roomCode: currentRoomCode, spellId: spellId, targetColumn: column, caster: '데모마법사' })
+      })
+        .then(r => r.json())
+        .then(d => {
+          document.getElementById('res5').innerText = JSON.stringify(d, null, 2);
+          log(`5단계 마법 시전 동기화: [${spellId}] -> 열 [${column}]`);
+        });
+    }
+
+    // 6단계 캔버스 제스처 드로잉
+    const canvas = document.getElementById("gestureCanvas");
+    const ctx = canvas.getContext("2d");
+    ctx.strokeStyle = "#58a6ff";
+    ctx.lineWidth = 4;
+    ctx.lineCap = "round";
+
+    canvas.addEventListener("mousedown", (e) => {
+      isDrawing = true;
+      const rect = canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      drawnPoints.push({ x: x, y: y, z: 0 });
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+    });
+
+    canvas.addEventListener("mousemove", (e) => {
+      if (!isDrawing) return;
+      const rect = canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      drawnPoints.push({ x: x, y: y, z: 0 });
+      ctx.lineTo(x, y);
+      ctx.stroke();
+    });
+
+    window.addEventListener("mouseup", () => { isDrawing = false; });
+
+    function clearCanvas() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      drawnPoints = [];
+      document.getElementById('res6').innerText = "캔버스가 초기화되었습니다.";
+    }
+
+    function recognizeDrawnGesture() {
+      if (drawnPoints.length < 5) {
+        document.getElementById('res6').innerText = "캔버스에 문양을 먼저 그려주세요!";
+        return;
+      }
+      fetch('/api/stage6/ai/recognize', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ points: drawnPoints, yDown: true })
+      })
+        .then(r => r.json())
+        .then(d => {
+          document.getElementById('res6').innerText = JSON.stringify(d, null, 2);
+          log(`6단계 AI 제스처 인식 결과: 스킬 [${d.result.spellId}], 신뢰도 ${(d.result.confidence*100).toFixed(1)}%`);
+        });
+    }
+
+    // 7단계 테스트
+    function testStage7Record() {
+      fetch('/api/stage7/combat/record-match', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ roomCode: currentRoomCode, winner: '데모마법사', loser: '도전자', endReason: 'PlayerDeath' })
+      })
+        .then(r => r.json())
+        .then(d => {
+          document.getElementById('res7').innerText = JSON.stringify(d, null, 2);
+          log("7단계: 전투 결과 전적 DB 기록 및 랭킹 점수 갱신 완료");
+        });
+    }
+
+    function testStage7Rankings() {
+      fetch('/api/stage7/rankings')
+        .then(r => r.json())
+        .then(d => {
+          document.getElementById('res7').innerText = JSON.stringify(d, null, 2);
+          log("7단계: 랭킹 리더보드 조회 완료");
+        });
+    }
+
+    // 8단계 테스트
+    function testStage8Cheat() {
+      fetch('/api/stage8/security/validate', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ spellId: 'H03', cooldownLeft: 14.5 })
+      })
+        .then(r => r.json())
+        .then(d => {
+          document.getElementById('res8').innerText = JSON.stringify(d, null, 2);
+          log(`8단계 보안 차단: ${d.error || '차단 성공'}`);
+        });
+    }
+
+    function testStage8Normal() {
+      fetch('/api/stage8/security/validate', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ spellId: 'S02', cooldownLeft: 0.0 })
+      })
+        .then(r => r.json())
+        .then(d => {
+          document.getElementById('res8').innerText = JSON.stringify(d, null, 2);
+          log("8단계: 정상 시전 서버 검증 승인");
+        });
+    }
+
+    function testStage8Recover() {
+      fetch('/api/stage8/session/recover', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ userId: 1 })
+      })
+        .then(r => r.json())
+        .then(d => {
+          document.getElementById('res8').innerText = JSON.stringify(d, null, 2);
+          log("8단계: 비정상 단절 세션 복구 완료");
+        });
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#0f161f" />
+  <title>404 · War of Wizards</title>
+  <link rel="icon" href="/assets/skills/circle/H02.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Noto+Sans+KR:wght@400;500;700;900&display=swap" />
+  <link rel="stylesheet" href="/client/wow.css" />
+  <style>
+    /* wow.css 를 못 읽어도 읽을 수 있게 최소한만 */
+    body { background: #0b1017; color: #e3eaf1; font-family: "Noto Sans KR", "Malgun Gothic", sans-serif; overflow: auto; }
+    .sigil { position: relative; width: min(260px, 60vw); aspect-ratio: 1; margin: 0 auto; display: grid; place-items: center; }
+    .sigil img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; opacity: 0.4; filter: grayscale(1); mix-blend-mode: screen; border-radius: 50%; }
+    .sigil .error-code { position: relative; }
+    .path { display: inline-block; vertical-align: bottom; font-family: "Chakra Petch", monospace; color: #a9b7c6; max-width: 60vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  </style>
+</head>
+<body>
+  <div class="backdrop" aria-hidden="true"></div>
+  <main id="app"><div class="error-page"><div>
+    <div class="sigil">
+      <img src="/assets/skills/circle/S03.png" alt="" />
+      <div class="error-code">4<span>0</span>4</div>
+    </div>
+        <h1 style="font-size:1.5rem;font-weight:900;margin-top:16px">이 주소와 맞는 마법진이 없습니다</h1>
+    <p class="muted" style="margin-top:6px">주소가 바뀌었거나 없는 화면이에요. 로비에서 다시 시작하세요.</p>
+    <p class="hint" style="margin-top:4px"><span class="path" id="path"></span> — 없는 주소</p>
+    <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:24px">
+      <a class="btn play lg" href="/#/lobby">로비로</a>
+      <a class="btn ghost lg" href="/">처음 화면</a>
+    </div>
+  </div></div></main>
+  <script>document.getElementById("path").textContent = location.pathname;</script>
+</body>
+</html>

@@ -1,0 +1,8 @@
+# War of Wizards AI 도구 — 설치: pip install -r requirements.txt
+numpy
+requests
+matplotlib
+torch
+onnx
+onnxscript
+onnxruntime

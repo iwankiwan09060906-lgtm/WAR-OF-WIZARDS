@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>랭킹 · War of Wizards</title>
+  <link rel="stylesheet" href="css/common.css" />
+  <link rel="stylesheet" href="css/pages.css" />
+</head>
+<body>
+  <!-- 캔버스 8 · 랭킹 -->
+  <div class="shell">
+    <div class="bg bg-top"></div>
+    <div data-particles="12"></div>
+    <header class="shell-header">
+      <div>
+        <div class="eyebrow">War of Wizards · 랭킹전 레이팅 기준</div>
+        <h2 class="glow-text-purple">랭킹</h2>
+      </div>
+      <div class="right">
+        <input id="search" class="text-input" style="padding:6px 14px;font-size:.95rem" placeholder="닉네임 검색" aria-label="닉네임 검색" />
+        <a href="lobby.html" class="btn btn-ghost btn-sm">← 로비</a>
+      </div>
+    </header>
+
+    <main class="shell-body flush">
+      <div class="max-1000" style="max-width:1100px;padding:24px 0">
+        <div class="rank-row rank-head">
+          <span>순위</span><span>닉네임</span><span>등급</span><span>레이팅</span><span>전적</span><span class="text-right">승률</span>
+        </div>
+        <div id="rows"><div class="dim" style="padding:24px">불러오는 중…</div></div>
+      </div>
+    </main>
+
+    <footer class="shell-footer">
+      <div class="between" style="max-width:1100px;margin:0 auto;font-size:1.1rem">
+        <span class="label" style="color:var(--purple-500)">내 순위</span>
+        <span id="mine">…</span>
+      </div>
+    </footer>
+  </div>
+
+  <script src="js/data.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/common.js"></script>
+  <script src="js/pages/ranking.js"></script>
+</body>
+</html>

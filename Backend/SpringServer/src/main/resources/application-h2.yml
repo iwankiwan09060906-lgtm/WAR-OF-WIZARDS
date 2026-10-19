@@ -1,0 +1,19 @@
+# 설치 없이 바로 실행되는 파일 DB. 데이터는 SpringServer/data/ 에 저장된다.
+# DB 확인: http://localhost:8080/h2-console  (JDBC URL: jdbc:h2:file:./data/wow-db, 사용자 sa, 비밀번호 없음)
+spring:
+  datasource:
+    url: jdbc:h2:file:./data/wow-db;AUTO_SERVER=TRUE
+    username: sa
+    password:
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+
+# ② 모션 DB — 별도 파일 DB (./data/wow-motion-db). h2-console 에서 JDBC URL 을 jdbc:h2:file:./data/wow-motion-db 로 바꿔 접속
+wow:
+  motion:
+    datasource:
+      url: jdbc:h2:file:./data/wow-motion-db;AUTO_SERVER=TRUE
+      username: sa
+      password:

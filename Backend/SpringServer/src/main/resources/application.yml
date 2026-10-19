@@ -1,0 +1,99 @@
+# ════════════════════════════════════════════════════════════════════════
+# War of Wizards 통합 백엔드 — 공통 설정
+#
+# DB 선택: spring.profiles.active 값을 바꾸거나 환경변수 WOW_DB 로 지정
+#   oracle   → 로컬 Oracle XE (XEPDB1, 계정 wow)      application-oracle.yml
+#   h2       → 설치 없이 파일 DB (./data/wow-db)       application-h2.yml
+#   postgres → PostgreSQL / Supabase Postgres           application-postgres.yml
+# 테이블은 JPA 가 엔티티 기준으로 자동 생성/갱신(ddl-auto: update)하고,
+# 스킬 19종·공지·데모 계정은 DataInitializer 가 시작할 때 채운다.
+# ════════════════════════════════════════════════════════════════════════
+server:
+  port: ${PORT:8080}
+  servlet:
+    encoding:
+      charset: UTF-8
+      # force: true 는 쓰지 않는다 — .wasm 응답에 charset 이 붙으면 Unity WebGL 스트리밍 로딩이 실패함
+
+spring:
+  application:
+    name: war-of-wizards-server
+  profiles:
+    active: ${WOW_DB:oracle}
+
+  threads:
+    virtual:
+      enabled: true   # Java 21 이상에서만 적용, 17 에서는 무시됨
+
+  servlet:
+    multipart:
+      max-file-size: 50MB     # ONNX 모델 업로드
+      max-request-size: 50MB
+
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: true
+        jdbc:
+          time_zone: UTC
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+wow:
+  jwt:
+    # 32바이트 이상 (Base64 또는 일반 문자열). 배포 시 반드시 환경변수 JWT_SECRET 로 교체.
+    secret: ${JWT_SECRET:404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970}
+    expiration-hours: 24
+
+  cors:
+    # Unity WebGL / React 개발 서버 등 다른 주소에서 호출할 때 허용할 Origin (쉼표 구분, * = 전체)
+    allowed-origins: ${WOW_CORS_ORIGINS:*}
+
+  # Photon 전용 서버 · 헤드리스 Unity 서버가 /api/server/** 호출 시 X-Server-Key 헤더로 보내는 키
+  server-api-key: ${WOW_SERVER_KEY:dev-server-key-change-me}
+
+  photon:
+    # Photon Dashboard > Authentication > Custom Server 의 key/value 에 secret=값 을 넣었다면 동일하게 설정 (비우면 검사 안 함)
+    auth-secret: ${PHOTON_AUTH_SECRET:}
+    # Photon Dashboard > Webhooks 의 CustomHttpHeaders(X-Webhook-Secret) 또는 BaseUrl ?key= 로 보내는 값
+    webhook-secret: ${PHOTON_WEBHOOK_SECRET:dev-webhook-secret}
+    # PUN RaiseEvent(HttpForward) 로 결과를 보낼 때 사용하는 이벤트 코드
+    match-result-event-code: 101
+
+  match:
+    # true: 클라이언트(웹 UI / Unity)가 랭크전 결과를 직접 신고 가능 (프로토타입)
+    # false: 랭크전은 게임 서버(/api/server/matches) 또는 Photon Webhook 으로만 기록 → 조작 방지
+    allow-client-ranked: true
+
+  matchmaking:
+    # 랭킹전 매칭 대기열: 이 시간(초) 동안 상대가 없으면 봇과 매칭
+    bot-timeout-seconds: ${WOW_MATCH_BOT_TIMEOUT:30}
+
+  rating:
+    client-ranked-step: 16   # 클라이언트 신고 랭크전 승/패 레이팅 변동 (UI 명세와 동일)
+    elo-k: 32                # 서버 판정 1:1 랭크전 Elo K 계수
+
+  webgl:
+    # Unity WebGL 빌드 폴더 → http://localhost:8080/game/ 으로 서비스
+    path: ${WOW_WEBGL_PATH:../UnityXR/Build/WebGL}
+
+  ai:
+    # Python 학습 스크립트가 업로드한 제스처 인식 ONNX 모델 위치 (Unity 는 /api/gestures/model 로 다운로드)
+    model-path: ${WOW_MODEL_PATH:../AI/Models/gesture_model.onnx}
+
+  seed:
+    demo-data: true          # 데모 계정(demo@wow.dev / demo1234)·봇 랭킹·샘플 전적 생성
+    admin-password: ${WOW_ADMIN_PASSWORD:admin1234}
+
+logging:
+  level:
+    root: INFO
+    com.wow: DEBUG

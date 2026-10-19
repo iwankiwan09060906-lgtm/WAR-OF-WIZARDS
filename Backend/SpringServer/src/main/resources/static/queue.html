@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>매칭 대기 · War of Wizards</title>
+  <link rel="stylesheet" href="css/common.css" />
+  <link rel="stylesheet" href="css/pages.css" />
+</head>
+<body>
+  <!-- 캔버스 10 · 랭킹전 매칭 대기
+       서버 API: POST /api/matchmaking/queue(참가) → 2초마다 GET /api/matchmaking/status → matched 면 카운트다운
+       대기 시간이 서버 설정(wow.matchmaking.bot-timeout-seconds)을 넘으면 봇과 매칭 -->
+  <div class="screen center">
+    <div class="bg" style="background:radial-gradient(ellipse 90% 70% at 50% 50%, rgba(30,10,70,.7) 0%, rgba(6,6,15,1) 68%)"></div>
+    <div class="magic-bg" style="opacity:.2" data-magic="720"></div>
+    <div data-particles="18"></div>
+
+    <div class="stage queue-wrap">
+      <div>
+        <div class="eyebrow" style="color:var(--cyan)">Ranked Match</div>
+        <h2 class="display glow-text-purple" style="font-weight:900;font-size:2.4rem;color:var(--purple-100);margin-top:8px" id="title">상대를 찾고 있습니다</h2>
+      </div>
+
+      <!-- 단계 표시 -->
+      <div class="queue-steps">
+        <span class="queue-step" data-step="join">① 대기열 참가</span>
+        <span class="queue-step" data-step="search">② 상대 탐색</span>
+        <span class="queue-step" data-step="found">③ 매칭 완료</span>
+      </div>
+
+      <!-- 나 vs 상대 -->
+      <div class="queue-versus">
+        <div class="queue-card">
+          <span class="who">나</span>
+          <div class="queue-avatar hex-clip" id="me-avatar">?</div>
+          <div class="name" id="me-name"></div>
+          <div id="me-tier"></div>
+          <div class="row gap-s" id="me-deck" style="flex-wrap:wrap;justify-content:center"></div>
+        </div>
+
+        <div class="col" style="align-items:center">
+          <div class="radar" id="radar"><div class="radar-core" id="radar-core">VS</div></div>
+          <div class="display glow-text-cyan tabular" style="font-weight:700;font-size:2.4rem;color:var(--cyan-300)" id="elapsed">0:00</div>
+        </div>
+
+        <div class="queue-card foe" id="foe-card">
+          <span class="who" style="color:#f87171">상대</span>
+          <div class="queue-avatar hex-clip unknown" id="foe-avatar">?</div>
+          <div class="name" id="foe-name">탐색 중…</div>
+          <div id="foe-tier" class="muted">레이팅이 비슷한 마법사를 찾는 중</div>
+        </div>
+      </div>
+
+      <!-- 탐색 범위 -->
+      <div class="queue-range" id="range-box">
+        <div id="range-bar"></div>
+      </div>
+      <div class="queue-stats">
+        <span>대기 인원 <b id="st-queue">-</b>명</span>
+        <span>허용 범위 <b id="st-range">±50</b></span>
+        <span>봇 매칭까지 <b id="st-bot">-</b></span>
+      </div>
+
+      <p id="status" class="dim" style="font-size:1.05rem"></p>
+      <div class="tip" id="tip"></div>
+      <button id="btn-cancel" class="btn btn-ghost btn-md">매칭 취소</button>
+    </div>
+  </div>
+
+  <script src="js/data.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/common.js"></script>
+  <script src="js/pages/queue.js"></script>
+</body>
+</html>

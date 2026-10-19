@@ -1,0 +1,8 @@
+# 빌드 결과물 / IDE / 로컬 DB
+.gradle/
+build/
+bin/
+data/
+*.log
+.idea/
+*.iml

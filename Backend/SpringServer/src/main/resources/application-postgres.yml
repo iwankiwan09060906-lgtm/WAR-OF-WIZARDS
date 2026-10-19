@@ -1,0 +1,23 @@
+# PostgreSQL 또는 Supabase Postgres
+# Supabase: Project Settings > Database > Connection string (JDBC)
+#   WOW_DB_URL=jdbc:postgresql://db.<project-ref>.supabase.co:5432/postgres?sslmode=require
+#   WOW_DB_USER=postgres  WOW_DB_PASSWORD=<DB 비밀번호>
+spring:
+  datasource:
+    url: ${WOW_DB_URL:jdbc:postgresql://localhost:5432/war_of_wizards}
+    username: ${WOW_DB_USER:postgres}
+    password: ${WOW_DB_PASSWORD:postgres}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 10
+
+# ② 모션 DB — 기본값은 같은 PostgreSQL (테이블 이름이 달라 섞이지 않음). 분리하려면 WOW_MOTION_DB_URL 지정
+wow:
+  motion:
+    datasource:
+      url: ${WOW_MOTION_DB_URL:${WOW_DB_URL:jdbc:postgresql://localhost:5432/war_of_wizards}}
+      username: ${WOW_MOTION_DB_USER:${WOW_DB_USER:postgres}}
+      password: ${WOW_MOTION_DB_PASSWORD:${WOW_DB_PASSWORD:postgres}}
+      driver-class-name: org.postgresql.Driver
+      hikari:
+        maximum-pool-size: 5

@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>마법서 · War of Wizards</title>
+  <link rel="stylesheet" href="css/common.css" />
+  <link rel="stylesheet" href="css/pages.css" />
+</head>
+<body>
+  <!-- 캔버스 9 · 마법서 (19종 중 8장, 중복 불가, 고위력 ≤ 2) -->
+  <div class="shell">
+    <div class="bg bg-top"></div>
+    <div data-particles="12"></div>
+    <header class="shell-header">
+      <div>
+        <div class="eyebrow">War of Wizards</div>
+        <h2 class="glow-text-purple">마법서 · 덱 편성</h2>
+      </div>
+      <div class="right">
+        <span class="pill" id="count-pill">0 / 8</span>
+        <span class="pill" id="high-pill">★ 0 / 2</span>
+        <a href="lobby.html" id="btn-back" class="btn btn-ghost btn-sm">← 로비</a>
+      </div>
+    </header>
+
+    <main class="shell-body flush">
+      <div class="spell-grid">
+        <!-- 스킬 풀 -->
+        <div class="spell-pool">
+          <div class="row gap-s">
+            <button class="filter active" data-filter="all">전체 19</button>
+            <button class="filter" data-filter="normal">일반 13</button>
+            <button class="filter" data-filter="high">고위력 6</button>
+          </div>
+          <div class="grid-3" id="pool"></div>
+        </div>
+
+        <!-- 상세 + 덱 -->
+        <aside class="spell-side">
+          <div class="spell-detail" id="detail"></div>
+          <div class="spell-deck">
+            <div class="label" style="font-size:.75rem;color:var(--purple-500);margin-bottom:12px">내 덱 · HUD 슬롯 순서 (2줄 × 4칸)</div>
+            <div class="grid-4" id="deck"></div>
+            <div class="warn mt-s" id="deck-err" style="font-size:.9rem"></div>
+            <p class="muted mt-m" style="font-size:.8rem;line-height:1.6">전투 중에는 슬롯 순환 없이 8장이 고정 배치됩니다. 슬롯 번호는 전투 HUD의 단축키(1~8) 순서와 같아요.</p>
+          </div>
+          <div class="row spell-actions">
+            <button id="btn-clear" class="btn btn-ghost btn-sm">비우기</button>
+            <button id="btn-random" class="btn btn-ghost btn-sm" title="규칙에 맞는 무작위 덱">추천</button>
+            <button id="btn-save" class="btn btn-primary btn-md grow">저장됨 ✓</button>
+          </div>
+        </aside>
+      </div>
+    </main>
+  </div>
+
+  <script src="js/data.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/common.js"></script>
+  <script src="js/pages/spellbook.js"></script>
+</body>
+</html>

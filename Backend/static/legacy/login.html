@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="War of Wizards - VR 마법 대전 로비 / 메타 UI" />
+  <title>로그인 · War of Wizards</title>
+  <link rel="stylesheet" href="css/common.css" />
+  <link rel="stylesheet" href="css/pages.css" />
+</head>
+<body>
+  <!-- 캔버스 1 · 로그인 -->
+  <div class="screen center">
+    <div class="bg bg-purple"></div>
+    <div class="magic-bg" style="opacity:.2" data-magic="700"></div>
+    <div data-particles="14"></div>
+
+    <form id="login-form" class="card corners auth-card stage" novalidate>
+      <div class="text-center col gap-s" style="align-items:center">
+        <div class="eyebrow" style="color:var(--cyan)">VR Magic Battle</div>
+        <h1 class="gradient-title" style="font-size:32px">War of Wizards</h1>
+        <div class="deco-line"></div>
+        <p class="muted">마법사 계정으로 로그인</p>
+      </div>
+
+      <div class="col gap-m">
+        <div class="field" data-field="email">
+          <label for="email">이메일</label>
+          <div class="input-box">
+            <span class="icon" data-icon="email"></span>
+            <input id="email" type="email" placeholder="wizard@example.com" autocomplete="email" />
+          </div>
+          <div class="field-error"></div>
+        </div>
+        <div class="field" data-field="password">
+          <label for="password">비밀번호</label>
+          <div class="input-box">
+            <span class="icon" data-icon="lock"></span>
+            <input id="password" type="password" placeholder="••••••••" autocomplete="current-password" />
+            <button type="button" class="right-slot" data-toggle-pw="password" aria-label="비밀번호 보기"></button>
+          </div>
+          <div class="field-error"></div>
+        </div>
+        <div class="text-right"><button type="button" id="btn-reset" class="link-muted">비밀번호를 잊으셨나요?</button></div>
+      </div>
+
+      <div id="server-error" class="alert" role="alert"></div>
+
+      <div class="col gap-m">
+        <button type="submit" id="btn-login" class="btn btn-primary btn-md btn-block">로그인</button>
+        <div class="or-line"><span>또는</span></div>
+        <button type="button" id="btn-demo" class="link">데모 계정으로 바로 시작 (서버 모드)</button>
+      </div>
+
+      <p class="text-center muted">계정이 없으신가요? <a class="link" href="signup.html">회원가입</a></p>
+    </form>
+
+    <div class="frame-label">캔버스 1 · 로그인</div>
+  </div>
+
+  <script src="js/data.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/common.js"></script>
+  <script src="js/pages/login.js"></script>
+</body>
+</html>

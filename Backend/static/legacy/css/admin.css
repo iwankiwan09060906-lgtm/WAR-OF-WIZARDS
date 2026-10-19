@@ -1,0 +1,41 @@
+/* 관리자 콘솔 전용 스타일 */
+.admin-tabs { position: relative; z-index: 10; display: flex; gap: 4px; padding: 0 48px; border-bottom: 1px solid rgba(76,29,149,.3); overflow-x: auto; }
+.admin-tabs button { padding: 12px 18px; font-weight: 600; color: var(--purple-500); border-bottom: 2px solid transparent; white-space: nowrap; }
+.admin-tabs button.active { color: var(--fg); border-bottom-color: var(--cyan); background: rgba(6,182,212,.08); }
+.tab-page { display: flex; flex-direction: column; gap: 20px; max-width: 1400px; margin: 0 auto; }
+
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+.kpi { border: 1px solid rgba(76,29,149,.4); background: rgba(0,0,0,.35); border-radius: 6px; padding: 14px 16px; }
+.kpi b { display: block; font-family: var(--font-display); font-size: 1.6rem; color: var(--purple-100); }
+.kpi span { font-size: .8rem; color: var(--purple-500); letter-spacing: .08em; }
+
+.db-card h3 { font-family: var(--font-display); font-size: 1.2rem; color: var(--purple-100); }
+.db-meta { font-size: .85rem; color: var(--purple-400); line-height: 1.7; word-break: break-all; }
+.db-tables { display: grid; grid-template-columns: 1fr auto; gap: 4px 16px; font-size: .95rem; margin-top: 10px; }
+.db-tables span:nth-child(odd) { font-family: monospace; color: var(--purple-300); }
+.db-tables span:nth-child(even) { text-align: right; color: var(--cyan-300); font-weight: 700; }
+.status-up { color: var(--green); font-weight: 700; }
+.status-down { color: #f87171; font-weight: 700; }
+
+.table-wrap { overflow-x: auto; border: 1px solid rgba(76,29,149,.35); border-radius: 6px; }
+.admin-table { width: 100%; border-collapse: collapse; font-size: .92rem; }
+.admin-table th { text-align: left; padding: 10px 12px; font-size: .75rem; letter-spacing: .1em; color: var(--purple-500); background: rgba(46,16,101,.25); white-space: nowrap; }
+.admin-table td { padding: 9px 12px; border-top: 1px solid rgba(76,29,149,.2); color: var(--purple-200); white-space: nowrap; max-width: 280px; overflow: hidden; text-overflow: ellipsis; }
+.admin-table tr:hover td { background: rgba(76,29,149,.12); }
+.admin-table tr.clickable { cursor: pointer; }
+.tag-ok { color: var(--green); }
+.tag-bad { color: #f87171; }
+.tag-admin { color: var(--amber); }
+.ev-LOGIN_SUCCESS { color: var(--green); }
+.ev-LOGIN_FAIL { color: #f87171; }
+.ev-REGISTER { color: var(--cyan-300); }
+.ev-LOGOUT { color: var(--purple-400); }
+.ev-PASSWORD_CHANGE { color: var(--amber); }
+
+.label-bars { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.label-bar { display: grid; grid-template-columns: 70px 1fr 50px; align-items: center; gap: 10px; font-size: .9rem; }
+.label-bar i { display: block; height: 8px; border-radius: 4px; background: linear-gradient(90deg, #7c3aed, #06b6d4); }
+
+.detail-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+.temp-pw { font-family: monospace; font-size: 1.3rem; color: var(--amber); padding: 8px 14px; border: 1px dashed rgba(251,191,36,.5); border-radius: 4px; display: inline-block; }
+@media (max-width: 1000px) { .admin-tabs { padding: 0 16px; } }

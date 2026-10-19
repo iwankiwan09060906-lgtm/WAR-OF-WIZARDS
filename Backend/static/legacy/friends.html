@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>친구 · War of Wizards</title>
+  <link rel="stylesheet" href="css/common.css" />
+  <link rel="stylesheet" href="css/pages.css" />
+</head>
+<body>
+  <!-- 캔버스 5 · 친구 목록 (상태/초대) -->
+  <div class="shell">
+    <div class="bg bg-top"></div>
+    <div data-particles="12"></div>
+    <header class="shell-header">
+      <div>
+        <div class="eyebrow">War of Wizards</div>
+        <h2 class="glow-text-purple">친구 목록</h2>
+      </div>
+      <div class="right">
+        <a href="room.html" id="btn-room" class="btn btn-secondary btn-sm">친선전 룸 만들기</a>
+        <a href="lobby.html" class="btn btn-ghost btn-sm">← 로비</a>
+      </div>
+    </header>
+
+    <main class="shell-body">
+      <div class="max-900 col gap-m">
+        <form id="request-form" class="row">
+          <input id="nick" class="text-input grow" placeholder="닉네임으로 친구 요청 보내기" aria-label="친구 닉네임" maxlength="12" />
+          <button type="submit" class="btn btn-primary btn-md">요청</button>
+        </form>
+
+        <div id="loading-text" class="dim">불러오는 중…</div>
+
+        <section class="panel hidden" id="sec-incoming">
+          <div class="row gap-s" style="margin-bottom:12px"><span class="label">받은 요청</span><span class="count" id="cnt-incoming"></span></div>
+          <div class="divided" id="list-incoming"></div>
+        </section>
+
+        <section class="panel">
+          <div class="row gap-s" style="margin-bottom:12px"><span class="label">친구</span><span class="count" id="cnt-friends">0</span></div>
+          <div class="divided" id="list-friends"></div>
+        </section>
+
+        <section class="panel hidden" id="sec-outgoing">
+          <div class="row gap-s" style="margin-bottom:12px"><span class="label">보낸 요청</span><span class="count" id="cnt-outgoing"></span></div>
+          <div class="divided" id="list-outgoing"></div>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <script src="js/data.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/common.js"></script>
+  <script src="js/pages/friends.js"></script>
+</body>
+</html>

@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>카운트다운 · War of Wizards</title>
+  <link rel="stylesheet" href="css/common.css" />
+  <link rel="stylesheet" href="css/pages.css" />
+</head>
+<body>
+  <!-- 캔버스 11 · 매치 카운트다운 (3-2-1) -->
+  <div class="screen center">
+    <div class="bg" style="background:radial-gradient(ellipse 100% 70% at 50% 50%, rgba(40,10,80,.8) 0%, rgba(6,6,15,1) 65%)"></div>
+    <div class="magic-bg" style="opacity:.2" data-magic="760"></div>
+    <div data-particles="16"></div>
+
+    <div class="stage versus">
+      <div class="col" style="align-items:flex-end;text-align:right">
+        <div class="eyebrow" style="color:var(--purple-500)">나</div>
+        <div class="display" style="font-weight:900;font-size:1.9rem;color:var(--purple-100)" id="me-name"></div>
+        <div style="font-size:1.1rem" id="me-tier"></div>
+        <div class="grid-4 mt-s" id="me-deck"></div>
+      </div>
+      <div class="text-center">
+        <div id="count" class="display glow-text-cyan count-num">3</div>
+        <div class="display" style="font-weight:700;font-size:1.1rem;color:var(--purple-400);letter-spacing:.2em;margin-top:8px">VS</div>
+      </div>
+      <div class="col" style="align-items:flex-start">
+        <div class="eyebrow" style="color:#f87171">상대</div>
+        <div class="display" style="font-weight:900;font-size:1.9rem;color:#fecaca" id="foe-name"></div>
+        <div style="font-size:1.1rem" id="foe-tier"></div>
+        <div class="grid-4 mt-s" id="foe-deck"></div>
+      </div>
+    </div>
+
+    <div class="frame-label" style="bottom:40px;font-size:1rem;letter-spacing:0;color:var(--purple-400)">손이 카메라에 잘 보이도록 두 손을 앞으로 내밀어 주세요.</div>
+  </div>
+
+  <script src="js/data.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/common.js"></script>
+  <script src="js/pages/countdown.js"></script>
+</body>
+</html>

@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>War of Wizards</title>
+  <link rel="stylesheet" href="css/common.css" />
+</head>
+<body data-no-dev>
+  <script src="js/data.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/common.js"></script>
+  <script>
+    // 첫 화면: 로그인되어 있으면 로비, 아니면 로그인 화면. 서버가 꺼져 있으면 에러 페이지
+    WOW.loading.message('서버에 연결하는 중…');
+    WOW.api.me()
+      .then(function (a) { WOW.go(a ? 'lobby' : 'login'); })
+      .catch(function (e) { e.status === 0 ? WOW.goError(503, e.message) : WOW.go('login'); });
+  </script>
+</body>
+</html>

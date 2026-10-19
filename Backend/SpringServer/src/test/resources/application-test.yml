@@ -1,0 +1,27 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:wowtest;DB_CLOSE_DELAY=-1
+    username: sa
+    password:
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+
+wow:
+  motion:
+    datasource:
+      url: jdbc:h2:mem:wowmotiontest;DB_CLOSE_DELAY=-1
+      username: sa
+      password:
+  server-api-key: test-server-key
+  photon:
+    auth-secret: ""
+    webhook-secret: test-webhook-secret
+  webgl:
+    path: build/test-webgl
+  ai:
+    model-path: build/test-ai/gesture_model.onnx
+
+logging:
+  level:
+    com.wow: INFO

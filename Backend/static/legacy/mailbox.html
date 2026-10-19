@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>우편함 · War of Wizards</title>
+  <link rel="stylesheet" href="css/common.css" />
+  <link rel="stylesheet" href="css/pages.css" />
+</head>
+<body>
+  <!-- 캔버스 7 · 우편함/공지 -->
+  <div class="shell">
+    <div class="bg bg-top"></div>
+    <div data-particles="12"></div>
+    <header class="shell-header">
+      <div>
+        <div class="eyebrow">War of Wizards</div>
+        <h2 class="glow-text-purple">우편함 · 공지</h2>
+      </div>
+      <div class="right">
+        <button id="btn-read-all" class="btn btn-ghost btn-sm">모두 읽음</button>
+        <a href="lobby.html" class="btn btn-ghost btn-sm">← 로비</a>
+      </div>
+    </header>
+
+    <main class="shell-body flush">
+      <div class="mail-grid">
+        <div class="mail-list-col">
+          <div class="tabs">
+            <button class="tab active" data-tab="mail">우편함 <span class="badge hidden"></span></button>
+            <button class="tab" data-tab="notice">공지사항 <span class="badge hidden"></span></button>
+          </div>
+          <div class="mail-list" id="mail-list"></div>
+        </div>
+        <div class="mail-detail" id="detail">
+          <div class="center dim" style="height:100%;font-size:1.1rem">왼쪽에서 항목을 선택하세요.</div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="js/data.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/common.js"></script>
+  <script src="js/pages/mailbox.js"></script>
+</body>
+</html>
