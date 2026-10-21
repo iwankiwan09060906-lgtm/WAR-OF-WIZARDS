@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: 27b0b095ee3300d41826b8d93451391c
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 2100000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 387564
+  packageName: FREE Shield Effect - Procedural Hexagonal Shield (URP)
+  packageVersion: 1.0
+  assetPath: Assets/ShieldEffect/Materials/M_HexShield_Green.mat
+  uploadId: 1003628

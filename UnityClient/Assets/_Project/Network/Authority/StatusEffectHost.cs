@@ -103,14 +103,19 @@ namespace SpellboundVR.Network
             }
         }
 
-        /// <summary>§12.5 ⑦ — 대상에게 붙은 효과가 순서대로 피해를 가공한다.</summary>
+        /// <summary>§12.5 ⑦ — 대상에게 붙은 효과가 피해를 가공한다: 반사 결계 먼저, 그다음 쉴드 등 나머지.</summary>
         public float AbsorbIncoming(int targetId, float amount, in DamageContext context)
         {
-            for (int i = 0; i < _entries.Count && amount > 0f; i++)
+            for (int pass = 0; pass < 2; pass++)
             {
-                var e = _entries[i];
-                if (e.TargetId != targetId || e.Effect.IsExpired) continue;
-                amount = e.Effect.AbsorbIncomingDamage(targetId, amount, context, _world);
+                bool reflectPass = pass == 0;
+                for (int i = 0; i < _entries.Count && amount > 0f; i++)
+                {
+                    var e = _entries[i];
+                    if (e.TargetId != targetId || e.Effect.IsExpired) continue;
+                    if ((e.Effect is ReflectBarrierEffect) != reflectPass) continue;
+                    amount = e.Effect.AbsorbIncomingDamage(targetId, amount, context, _world);
+                }
             }
             return amount < 0f ? 0f : amount;
         }

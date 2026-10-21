@@ -40,7 +40,7 @@ namespace SpellboundVR.Combat
         public readonly StructureState[] Structures = new StructureState[MatchSnapshot.StructureCount];
         public readonly UnitState[] Units = new UnitState[MatchSnapshot.MaxUnits];
 
-        private readonly MinionDefinition[] _minionDefs = new MinionDefinition[3];
+        private readonly MinionDefinition[] _minionDefs = new MinionDefinition[MinionDefinition.KindCount];
         private readonly BotPlayer[] _bots = new BotPlayer[TeamUtil.TeamCount];
         private readonly IBotBrain[] _botBrainOverrides = new IBotBrain[TeamUtil.TeamCount];
         private readonly int[][] _decks = { new int[DeckData.SlotCount], new int[DeckData.SlotCount] };
@@ -68,6 +68,11 @@ namespace SpellboundVR.Combat
         private float _duration;
         private bool _botManualKeys;
         private bool _botRequireAlt;
+        /// <summary>실행 중인 시전의 S10 집중 배율 (ISpellWorld.CastFocus)</summary>
+        private float _castFocus = 1f;
+
+        /// <summary>덱 밖 룬 테스트 시전 슬롯 번호 (AllowTestCasts일 때만 허용)</summary>
+        public const int TestCastSlot = -1;
 
         public MatchSimulation(MatchRuleConfig rules, SpellCatalog catalog, ArenaGeometry arena, BotConfig botConfig,
                                MinionDefinition melee, MinionDefinition ranged, MinionDefinition brute, uint seed)
@@ -79,6 +84,8 @@ namespace SpellboundVR.Combat
             _minionDefs[(int)MinionKind.Melee] = melee != null ? melee : MinionDefinition.CreateDefault(MinionKind.Melee);
             _minionDefs[(int)MinionKind.Ranged] = ranged != null ? ranged : MinionDefinition.CreateDefault(MinionKind.Ranged);
             _minionDefs[(int)MinionKind.Brute] = brute != null ? brute : MinionDefinition.CreateDefault(MinionKind.Brute);
+            for (int k = 0; k < _minionDefs.Length; k++)
+                if (_minionDefs[k] == null) _minionDefs[k] = MinionDefinition.CreateDefault((MinionKind)k);
             _rng = new DeterministicRandom(seed);
 
             for (int t = 0; t < TeamUtil.TeamCount; t++) Players[t] = new PlayerState((Team)t);
@@ -117,6 +124,11 @@ namespace SpellboundVR.Combat
         public float Duration => _duration;
         public ProjectileSystem Projectiles => _projectiles;
 
+        /// <summary>
+        /// 로컬 개발 전용: 덱 밖 룬도 SlotIndex = -1 로 시전 허용 (쿨타임 · 횟수 없음). PC 서버에서는 끈다.
+        /// </summary>
+        public bool AllowTestCasts { get; set; }
+
         /// <summary>§37 디버깅: 시전 확정 · 거절을 콘솔에 남긴다 (서버 창 · 에디터)</summary>
         public bool LogCasts { get; set; } = true;
 
@@ -125,6 +137,12 @@ namespace SpellboundVR.Combat
         public BotPlayer GetBot(Team team) => _bots[(int)team];
 
         public MinionDefinition GetMinionDefinition(MinionKind kind) => _minionDefs[(int)kind];
+
+        /// <summary>소환수 · 설치물 정의 에셋 지정 (없으면 코드 기본값)</summary>
+        public void SetUnitDefinition(MinionDefinition def)
+        {
+            if (def != null && (int)def.Kind < _minionDefs.Length) _minionDefs[(int)def.Kind] = def;
+        }
 
         public int[] GetDeck(Team team) => _decks[(int)team];
 
@@ -362,7 +380,12 @@ namespace SpellboundVR.Combat
         private void ProcessCast(Team team, in SpellCastRequest request)
         {
             var caster = Players[(int)team];
-            var reason = ServerSpellValidator.Validate(_phase, caster, request, Catalog, _executors, out SpellDefinition def);
+            bool testCast = request.SlotIndex == TestCastSlot && AllowTestCasts;
+            SpellDefinition def;
+            var reason = testCast
+                ? ValidateTestCast(caster, request, out def)
+                : ServerSpellValidator.Validate(_phase, caster, request, Catalog, _executors, out def);
+            if (reason == CastRejectReason.None && !CanPlaceUnits(team, def)) reason = CastRejectReason.UnitCapReached;
             if (reason != CastRejectReason.None || !_executors.TryGet(request.SpellId, out ISpellExecutor executor))
             {
                 if (reason == CastRejectReason.None) reason = CastRejectReason.NotImplemented;
@@ -370,16 +393,54 @@ namespace SpellboundVR.Combat
                 _sink.OnCastRejected(team, request.SlotIndex, reason);
                 return;
             }
+            // S10 집중: 다음 스킬 1회에 배율 적용 후 소모 (집중 자신은 제외)
+            float focus = 1f;
+            if (def.Behavior != SpellBehaviorType.Focus && caster.HasFocus)
+            {
+                focus = caster.PendingFocus;
+                caster.PendingFocus = 1f;
+            }
+
             if (LogCasts)
-                Debug.Log($"[MatchSimulation] 시전 확정 {team}{(caster.IsBot ? "(Bot)" : "")} 슬롯{request.SlotIndex + 1} {def.Code} {def.DisplayName} " +
-                          $"열 {request.TargetColumn} 깊이 {request.TargetDepth:0.00} t={_matchTime:0.0}");
+                Debug.Log($"[MatchSimulation] 시전 확정 {team}{(caster.IsBot ? "(Bot)" : "")} {(testCast ? "테스트" : "슬롯" + (request.SlotIndex + 1))} {def.Code} {def.DisplayName} " +
+                          $"열 {request.TargetColumn} 깊이 {request.TargetDepth:0.00}{(focus > 1f ? " 집중x" + focus.ToString("0.0") : "")} t={_matchTime:0.0}");
 
             // 시전 확정 → 쿨타임 시작 (§13.4), 활동 기록 (§10)
-            SlotCooldownService.Consume(caster, request.SlotIndex, _matchTime, Rules, def.Tier, _scaling.Stage);
+            if (!testCast)
+            {
+                SlotCooldownService.Consume(caster, request.SlotIndex, _matchTime, Rules, def.Tier, _scaling.Stage);
+                _sink.OnCastAccepted(team, request.SlotIndex, request.SpellId);
+            }
             caster.LastActivityTime = _matchTime;
-            _sink.OnCastAccepted(team, request.SlotIndex, request.SpellId);
 
-            executor.Execute(request, team);
+            _castFocus = focus;
+            try
+            {
+                executor.Execute(request, team);
+            }
+            finally
+            {
+                _castFocus = 1f;
+            }
+        }
+
+        private CastRejectReason ValidateTestCast(PlayerState caster, in SpellCastRequest request, out SpellDefinition def)
+        {
+            def = null;
+            if (!caster.Alive) return CastRejectReason.CasterDead;
+            if (!Catalog.TryGet(request.SpellId, out def) || !_executors.Has(request.SpellId)) return CastRejectReason.NotImplemented;
+            if ((int)request.TargetColumn > 2 || float.IsNaN(request.TargetDepth)) return CastRejectReason.InvalidTarget;
+            return CastRejectReason.None;
+        }
+
+        /// <summary>§14.5 소환 · 설치: 진영 생존 상한이면 거절 (쿨타임 미소모). 설치물 교체는 자리가 생기므로 허용.</summary>
+        private bool CanPlaceUnits(Team team, SpellDefinition def)
+        {
+            if (def == null) return true;
+            if (def.Executor == SpellExecutorType.Summon) return AliveUnitLimiter.CanSpawn(this, team);
+            if (def.Executor == SpellExecutorType.Structure)
+                return FindTeamUnit(team, def.SummonKind) != 0 || AliveUnitLimiter.CanSpawn(this, team);
+            return true;
         }
 
         private void ProcessMove(Team team, in MoveRequest request)
@@ -518,11 +579,18 @@ namespace SpellboundVR.Combat
 
         public bool SpawnUnit(Team team, MinionDefinition def, int lane, Vector2 position)
         {
+            return SpawnUnit(team, def, lane, position, 1f, out _);
+        }
+
+        public bool SpawnUnit(Team team, MinionDefinition def, int lane, Vector2 position, float hpMultiplier, out int unitId)
+        {
+            unitId = 0;
             for (int i = 0; i < Units.Length; i++)
             {
                 var u = Units[i];
                 if (u.Active) continue;
-                u.Activate(_nextUnitId++, team, def, lane, Arena.ClampToField(position), _matchTime);
+                unitId = _nextUnitId++;
+                u.Activate(unitId, team, def, lane, Arena.ClampToField(position), _matchTime, hpMultiplier);
                 return true;
             }
             return false;

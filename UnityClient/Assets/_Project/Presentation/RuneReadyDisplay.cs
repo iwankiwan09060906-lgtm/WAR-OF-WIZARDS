@@ -12,10 +12,11 @@ namespace SpellboundVR.Presentation
 {
     public sealed class RuneReadyDisplay : MonoBehaviour
     {
-        public Vector3 offsetAboveHand = new Vector3(0f, 0.12f, 0f);
-        public float textSize = 0.0035f;
-        [Tooltip("아이콘 긴 변 길이 (m)")]
-        public float iconSize = 0.1f;
+        [Tooltip("손 위 표시 위치 — 룬이 커서 손을 가리지 않도록 아이콘 반지름만큼 위로")]
+        public Vector3 offsetAboveHand = new Vector3(0f, 0.32f, 0f);
+        public float textSize = 0.006f;
+        [Tooltip("아이콘 긴 변 길이 (m) — 손 크기(약 0.1m)의 5배")]
+        public float iconSize = 0.5f;
         [Tooltip("아이콘(마법진)이 천천히 도는 속도 (도/초)")]
         public float iconSpinDegrees = 20f;
 
@@ -43,7 +44,7 @@ namespace SpellboundVR.Presentation
             _root.SetParent(transform, false);
             _orb = FallbackVisuals.Primitive(PrimitiveType.Sphere, "RuneOrb", FallbackVisuals.Transparent(Color.white)).transform;
             _orb.SetParent(_root, false);
-            _orb.localScale = Vector3.one * 0.05f;
+            _orb.localScale = Vector3.one * iconSize * 0.5f;
             _text = FallbackVisuals.Text(_root, "", textSize, Color.white);
             _text.transform.localPosition = new Vector3(0f, iconSize * 0.5f + 0.03f, 0f);
             // 룬 아이콘 — 구체 자리(손 위)에 쿼드, 머리 쪽을 향함
@@ -98,7 +99,7 @@ namespace SpellboundVR.Presentation
             else
             {
                 _orb.GetComponent<Renderer>().sharedMaterial = FallbackVisuals.Transparent(new Color(color.r, color.g, color.b, 0.75f));
-                _orb.localScale = Vector3.one * 0.05f * pulse;
+                _orb.localScale = Vector3.one * iconSize * 0.5f * pulse;
             }
 
             string hint;

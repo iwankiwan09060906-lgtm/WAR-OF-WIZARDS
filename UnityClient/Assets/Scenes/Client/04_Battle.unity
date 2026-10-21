@@ -1037,7 +1037,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 119ee961833b3344194209534f06154e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SpellboundVR.Core.GameBootstrap
-  bootMode: 1
+  bootMode: 3
   sessionName: spellbound-dev
   serverPort: 0
   rules: {fileID: 11400000, guid: 5315434185c97614ab3bd27ba86f9df1, type: 2}
@@ -1047,6 +1047,7 @@ MonoBehaviour:
   meleeDefinition: {fileID: 11400000, guid: ea177d3fcfae9e94993b60fe98c88606, type: 2}
   rangedDefinition: {fileID: 11400000, guid: e35647c21be918045a906c8e5df8413c, type: 2}
   bruteDefinition: {fileID: 11400000, guid: 8e5c16b838005144eb44fb4833c3ce7d, type: 2}
+  unitDefinitions: []
   vfxCatalog: {fileID: 11400000, guid: d6d85eab6679b2f469adadacd38d69d3, type: 2}
   arenaLayout: {fileID: 990286813}
   playerRig: {fileID: 890119592}
@@ -1061,7 +1062,7 @@ MonoBehaviour:
   localAfkEnabled: 1
   showDebugPanels: 1
   recognizeAllRunes: 1
-  localDeck: 0300000007000000080000000000000000000000000000000000000000000000
+  localDeck: 030000000700000008000000010000000b0000000d0000006500000068000000
 --- !u!4 &165065891
 Transform:
   m_ObjectHideFlags: 0
@@ -9355,6 +9356,53 @@ PrefabInstance:
     m_AddedGameObjects: []
     m_AddedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: 74df2060880ac9b43838eaed577ee237, type: 3}
+--- !u!1 &1154817483
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1154817485}
+  - component: {fileID: 1154817484}
+  m_Layer: 0
+  m_Name: GameObject
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1154817484
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1154817483}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 47cfa2ce9adb69047abef279da9ef9bc, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SpellboundVR.Backend.MatchResultReporter
+  bootstrap: {fileID: 0}
+  restoreLoginOnStart: 1
+  fallbackMode: bot
+--- !u!4 &1154817485
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1154817483}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: -2.41952, y: 0.02, z: 12.10955}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!4 &1182790533 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 7741544590106231781, guid: f86108bb7379846649c97694f0c2705b, type: 3}
@@ -16164,3 +16212,4 @@ SceneRoots:
   - {fileID: 712800407}
   - {fileID: 990286814}
   - {fileID: 165065891}
+  - {fileID: 1154817485}

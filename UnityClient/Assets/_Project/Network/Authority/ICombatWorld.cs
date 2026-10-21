@@ -20,6 +20,9 @@ namespace SpellboundVR.Network
 
         float GetAttackMultiplier(Team team);
 
+        /// <summary>대상 자체의 받는 피해 배율 (S09 타워 버프 · H05 분노 유닛, 기본 1)</summary>
+        float GetIncomingDamageMultiplier(int targetId);
+
         /// <summary>
         /// HP를 바꾸는 유일한 함수 — ServerDamageResolver만 호출한다(§12.5 ⑧).
         /// delta &lt; 0 이 피해. 실제로 변한 양의 절댓값을 반환한다. 0 이하가 되면 사망 처리.

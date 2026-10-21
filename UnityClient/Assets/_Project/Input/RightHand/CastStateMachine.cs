@@ -11,8 +11,8 @@
 //     └──────────── 손바닥 펴기 · 5초 무입력 · 트래킹 손실 → 취소 (쿨타임 미소모, §6.4)
 //
 // 키보드 대체 입력(§6.6)은 슬롯 번호로 RuneReady를 건너뛰고 바로 Aiming(또는 즉시 시전)으로 간다.
-// 룬 인식 테스트(recognizeAllRunes): 덱에 없는 룬도 후보로 인식해 손 옆 아이콘 · 조준까지 진행하고, 시전 요청은 보내지 않는다 (로그만).
-//   덱에 있는 룬은 원래대로 시전한다.
+// 룬 인식 테스트(recognizeAllRunes): 덱에 없는 룬도 후보로 인식해 손 옆 아이콘 · 조준까지 진행하고, SlotIndex = -1 테스트 시전을 보낸다
+//   (로컬 봇전 서버만 받아들인다 — 쿨타임 · 횟수 없음). 덱에 있는 룬은 원래대로 시전한다.
 // 클라이언트는 요청만 보낸다 — 시전 가능 여부 · 결과는 서버가 결정한다(Rule 4).
 
 using System;
@@ -337,17 +337,43 @@ namespace SpellboundVR.Input
             SetState(CastState.Idle);
         }
 
-        /// <summary>덱 밖 룬의 테스트 "시전" — 서버에 보내지 않고 조준 결과만 남긴다</summary>
+        /// <summary>
+        /// 덱 밖 룬의 테스트 시전 — 카탈로그에 있는 스킬이면 SlotIndex = -1 로 서버에 보낸다
+        /// (로컬 봇전 서버만 허용: 쿨타임 · 횟수 없이 실제 발동. PC 서버는 거절).
+        /// </summary>
         private void CommitTestCast()
         {
+            var request = new SpellCastRequest
+            {
+                SpellId = _selectedSpell.SpellId,
+                SlotIndex = -1,
+                TargetColumn = Column.Center,
+                TargetDepth = 0f,
+            };
             string target = "-";
             if (_selectedSpell.RequiresAim && aimPointer != null)
             {
                 var aim = aimPointer.Current;
-                if (aim.Valid) target = $"{aim.LocalColumn} 깊이 {aim.Depth:0.00}";
+                if (aim.Valid)
+                {
+                    target = $"{aim.LocalColumn} 깊이 {aim.Depth:0.00}";
+                    request.TargetColumn = aim.LocalColumn;
+                    request.TargetDepth = aim.Depth;
+                }
                 aimPointer.End();
             }
-            Debug.Log($"[RuneTest] {_selectedSpell.Code} {_selectedSpell.DisplayName} 시전 테스트 완료 (조준: {target}) — 서버 요청 안 보냄");
+
+            bool real = _session.Catalog.Get(_selectedSpell.SpellId) != null;
+            if (real && _session.Client != null && _session.Client.IsReady)
+            {
+                _session.Client.RequestCast(request);
+                OnCastRequested?.Invoke(request);
+                Debug.Log($"[RuneTest] {_selectedSpell.Code} {_selectedSpell.DisplayName} 테스트 시전 요청 (조준: {target}, 덱 밖 — 쿨타임 없음)");
+            }
+            else
+            {
+                Debug.Log($"[RuneTest] {_selectedSpell.Code} {_selectedSpell.DisplayName} 시전 테스트 완료 (조준: {target}) — 서버 요청 안 보냄");
+            }
             ResetSelection();
             SetState(CastState.Idle);
         }

@@ -52,5 +52,8 @@ namespace SpellboundVR.Contracts
         /// 대상 플레이어의 서버 위치가 이 열과 다르면 ③단계에서 회피 처리된다(§11.2, Rule 9).
         /// </summary>
         public int AimedWorldColumn;
+
+        /// <summary>H04 반사 결계가 되돌려 보낸 피해 — 다시 반사되지 않는다 (무한 반사 방지)</summary>
+        public bool IsReflected;
     }
 }

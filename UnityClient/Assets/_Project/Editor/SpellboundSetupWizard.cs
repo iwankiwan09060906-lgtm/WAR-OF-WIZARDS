@@ -1,7 +1,8 @@
 // 에디터 자동 셋업 도구 — 사람이 손으로 할 작업을 메뉴 한 번으로 처리한다.
 //   Spellbound > 1. Setup Battle Scene
 //     ① 데이터 에셋 생성 (이미 있으면 건드리지 않음)
-//        MatchRuleConfig / BotConfig / Minion_* / Spell_S03 · S07 · S08 / SpellCatalog / Rune_* (19종) / RuneTemplateLibrary / VFXCatalog
+//        MatchRuleConfig / BotConfig / Minion_* (미니언 3 + 소환수 · 설치물 5) / Spell_* (19종) / SpellCatalog / Rune_* (19종) / RuneTemplateLibrary / VFXCatalog
+//        (스킬 VFX · 소환수 모델은 Spellbound > Skills > Build All Skill Assets)
 //     ② 네트워크 프리팹 생성: Prefabs/Network/NetworkMatchState, NetworkPlayer (+ Fusion 프리팹 테이블 갱신)
 //     ③ 04_Battle 씬 연결: [Spellbound](GameBootstrap) · ArenaLayout · OVRHandPrefab(좌/우) · 참조 할당 → 저장
 //   Spellbound > Mode > ... : GameBootstrap 실행 모드 전환
@@ -109,14 +110,21 @@ namespace SpellboundVR.EditorTools
                 Brute = LoadOrCreate(MinionData + "/Minion_Brute.asset", () => MinionDefinition.CreateDefault(MinionKind.Brute)),
             };
 
-            var fireball = LoadOrCreate(SpellData + "/Spell_S03_Fireball.asset", SpellDefinition.CreateFireballDefault);
-            var gatling = LoadOrCreate(SpellData + "/Spell_S07_Gatling.asset", SpellDefinition.CreateGatlingDefault);
-            var shield = LoadOrCreate(SpellData + "/Spell_S08_Shield.asset", SpellDefinition.CreateShieldDefault);
             a.Catalog = LoadOrCreate(SpellData + "/SpellCatalog.asset", () => ScriptableObject.CreateInstance<SpellCatalog>());
-            AddUnique(a.Catalog.Spells, fireball);
-            AddUnique(a.Catalog.Spells, gatling);
-            AddUnique(a.Catalog.Spells, shield);
+            foreach (int id in SpellDefinition.AllIds)
+            {
+                int spellId = id;
+                var probe = SpellDefinition.CreateDefault(spellId);
+                var def = LoadOrCreate($"{SpellData}/Spell_{SpellIds.Code(spellId)}_{probe.VfxName}.asset", () => SpellDefinition.CreateDefault(spellId));
+                Object.DestroyImmediate(probe);
+                AddUnique(a.Catalog.Spells, def);
+            }
             EditorUtility.SetDirty(a.Catalog);
+            foreach (var kind in SpellboundSkillAssetBuilder.ExtraUnitKinds)
+            {
+                var k = kind;
+                LoadOrCreate($"{MinionData}/Minion_{k}.asset", () => MinionDefinition.CreateDefault(k));
+            }
 
             a.Runes = LoadOrCreate(RuneData + "/RuneTemplateLibrary.asset", () => ScriptableObject.CreateInstance<RuneTemplateLibrary>());
             foreach (var design in RuneDesigns.All)
@@ -283,6 +291,7 @@ namespace SpellboundVR.EditorTools
             bootstrap.meleeDefinition = assets.Melee;
             bootstrap.rangedDefinition = assets.Ranged;
             bootstrap.bruteDefinition = assets.Brute;
+            bootstrap.unitDefinitions = SpellboundSkillAssetBuilder.LoadExtraUnitDefinitions();
             bootstrap.vfxCatalog = assets.Vfx;
             bootstrap.arenaLayout = layout;
             bootstrap.matchStatePrefab = prefabs.MatchState;

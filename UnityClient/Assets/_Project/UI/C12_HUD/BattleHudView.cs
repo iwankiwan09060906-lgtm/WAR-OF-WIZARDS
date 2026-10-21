@@ -53,6 +53,8 @@ namespace SpellboundVR.UI
         private float _messageUntil;
         private float _centerUntil = -1f;
         private float _shieldEnd;
+        private bool _focusOn;
+        private bool _reflectOn;
         private int _lastShieldSecond = -1;
         private float _matchTime;
         private int _stage;
@@ -313,6 +315,9 @@ namespace SpellboundVR.UI
         {
             if (target != TeamUtil.PlayerId(Local)) return;
             if (effectId == "S08_Shield") _shieldEnd = active ? Time.time + remaining : 0f;
+            else if (effectId == "S10_Focus") _focusOn = active;
+            else if (effectId == "H04_Reflect") _reflectOn = active;
+            _lastShieldSecond = int.MinValue; // 상태 글자 다시 그리기
         }
 
         private void HandleDefense(Team team, bool towerAlive, bool nexusAlive)
@@ -463,7 +468,10 @@ namespace SpellboundVR.UI
             if (shieldSecond != _lastShieldSecond)
             {
                 _lastShieldSecond = shieldSecond;
-                _status.text = shieldSecond > 0 ? "SHIELD " + shieldSecond + "s" : "";
+                string status = shieldSecond > 0 ? "SHIELD " + shieldSecond + "s" : "";
+                if (_reflectOn) status += (status.Length > 0 ? "  " : "") + "REFLECT";
+                if (_focusOn) status += (status.Length > 0 ? "  " : "") + "FOCUS x1.5";
+                _status.text = status;
             }
 
             if (_message.text.Length > 0 && now > _messageUntil) _message.text = "";

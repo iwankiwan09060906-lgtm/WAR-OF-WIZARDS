@@ -54,14 +54,12 @@ namespace SpellboundVR.Spells
 
         private void OnValidate() => _byId = null;
 
-        /// <summary>에셋이 없을 때 쓰는 런타임 기본 카탈로그 (S03 / S07 / S08)</summary>
+        /// <summary>에셋이 없을 때 쓰는 런타임 기본 카탈로그 (19종)</summary>
         public static SpellCatalog CreateDefault()
         {
             var cat = CreateInstance<SpellCatalog>();
             cat.name = "SpellCatalog (Runtime Default)";
-            cat.Spells.Add(SpellDefinition.CreateFireballDefault());
-            cat.Spells.Add(SpellDefinition.CreateGatlingDefault());
-            cat.Spells.Add(SpellDefinition.CreateShieldDefault());
+            foreach (int id in SpellDefinition.AllIds) cat.Spells.Add(SpellDefinition.CreateDefault(id));
             return cat;
         }
     }

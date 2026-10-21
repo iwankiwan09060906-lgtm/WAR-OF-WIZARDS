@@ -1,0 +1,18 @@
+fileFormatVersion: 2
+guid: 68160830ed3f4451eb7b714c1df6fdfd
+MonoImporter:
+  externalObjects: {}
+  serializedVersion: 2
+  defaultReferences: []
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 413902
+  packageName: "Nora Squad \u2013 Starter"
+  packageVersion: 1.0
+  assetPath: Assets/Nora Squad/Demo/Scripts/NoraShowcase.cs
+  uploadId: 1010958

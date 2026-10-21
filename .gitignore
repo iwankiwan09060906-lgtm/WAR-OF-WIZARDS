@@ -58,6 +58,17 @@ __pycache__/
 *.pyc
 .venv/
 venv/
+# MediaPipe 손 모델 — run_hand_tracker.bat 첫 실행 때 자동으로 받는다 (7.8MB)
+GestureTools/MediaPipe/models/
+
+## ---------- Backend (Python 서버) ----------
+# SQLite DB 는 서버 첫 실행 때 자동 생성 + 데모 데이터 시딩된다
+Backend/*.sqlite
+Backend/*.sqlite-journal
+# Google 로그인 클라이언트 ID (Docs/Backend/WebUiServer.md)
+Backend/google_client_id.txt
+# Unity WebGL 빌드 산출물 자리
+Backend/static/game/
 
 ## ---------- Supabase CLI ----------
 Supabase/.branches/

@@ -14,6 +14,12 @@
 *.sql text eol=lf
 *.md text eol=lf
 *.json text eol=lf
+*.js text eol=lf
+*.css text eol=lf
+*.html text eol=lf
+*.jslib text eol=lf
+# Windows 배치 파일은 CRLF 여야 goto/라벨이 안전하게 동작한다
+*.bat text eol=crlf
 
 ## ---------- Unity YAML 파일: Smart Merge (UnityYAMLMerge) ----------
 *.unity merge=unityyamlmerge eol=lf text

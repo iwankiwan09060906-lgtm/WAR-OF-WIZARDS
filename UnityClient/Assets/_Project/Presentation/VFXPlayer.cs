@@ -1,8 +1,10 @@
 // §25.2 OnSpellFx 구독 → VFX 프리팹 재생 (ㅊㄱㅇ: VFX 연결 코드)
 //   · 프리팹 이름: SpellDefinition.GetVfxPrefabName(part) = VFX_{SkillId}_{Name}_{Part}
-//   · 범위형(Impact · Field)은 반경 1m 기준 제작 → 코드에서 스킬 반경 배율 적용 (§25.3)
-//   · 일회성은 Stop Action(Disable)로 스스로 꺼져 풀로 돌아온다. 안전장치로 최대 수명 후 강제 반환.
-//   · Loop는 연결된 상태 효과가 끝나면(OnStatusEffectChanged active=false) 반환한다.
+//     (Spellbound > Skills > Build Skill Assets 가 에셋 팩으로 만든다 — 실제 크기로 제작, 코드에서 크기를 바꾸지 않는다)
+//   · 방향: 레인 방향(아레나 forward)으로 정렬, 시전자 쪽에서 상대 쪽을 바라보게 (장판 · 띠 · 빔이 레인을 따라 놓인다)
+//   · 수명: Field · Loop = 스킬 지속 시간, Telegraph = 예고 시간, 그 외 = oneShotMaxLifetime
+//     수명이 끝나면 파티클 방출만 멈추고 남은 입자가 사라진 뒤 풀로 돌려보낸다 (뚝 끊기지 않게)
+//   · H02 레이저 빔(Field · Telegraph)은 길이 1m(+Z)로 제작 → 전장 길이만큼 Z 스케일
 //   · 프리팹이 없으면 대체 연출(FallbackFxAnimator)을 쓴다.
 
 using System.Collections.Generic;
@@ -20,18 +22,23 @@ namespace SpellboundVR.Presentation
         {
             public GameObject Instance;
             public float ReleaseTime;
+            public bool Stopping;
             public bool IsLoop;
             public int SpellId;
         }
 
         public float oneShotMaxLifetime = 4f;
-        public int prewarmPerPrefab = 4;
+        [Tooltip("방출을 멈춘 뒤 남은 입자가 사라지길 기다리는 시간 (초)")]
+        public float fadeOutSeconds = 1.2f;
+        public int prewarmPerPrefab = 2;
         public int fallbackPrewarm = 24;
 
         private ClientSession _session;
         private VFXCatalog _catalog;
         private readonly Dictionary<string, ObjectPool> _pools = new Dictionary<string, ObjectPool>();
         private readonly List<TimedFx> _timed = new List<TimedFx>(64);
+        private readonly List<ParticleSystem> _psBuffer = new List<ParticleSystem>(16);
+        private readonly List<MeshRenderer> _meshBuffer = new List<MeshRenderer>(8);
         private ObjectPool _fallbackPool;
         private Transform _root;
 
@@ -43,7 +50,6 @@ namespace SpellboundVR.Presentation
             _root.SetParent(transform, false);
             _fallbackPool = new ObjectPool(CreateFallbackFx, _root, fallbackPrewarm, "FallbackFx");
             _session.Events.OnSpellFx += HandleSpellFx;
-            _session.Events.OnStatusEffectChanged += HandleStatusEffect;
             _session.Events.OnMatchEnded += HandleMatchEnded;
         }
 
@@ -51,7 +57,6 @@ namespace SpellboundVR.Presentation
         {
             if (_session == null) return;
             _session.Events.OnSpellFx -= HandleSpellFx;
-            _session.Events.OnStatusEffectChanged -= HandleStatusEffect;
             _session.Events.OnMatchEnded -= HandleMatchEnded;
         }
 
@@ -62,28 +67,79 @@ namespace SpellboundVR.Presentation
             return go;
         }
 
+        /// <summary>
+        /// 이름으로 VFX 한 번 재생 (표시 전용 — ArenaStateView의 유닛 공격 · 등장 연출도 이 경로를 쓴다).
+        /// 프리팹이 없으면 false.
+        /// </summary>
+        public bool PlayNamed(string prefabName, Vector3 position, Quaternion rotation, float lifetime, Vector3? scale = null)
+        {
+            if (_catalog == null || !_catalog.TryGet(prefabName, out var prefab)) return false;
+            var inst = GetPool(prefab).Get(position, rotation);
+            inst.transform.localScale = scale ?? prefab.transform.localScale;
+            RestartParticles(inst);
+            _timed.Add(new TimedFx { Instance = inst, ReleaseTime = Time.time + Mathf.Max(0.1f, lifetime), IsLoop = false });
+            return true;
+        }
+
         private void HandleSpellFx(int spellId, VfxPart part, Vector3 position, Column column)
         {
             var def = _session.Catalog.Get(spellId);
             Color color = def != null ? def.ThemeColor : Color.white;
             color.a = 0.8f;
-            float radius = def != null && (part == VfxPart.Impact || part == VfxPart.Field) && def.Executor == SpellExecutorType.Area
-                ? def.Radius
-                : 0f;
+            var arena = _session.Arena;
+
+            // 레인 방향 정렬: 위치가 Home 쪽 절반이면 +forward, Away 쪽이면 -forward (시전자 → 상대)
+            Vector2 uv = arena.ToArena(position);
+            Vector3 facing = arena.Forward * (uv.y <= arena.FieldLength * 0.5f ? 1f : -1f);
+            if (part != VfxPart.Cast && part != VfxPart.Projectile) facing = arena.Forward;
+            Quaternion rotation = Quaternion.LookRotation(facing, Vector3.up);
 
             if (def != null && _catalog != null && _catalog.TryGet(def.GetVfxPrefabName(part), out var prefab))
             {
-                var pool = GetPool(prefab);
-                var inst = pool.Get(position, Quaternion.identity);
-                if (radius > 0f) inst.transform.localScale = Vector3.one * radius;
-                else inst.transform.localScale = prefab.transform.localScale;
+                var inst = GetPool(prefab).Get(position, rotation);
+                Vector3 scale = prefab.transform.localScale;
+                if (spellId == SpellIds.H02_Laser && (part == VfxPart.Field || part == VfxPart.Telegraph))
+                    scale = new Vector3(scale.x, scale.y, scale.z * arena.FieldLength);
+                inst.transform.localScale = scale;
+                RestartParticles(inst);
                 bool loop = part == VfxPart.Loop || part == VfxPart.Field;
-                float life = loop && def.EffectDuration > 0f ? def.EffectDuration : oneShotMaxLifetime;
-                _timed.Add(new TimedFx { Instance = inst, ReleaseTime = Time.time + life, IsLoop = loop, SpellId = spellId });
+                _timed.Add(new TimedFx { Instance = inst, ReleaseTime = Time.time + Lifetime(def, part), IsLoop = loop, SpellId = spellId });
                 return;
             }
 
+            float radius = def != null && (part == VfxPart.Impact || part == VfxPart.Field) && def.Executor == SpellExecutorType.Area
+                ? def.Radius
+                : 0f;
             PlayFallback(def, part, position, color, radius);
+        }
+
+        private float Lifetime(SpellDefinition def, VfxPart part)
+        {
+            switch (part)
+            {
+                case VfxPart.Field:
+                    return def.EffectDuration > 0f ? def.EffectDuration : oneShotMaxLifetime;
+                case VfxPart.Loop:
+                    return def.EffectDuration > 0f ? Mathf.Min(def.EffectDuration, 2.5f) : 2f;
+                case VfxPart.Telegraph:
+                    return def.TelegraphDelay > 0f ? def.TelegraphDelay + 0.15f : 1.2f;
+                default:
+                    return oneShotMaxLifetime;
+            }
+        }
+
+        private void RestartParticles(GameObject inst)
+        {
+            inst.GetComponentsInChildren(true, _meshBuffer);
+            for (int i = 0; i < _meshBuffer.Count; i++) _meshBuffer[i].enabled = true; // 지난 재생에서 끈 빔 · 판 메시
+            inst.GetComponentsInChildren(true, _psBuffer);
+            for (int i = 0; i < _psBuffer.Count; i++)
+            {
+                var ps = _psBuffer[i];
+                if (ps.transform.parent != null && ps.transform.parent.GetComponentInParent<ParticleSystem>() != null) continue;
+                ps.Clear(true);
+                ps.Play(true);
+            }
         }
 
         private void PlayFallback(SpellDefinition def, VfxPart part, Vector3 position, Color color, float radius)
@@ -96,7 +152,6 @@ namespace SpellboundVR.Presentation
                     anim.Play(color, position, position, 0.2f, 0.7f, 0.3f, false);
                     break;
                 case VfxPart.Projectile:
-                    // 범위 공격: 하늘에서 떨어지는 구체 (메테오)
                     anim.Play(color, position + Vector3.up * 7f, position, 0.6f, 0.9f, 0.25f, false);
                     break;
                 case VfxPart.Impact:
@@ -121,33 +176,15 @@ namespace SpellboundVR.Presentation
         {
             if (!_pools.TryGetValue(prefab.name, out var pool))
             {
-                pool = new ObjectPool(prefab, _root, prewarmPerPrefab);
+                // 한 번에 여러 개 나오는 것: H01 프리즈 장판 15칸 · 화살 착탄 10발 · 총난사 15발
+                int prewarm = prefab.name.StartsWith("VFX_H01_Freeze_Field") ? 16
+                            : prefab.name.Contains("ArrowRain_Impact") || prefab.name.Contains("Gatling_Impact") ? 12
+                            : prefab.name.Contains("Tornado_Field") || prefab.name.Contains("Rage_Field") ? 4
+                            : prewarmPerPrefab;
+                pool = new ObjectPool(prefab, _root, prewarm);
                 _pools.Add(prefab.name, pool);
             }
             return pool;
-        }
-
-        private void HandleStatusEffect(int targetId, string effectId, bool active, float remaining)
-        {
-            if (active || !TeamUtil.IsPlayerId(targetId)) return;
-            var snap = _session.Events.Latest;
-            if (snap == null) return;
-            Team team = TeamUtil.TeamOfPlayerId(targetId);
-            var arena = _session.Arena;
-            Vector3 playerPos = arena.ToWorld(arena.PlayerPosition(team, snap.Players[(int)team].WorldColumn), 1.2f);
-
-            for (int i = _timed.Count - 1; i >= 0; i--)
-            {
-                var t = _timed[i];
-                if (!t.IsLoop || t.Instance == null) continue;
-                Vector3 p = t.Instance.transform.position;
-                p.y = playerPos.y;
-                if ((p - playerPos).sqrMagnitude <= 4f)
-                {
-                    t.Instance.SetActive(false);
-                    _timed.RemoveAt(i);
-                }
-            }
         }
 
         private void HandleMatchEnded(MatchResult result, MatchEndReason reason, float duration)
@@ -168,12 +205,35 @@ namespace SpellboundVR.Presentation
                     _timed.RemoveAt(i);
                     continue;
                 }
-                if (now >= t.ReleaseTime)
+                if (now < t.ReleaseTime) continue;
+
+                if (!t.Stopping && StopEmitting(t.Instance))
                 {
-                    t.Instance.SetActive(false);
-                    _timed.RemoveAt(i);
+                    // 방출만 멈추고 남은 입자가 사라질 시간을 준다
+                    t.Stopping = true;
+                    t.ReleaseTime = now + fadeOutSeconds;
+                    _timed[i] = t;
+                    continue;
                 }
+                t.Instance.SetActive(false);
+                _timed.RemoveAt(i);
             }
+        }
+
+        private bool StopEmitting(GameObject inst)
+        {
+            inst.GetComponentsInChildren(false, _psBuffer);
+            if (_psBuffer.Count == 0) return false;
+            bool anyAlive = false;
+            for (int i = 0; i < _psBuffer.Count; i++)
+            {
+                _psBuffer[i].Stop(false, ParticleSystemStopBehavior.StopEmitting);
+                if (_psBuffer[i].particleCount > 0) anyAlive = true;
+            }
+            // 메시 렌더러(빔 · 쉴드 판)는 바로 끈다
+            inst.GetComponentsInChildren(false, _meshBuffer);
+            for (int i = 0; i < _meshBuffer.Count; i++) _meshBuffer[i].enabled = false;
+            return anyAlive;
         }
     }
 }

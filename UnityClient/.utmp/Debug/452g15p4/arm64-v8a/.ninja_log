@@ -1,12 +1,12 @@
 # ninja log v5
-568	2127	8128801216973890	FramePacing/CMakeFiles/swappywrapper.dir/UnitySwappyWrapper.cpp.o	badc559ae111564a
-2133	2921	8128801224455550	C:/Users/Kiwan/Desktop/20/3-1/XRProject/WAR-OF-WIZARDS/UnityClient/Library/Bee/Android/Prj/IL2CPP/Gradle/unityLibrary/build/intermediates/cxx/Debug/452g15p4/obj/arm64-v8a/libswappywrapper.so	ebca7a4f52b793c
-44	3815	8128801233789528	GameActivity/CMakeFiles/game.dir/UGAConfiguration.cpp.o	fa625d879b44ce50
-491	3834	8128801233779414	GameActivity/CMakeFiles/game.dir/UGAInputMotionEvent.cpp.o	be87f5190b1b12cf
-192	3838	8128801233869152	GameActivity/CMakeFiles/game.dir/UGAEntry.cpp.o	e810f06c3584c94c
-289	3841	8128801233941338	GameActivity/CMakeFiles/game.dir/UGAInputKeyEvent.cpp.o	51946cbd720f4a12
-91	3864	8128801234339870	GameActivity/CMakeFiles/game.dir/UGADebug.cpp.o	5df79e4921810e87
-143	4003	8128801235715275	GameActivity/CMakeFiles/game.dir/UGAInput.cpp.o	f6c39d7757a70d7f
-2	4060	8128801236251601	GameActivity/CMakeFiles/game.dir/UGAApplication.cpp.o	7b41e53035dc9981
-384	4103	8128801236728786	GameActivity/CMakeFiles/game.dir/UGASoftKeyboard.cpp.o	9f3c966bb57b5645
-4103	4496	8128801240622976	C:/Users/Kiwan/Desktop/20/3-1/XRProject/WAR-OF-WIZARDS/UnityClient/Library/Bee/Android/Prj/IL2CPP/Gradle/unityLibrary/build/intermediates/cxx/Debug/452g15p4/obj/arm64-v8a/libgame.so	dc6cfdf1cc29015c
+316	973	8142605580083480	FramePacing/CMakeFiles/swappywrapper.dir/UnitySwappyWrapper.cpp.o	badc559ae111564a
+979	1750	8142605587560246	C:/Users/Kiwan/Desktop/20/3-1/XRProject/WAR-OF-WIZARDS/UnityClient/Library/Bee/Android/Prj/IL2CPP/Gradle/unityLibrary/build/intermediates/cxx/Debug/452g15p4/obj/arm64-v8a/libswappywrapper.so	ebca7a4f52b793c
+108	3882	8142605609102664	GameActivity/CMakeFiles/game.dir/UGAEntry.cpp.o	e810f06c3584c94c
+220	3903	8142605609143139	GameActivity/CMakeFiles/game.dir/UGAInputKeyEvent.cpp.o	51946cbd720f4a12
+36	3907	8142605609320518	GameActivity/CMakeFiles/game.dir/UGAConfiguration.cpp.o	fa625d879b44ce50
+178	3941	8142605609707655	GameActivity/CMakeFiles/game.dir/UGAInputMotionEvent.cpp.o	be87f5190b1b12cf
+2	3961	8142605609936653	GameActivity/CMakeFiles/game.dir/UGADebug.cpp.o	5df79e4921810e87
+139	4148	8142605611804724	GameActivity/CMakeFiles/game.dir/UGAInput.cpp.o	f6c39d7757a70d7f
+69	4224	8142605612558363	GameActivity/CMakeFiles/game.dir/UGAApplication.cpp.o	7b41e53035dc9981
+267	4407	8142605614418727	GameActivity/CMakeFiles/game.dir/UGASoftKeyboard.cpp.o	9f3c966bb57b5645
+4407	4870	8142605618986417	C:/Users/Kiwan/Desktop/20/3-1/XRProject/WAR-OF-WIZARDS/UnityClient/Library/Bee/Android/Prj/IL2CPP/Gradle/unityLibrary/build/intermediates/cxx/Debug/452g15p4/obj/arm64-v8a/libgame.so	dc6cfdf1cc29015c

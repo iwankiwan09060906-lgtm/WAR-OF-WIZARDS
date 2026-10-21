@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#0f161f" />
+  <title>서버 오류 · War of Wizards</title>
+  <link rel="icon" href="/assets/skills/circle/H02.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Noto+Sans+KR:wght@400;500;700;900&display=swap" />
+  <link rel="stylesheet" href="/client/wow.css" />
+  <style>
+    /* 서버가 반쯤 죽어 wow.css 를 못 받아도 읽을 수 있게 최소한만 */
+    body { background: #0b1017; color: #e3eaf1; font-family: "Noto Sans KR", "Malgun Gothic", sans-serif; overflow: auto; }
+    .sigil { position: relative; width: min(260px, 60vw); aspect-ratio: 1; margin: 0 auto; display: grid; place-items: center; }
+    .sigil img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; opacity: 0.4; filter: grayscale(1); mix-blend-mode: screen; border-radius: 50%; }
+    .sigil .error-code { position: relative; }
+    .checks { max-width: 460px; margin: 20px auto 0; text-align: left; display: grid; gap: 8px; }
+    .checks li { display: flex; gap: 10px; padding: 10px 14px; background: #141e2a; box-shadow: inset 0 0 0 1px #273649; font-size: 0.92rem; color: #a9b7c6; }
+    .checks b { color: #e3eaf1; }
+    .checks code { font-family: "Chakra Petch", monospace; color: #3cc8ff; white-space: nowrap; }
+    #state[data-up="1"] { color: #d6f5b8; }
+  </style>
+</head>
+<body>
+  <div class="backdrop" aria-hidden="true"></div>
+  <main id="app"><div class="error-page"><div>
+    <div class="sigil">
+      <img src="/assets/skills/circle/S06.png" alt="" />
+      <div class="error-code">5<span>0</span>0</div>
+    </div>
+    <h1 style="font-size:1.5rem;font-weight:900;margin-top:16px">게임 서버와 연결이 끊어졌습니다</h1>
+    <p class="muted" style="margin-top:6px">매칭 · 전적 · 룬 인식은 서버가 있어야 동작합니다. 서버가 돌아오면 자동으로 다시 연결합니다.</p>
+    <ol class="checks">
+      <li><b>1</b><span>서버 창이 켜져 있는지 확인하세요. <code>Backend</code> 폴더에서 <code>python wow_server.py</code></span></li>
+      <li><b>2</b><span>주소의 포트가 서버 창에 찍힌 포트(기본 <code>8080</code>)와 같은지 확인하세요.</span></li>
+      <li><b>3</b><span>서버 창에 빨간 오류가 있으면 그 내용을 팀 채팅에 올려 주세요.</span></li>
+    </ol>
+    <p class="hint" style="margin-top:16px" id="state" aria-live="polite">서버 확인 대기 중…</p>
+    <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:14px">
+      <button class="btn play lg" id="retry" type="button">다시 연결</button>
+      <a class="btn ghost lg" href="/">처음 화면</a>
+    </div>
+  </div></div></main>
+  <script>
+    (function () {
+      var el = document.getElementById("state");
+      var timer = 0, left = 5;
+      function check() {
+        clearInterval(timer);
+        el.textContent = "서버 확인 중…";
+        fetch("/api/health", { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : Promise.reject(); })
+          .then(function (j) {
+            if (j && j.status === "UP") { el.dataset.up = "1"; el.textContent = "서버가 돌아왔습니다. 게임으로 돌아갑니다…"; setTimeout(function () { location.replace("/"); }, 600); }
+            else wait();
+          }).catch(wait);
+      }
+      function wait() {
+        left = 5;
+        el.textContent = "아직 응답이 없습니다. " + left + "초 뒤 다시 확인합니다.";
+        timer = setInterval(function () {
+          left -= 1;
+          if (left <= 0) return check();
+          el.textContent = "아직 응답이 없습니다. " + left + "초 뒤 다시 확인합니다.";
+        }, 1000);
+      }
+      document.getElementById("retry").addEventListener("click", check);
+      check();
+    })();
+  </script>
+</body>
+</html>

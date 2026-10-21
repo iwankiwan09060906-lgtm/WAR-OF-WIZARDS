@@ -61,6 +61,17 @@ namespace SpellboundVR.Combat
 
         public float GetAttackMultiplier(Team team) => TeamAttackMultiplier.Compute(team, Defense, _scaling.Stage, Rules);
 
+        public float GetIncomingDamageMultiplier(int targetId)
+        {
+            if (TeamUtil.IsStructureId(targetId))
+            {
+                var s = GetStructureById(targetId);
+                return s != null && !s.IsNexus && s.IsBuffed(_matchTime) ? s.BuffDefense : 1f;
+            }
+            var u = FindUnit(targetId);
+            return u != null && u.IsRaged(_matchTime) ? u.RageDefense : 1f;
+        }
+
         public float ApplyHpChange(int targetId, float delta, Team sourceTeam)
         {
             if (TeamUtil.IsPlayerId(targetId))
@@ -145,7 +156,7 @@ namespace SpellboundVR.Combat
             for (int i = 0; i < Units.Length; i++)
             {
                 var u = Units[i];
-                if (!u.Active || u.Dead || u.Team != enemy) continue;
+                if (!u.Active || u.Dead || u.Team != enemy || u.IsStructure) continue;
                 if (Mathf.Abs(u.Position.x - laneU) > half) continue;
                 // 거리순 삽입 정렬 (시전자 발판에서 가까운 순)
                 float key = Mathf.Abs(u.Position.y - baseV);
@@ -171,9 +182,38 @@ namespace SpellboundVR.Combat
             for (int i = 0; i < Units.Length; i++)
             {
                 var u = Units[i];
-                if (!u.Active || u.Dead || u.Team != enemy) continue;
+                if (!u.Active || u.Dead || u.Team != enemy || u.IsStructure) continue;
                 float r = radius + u.Def.BodyRadius;
                 if ((u.Position - center).sqrMagnitude <= r * r) results.Add(u.Id);
+            }
+            return results.Count;
+        }
+
+        public int CollectEnemyUnitsInRect(Team casterTeam, float uMin, float uMax, float vMin, float vMax, List<int> results)
+        {
+            results.Clear();
+            Team enemy = TeamUtil.Opponent(casterTeam);
+            for (int i = 0; i < Units.Length; i++)
+            {
+                var u = Units[i];
+                if (!u.Active || u.Dead || u.Team != enemy || u.IsStructure) continue;
+                float r = u.Def.BodyRadius;
+                if (u.Position.x < uMin - r || u.Position.x > uMax + r) continue;
+                if (u.Position.y < vMin - r || u.Position.y > vMax + r) continue;
+                results.Add(u.Id);
+            }
+            return results.Count;
+        }
+
+        public int CollectTeamUnits(Team team, bool includeStructures, List<int> results)
+        {
+            results.Clear();
+            for (int i = 0; i < Units.Length; i++)
+            {
+                var u = Units[i];
+                if (!u.Active || u.Dead || u.Team != team) continue;
+                if (!includeStructures && u.IsStructure) continue;
+                results.Add(u.Id);
             }
             return results.Count;
         }
@@ -211,13 +251,103 @@ namespace SpellboundVR.Combat
 
         public float Heal(int targetId, float amount, int sourceSpellId)
         {
-            if (!TryGetTargetInfo(targetId, out Team team, out _, out _)) return 0f;
-            return Resolver.ResolveHeal(targetId, amount, team);
+            if (!TryGetTargetInfo(targetId, out Team team, out _, out Vector2 pos)) return 0f;
+            float healed = Resolver.ResolveHeal(targetId, amount, team);
+            // 큰 회복(H03 흡혈 등)만 +HP 표시 — 쉴드 재생 같은 틱 회복은 표시하지 않는다
+            if (healed >= 5f) ReportHit(targetId, pos, healed, HitResultKind.Heal, new DamageContext { SpellId = sourceSpellId, IsPlayerSkill = true });
+            return healed;
         }
 
         public void PublishFx(int spellId, VfxPart part, Vector2 arenaPosition, float height, int worldColumn)
         {
             _sink.OnSpellFx(spellId, part, new Vector3(arenaPosition.x, height, arenaPosition.y), worldColumn);
+        }
+
+        // ── ISpellWorld: 상태 제어 ───────────────────────────────
+
+        float ISpellWorld.CastFocus => _castFocus;
+
+        public void FreezeUnit(int unitId, float duration)
+        {
+            var u = FindUnit(unitId);
+            if (u != null) u.FrozenUntil = Mathf.Max(u.FrozenUntil, _matchTime + duration);
+        }
+
+        public void FreezeTower(Team team, float duration)
+        {
+            var tower = Defense.Tower(team);
+            if (tower.Alive) tower.FrozenUntil = Mathf.Max(tower.FrozenUntil, _matchTime + duration);
+        }
+
+        public void StunUnit(int unitId, float duration)
+        {
+            var u = FindUnit(unitId);
+            if (u != null) u.StunnedUntil = Mathf.Max(u.StunnedUntil, _matchTime + duration);
+        }
+
+        public void RageUnit(int unitId, float duration, float attack, float attackSpeed, float move, float incomingDamage)
+        {
+            var u = FindUnit(unitId);
+            if (u == null) return;
+            u.RageUntil = Mathf.Max(u.RageUntil, _matchTime + duration);
+            u.RageAttack = attack;
+            u.RageAttackSpeed = Mathf.Max(0.1f, attackSpeed);
+            u.RageMove = move;
+            u.RageDefense = incomingDamage;
+        }
+
+        public bool IsTowerAlive(Team team) => Defense.TowerAlive(team);
+
+        public void BuffTower(Team team, float duration, float attack, float incomingDamage)
+        {
+            var tower = Defense.Tower(team);
+            if (!tower.Alive) return;
+            tower.BuffUntil = Mathf.Max(tower.BuffUntil, _matchTime + duration);
+            tower.BuffAttack = attack;
+            tower.BuffDefense = incomingDamage;
+        }
+
+        public void BlindPlayer(Team team, float duration)
+        {
+            var p = Players[(int)team];
+            p.BlindUntil = Mathf.Max(p.BlindUntil, _matchTime + duration);
+        }
+
+        public void SetPendingFocus(Team team, float multiplier)
+        {
+            Players[(int)team].PendingFocus = Mathf.Max(1f, multiplier);
+        }
+
+        bool ISpellWorld.SpawnUnit(Team team, MinionKind kind, int lane, Vector2 position, float hpMultiplier, out int unitId)
+        {
+            unitId = 0;
+            if (!AliveUnitLimiter.CanSpawn(this, team)) return false;
+            return SpawnUnit(team, GetMinionDefinition(kind), lane, position, hpMultiplier, out unitId);
+        }
+
+        public int FindTeamUnit(Team team, MinionKind kind)
+        {
+            for (int i = 0; i < Units.Length; i++)
+            {
+                var u = Units[i];
+                if (u.Active && !u.Dead && u.Team == team && u.Kind == kind) return u.Id;
+            }
+            return 0;
+        }
+
+        public void RemoveUnit(int unitId)
+        {
+            var u = FindUnit(unitId);
+            if (u == null) return;
+            u.Dead = true;
+            _status.ClearTarget(u.Id);
+            u.Deactivate();
+        }
+
+        public Vector2 GetPlacementPosition(Team team, int worldColumn)
+        {
+            float depth = (Defense.TowerAlive(team) ? Arena.TowerDepth : Arena.NexusDepth) + Rules.PlacementOffset;
+            return new Vector2(Arena.ColumnU(worldColumn), Arena.BaseV(team) + Arena.ForwardSign(team) * depth);
         }
     }
 }

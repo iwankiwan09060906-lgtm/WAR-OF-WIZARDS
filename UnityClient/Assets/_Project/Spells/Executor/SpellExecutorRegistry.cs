@@ -1,6 +1,6 @@
 // SpellDefinition → Executor 인스턴스 매핑 (Rule 11: 데이터 + Behavior 조합)
-// 현재 구현된 Executor: Projectile / Area / Buff. 나머지 타입(Beam · Summon · Structure · Global)은
-// 등록되지 않으며, 서버가 NotImplemented로 거절한다 (쿨타임 미소모).
+// Executor 7종 전부 구현 (Projectile / Area / Beam / Summon / Structure / Buff / Global).
+// 매핑이 없는 정의는 등록되지 않으며, 서버가 NotImplemented로 거절한다 (쿨타임 미소모).
 
 using System.Collections.Generic;
 using SpellboundVR.Contracts;
@@ -40,7 +40,11 @@ namespace SpellboundVR.Spells.Executor
             {
                 case SpellExecutorType.Projectile: return new ProjectileExecutor(def, world);
                 case SpellExecutorType.Area: return new AreaExecutor(def, world);
+                case SpellExecutorType.Beam: return new BeamExecutor(def, world);
+                case SpellExecutorType.Summon: return new SummonExecutor(def, world);
+                case SpellExecutorType.Structure: return new StructureExecutor(def, world);
                 case SpellExecutorType.Buff: return new BuffExecutor(def, world);
+                case SpellExecutorType.Global: return new GlobalExecutor(def, world);
                 default: return null;
             }
         }

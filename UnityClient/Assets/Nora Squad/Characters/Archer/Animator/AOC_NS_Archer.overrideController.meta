@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: e7cce5c420d3d48118a87c771bdda67d
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 22100000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 413902
+  packageName: "Nora Squad \u2013 Starter"
+  packageVersion: 1.0
+  assetPath: Assets/Nora Squad/Characters/Archer/Animator/AOC_NS_Archer.overrideController
+  uploadId: 1010958

@@ -25,6 +25,12 @@ namespace SpellboundVR.Combat
         /// <summary>누적 발사 횟수 (표시용 — 클라이언트 총알)</summary>
         public int ShotCount;
 
+        // 스킬 효과 (S09 타워 버프 · H01 프리즈)
+        public float BuffUntil = -1f;
+        public float BuffAttack = 1f;
+        public float BuffDefense = 1f;
+        public float FrozenUntil = -1f;
+
         public StructureState(Team team, bool isNexus)
         {
             Team = team;
@@ -45,6 +51,14 @@ namespace SpellboundVR.Combat
             LastTargetId = 0;
             ComboCount = 0;
             ShotCount = 0;
+            BuffUntil = -1f;
+            BuffAttack = 1f;
+            BuffDefense = 1f;
+            FrozenUntil = -1f;
         }
+
+        public bool IsBuffed(float now) => BuffUntil > now;
+
+        public bool IsFrozen(float now) => FrozenUntil > now;
     }
 }

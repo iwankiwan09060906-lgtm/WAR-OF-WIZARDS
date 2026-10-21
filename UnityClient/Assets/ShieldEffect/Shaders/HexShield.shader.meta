@@ -1,0 +1,16 @@
+fileFormatVersion: 2
+guid: f9cee44487ea1494a82e85002e470a5b
+ShaderImporter:
+  externalObjects: {}
+  defaultTextures: []
+  nonModifiableTextures: []
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 387564
+  packageName: FREE Shield Effect - Procedural Hexagonal Shield (URP)
+  packageVersion: 1.0
+  assetPath: Assets/ShieldEffect/Shaders/HexShield.shader
+  uploadId: 1003628

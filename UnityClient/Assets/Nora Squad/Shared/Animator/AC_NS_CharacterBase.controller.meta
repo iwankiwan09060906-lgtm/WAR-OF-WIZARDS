@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: 4a87e68c5dbee4e31a42e804a0baa9df
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 9100000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 413902
+  packageName: "Nora Squad \u2013 Starter"
+  packageVersion: 1.0
+  assetPath: Assets/Nora Squad/Shared/Animator/AC_NS_CharacterBase.controller
+  uploadId: 1010958

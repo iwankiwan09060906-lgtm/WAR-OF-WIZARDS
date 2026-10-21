@@ -1,0 +1,18 @@
+fileFormatVersion: 2
+guid: 3866ee9c0286c4cbe81756b851fa85be
+MonoImporter:
+  externalObjects: {}
+  serializedVersion: 2
+  defaultReferences: []
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 413902
+  packageName: "Nora Squad \u2013 Starter"
+  packageVersion: 1.0
+  assetPath: Assets/Nora Squad/Shared/Runtime/NoraCharacter.cs
+  uploadId: 1010958

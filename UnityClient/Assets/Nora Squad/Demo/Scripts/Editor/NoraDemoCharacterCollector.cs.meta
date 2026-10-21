@@ -1,0 +1,18 @@
+fileFormatVersion: 2
+guid: f0ab74bf730994e7ca72a0f2ca212b8b
+MonoImporter:
+  externalObjects: {}
+  serializedVersion: 2
+  defaultReferences: []
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 413902
+  packageName: "Nora Squad \u2013 Starter"
+  packageVersion: 1.0
+  assetPath: Assets/Nora Squad/Demo/Scripts/Editor/NoraDemoCharacterCollector.cs
+  uploadId: 1010958

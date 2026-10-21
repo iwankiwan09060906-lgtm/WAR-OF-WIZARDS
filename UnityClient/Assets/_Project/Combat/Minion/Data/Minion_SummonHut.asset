@@ -1,0 +1,32 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c3ae6883eedc1de408433e55ae77bc30, type: 3}
+  m_Name: Minion_SummonHut
+  m_EditorClassIdentifier: Assembly-CSharp::SpellboundVR.Combat.MinionDefinition
+  Kind: 7
+  MaxHp: 800
+  Damage: 0
+  AttackInterval: 0
+  AttackRange: 0
+  MoveSpeed: 0
+  DetectRange: 0
+  BodyRadius: 1
+  StructureDamageMultiplier: 1
+  PrefersStructures: 0
+  TowerTargetPriority: 1
+  IsStructure: 1
+  IsSummon: 0
+  SplashRadius: 0
+  FlightHeight: 0
+  Lifetime: 25
+  SpawnInterval: 3
+  SpawnKind: 5

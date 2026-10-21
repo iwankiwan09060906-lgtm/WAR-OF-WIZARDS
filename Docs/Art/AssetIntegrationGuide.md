@@ -64,26 +64,50 @@
 | --- | --- |
 | 폴더 | `UnityClient/Assets/Prefabs/VFX/{SkillId}/` 권장 (예: `Prefabs/VFX/S03/`) — 사실 프로젝트 어디든 이름만 맞으면 됨 |
 | 파일명 | **`VFX_{SkillId}_{Name}_{Part}.prefab`** — `{Name}`은 스킬 에셋의 `VfxName` 값 |
-| 일회성 | 루트 파티클 **Stop Action = Disable** (끝나면 스스로 꺼져 풀로 돌아감). 안 해도 4초 뒤 강제 회수 |
-| 반복형(Loop) | Looping 파티클. 상태 효과가 끝나면 코드가 끈다 |
-| 크기 | 범위형(Impact · Field)은 **반경 1m 기준**으로 제작 → 코드가 스킬 반경만큼 확대 |
+| 수명 | 일회성 = 4초, Field · Loop = 스킬 지속 시간, Telegraph = 예고 시간. 끝나면 코드가 방출만 멈추고 남은 입자가 사라진 뒤 풀로 회수 |
+| 크기 | **실제 크기(1 = 1m)로 제작** — 코드가 크기를 바꾸지 않는다 (예외: H02 빔은 길이 1m(+Z) → 전장 길이로 늘림) |
+| 방향 | Field · Telegraph · Impact는 레인 방향 = +Z, Projectile은 진행 방향 = +Z |
+| 셰이더 | 프로젝트는 **Built-in RP**. URP · HDRP 셰이더는 분홍색이 된다 (아래 2.1 빌더가 자동 변환) |
 | 예산 | 프리팹 1개 동시 파티클 ~100 이하 |
 | 금지 | C# 스크립트, 외부 텍스처 참조 누락 |
 
-### 2.1 현재 구현된 3종에 필요한 프리팹
+### 2.1 스킬 에셋 빌더 — 19종 VFX · 소환수 · 설치물 자동 생성
 
-| 파일명 | 언제 · 어디에 생성 | 피벗 · 방향 | 수명 |
-| --- | --- | --- | --- |
-| `VFX_S03_Fireball_Cast` | 시전 순간, **시전자 발판 위 1.5m** | 중심 | 일회성 ~0.5s |
-| `VFX_S03_Fireball_Projectile` | 시전 순간, **착탄 지점(바닥)** 에 생성 | 바닥 중심 — **프리팹 안에서 위(약 7m)에서 떨어지는 연출을 스스로 재생** (~0.25s) | 일회성 |
-| `VFX_S03_Fireball_Impact` | 시전 순간, 착탄 지점 | 바닥 중심, 반경 1m 제작 (코드가 ×2.6) | 일회성 ~0.5s |
-| `VFX_S07_Gatling_Cast` | 연사 시작, 시전자 앞 1.5m | 중심 | 일회성 |
-| `VFX_S07_Gatling_Projectile` | **날아가는 탄환 1발** (8발 각각) — 서버 위치를 따라 매 프레임 이동 | 중심, **+Z = 진행 방향** | 코드가 끔 (짧은 트레일 권장) |
-| `VFX_S07_Gatling_Impact` | 탄환 1발이 맞을 때마다 (유닛 0.6m / 플레이어 1.2m 높이) | 중심 | 일회성 ~0.3s |
-| `VFX_S08_Shield_Cast` | 시전 순간, 시전자 1.2m | 중심 | 일회성 |
-| `VFX_S08_Shield_Loop` | 쉴드가 켜져 있는 동안 시전자 위치 | 중심, 반경 ~1m 버블 | **Loop** — 쉴드가 깨지거나 8초 뒤 코드가 끔 |
+메뉴 **`Spellbound > Skills > Build All Skill Assets (VFX + models + spell data)`** 한 번이면 아래를 전부 만들고 VFX 카탈로그까지 갱신한다 (약 1분, 다시 실행하면 덮어씀 — 에셋 팩 원본은 수정하지 않음).
 
-> 나머지 16종도 같은 규칙이다. `{Name}`은 각 `Spell_Sxx_*.asset`의 `VfxName`에서 확인한다.
+| 생성물 | 위치 | 원본 에셋 |
+| --- | --- | --- |
+| 스킬 정의 19종 + SpellCatalog | `_Project/Spells/Definition/Data/Spell_*.asset` | 코드 기본값 (`SpellDefinition.CreateDefault`) — **수치를 에셋에서 고쳤다면 이 메뉴가 덮어쓴다** (따로: `Rebuild Spell Definitions (19)`) |
+| 소환수 · 설치물 정의 | `_Project/Combat/Minion/Data/Minion_AxeOrc · Dragon · Skeleton · Turret · SummonHut.asset` | 없을 때만 생성 (튜닝 보존) |
+| 스킬 VFX 56개 | `Prefabs/VFX/Skills/VFX_*.prefab` | 52SpecialEffectPack · Hun0FX · Eric VFX Studio · ShieldEffect · ZNS3D |
+| 유닛 연출 | `Prefabs/VFX/Skills/VFX_Unit_*` (등장 · 사라짐 · 오크 베기 · 드래곤 화염 · 터렛 화살) | 52 · Eric · Hun0FX · ZNS3D |
+| 모델 5종 + Animator | `Prefabs/Summon/MDL_Summon_AxeOrc · Dragon · Skeleton`, `MDL_Structure_Turret · SummonHut`, `Art/Models/Summon/AC_*.controller` | 3D Stylized Orc · FourEvilDragons(Usurper Red) · Mini Simple Skeleton · StoneKeep Tower_c + Nora Squad Archer · ZNS3D 벽/지붕 |
+| Built-in 변환 재질 | `Art/Materials/Skills/Converted/` · `Art/Materials/Skills/Mat_*` | URP 셰이더 → `Spellbound/FxAdditiveFlow · FxAlphaFlow · HexShield`(`Art/Shaders/Skills`), HDRP · Nora → Standard |
+
+- 크기 확인: `Spellbound > Skills > Render VFX Previews` — `UnityClient/Temp/vfx_preview_request.txt`의 각 줄(`프리팹경로|출력.png|시간들|카메라거리|카메라높이|바라볼높이`)을 1m 격자 · 1.8m 사람 막대와 함께 PNG로 렌더한다.
+- 에셋 팩을 손볼 때 주의: 52SpecialEffectPack 이펙트는 원본 반경이 8~20m라 빌더가 0.1~0.2배로 줄인다. `MagicCircleRelease`는 서 있는 마법진이라 바닥 표시에는 `SummonMagicCircle2`를 쓴다.
+- 함께 고친 에셋 팩 스크립트: `52SpecialEffectPack/Animation&Script/csShowAllEffect.cs`(Unity 6에서 삭제된 GUIText → 컴파일 실패), `Mini Simple Characters Skeleton Demo/Readme/.../ReadmeEditor.cs`(창 배치 강제 로드 예외 → Error Pause로 플레이 정지).
+
+### 2.2 스킬별 프리팹 (VfxName · Part)
+
+| 스킬 | 프리팹 (VFX_{Code}_{VfxName}_…) |
+| --- | --- |
+| S01 Smoke | Cast · Projectile(연막탄) · Impact(검은 연기 폭발) · Loop(연막 맞은 상대 머리) |
+| S02 PoisonField | Cast · Impact(3열 독 폭발) · Field(3열 × 깊이 5m 띠) |
+| S03 Fireball | Cast · Projectile(Hun0FX 불덩이) · Telegraph(착탄 마법진) · Impact(폭발 + 바닥 불) |
+| S04 ArrowRain | Cast · Projectile(ZNS3D 화살) · Telegraph · Impact(흙먼지) |
+| S05 Tornado | Cast · Field(회오리 기둥 1개 — 서버가 레인에 3개 발행) |
+| S06 Lightning | Cast · Telegraph(먹구름) · Impact(낙뢰) |
+| S07 Gatling | Cast(손 화염 2초) · Projectile · Impact |
+| S08 Shield | Cast · Loop(구형 쉴드, 반경 1m) |
+| S09 TowerBuff | Cast · Loop(상자 방어막, 1m 상자 — 코드가 타워 크기로 맞춤) |
+| S10 Focus | Cast · Loop(발밑 마법진) |
+| S11 AxeWarrior · S12 Mage · S13 Turret · H06 SummonTower | Cast(소환 마법진) |
+| H01 Freeze | Cast · Field(얼음 장판 1칸 — 서버가 3열 × 5줄 발행) · Loop(타워 빙결) |
+| H02 Laser | Cast · Telegraph(예고선) · Field(빔) · Impact |
+| H03 Drain | Telegraph(시전) · Impact(상대) · Projectile(생명의 불) · Loop(회복) |
+| H04 ReflectBarrier | Cast · Loop(육각 결계, 반경 1m · 높이 2m) · Projectile(반사 탄) · Impact |
+| H05 Rage | Cast · Field(붉은 장판 — 서버가 3곳 발행) |
 
 ---
 

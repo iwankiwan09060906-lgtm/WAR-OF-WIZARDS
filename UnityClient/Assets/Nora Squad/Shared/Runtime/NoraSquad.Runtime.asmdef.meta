@@ -1,0 +1,14 @@
+fileFormatVersion: 2
+guid: 3902f25b0c9cf435987459fb1636b42e
+AssemblyDefinitionImporter:
+  externalObjects: {}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 413902
+  packageName: "Nora Squad \u2013 Starter"
+  packageVersion: 1.0
+  assetPath: Assets/Nora Squad/Shared/Runtime/NoraSquad.Runtime.asmdef
+  uploadId: 1010958

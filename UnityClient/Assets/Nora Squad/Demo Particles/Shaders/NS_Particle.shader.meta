@@ -1,0 +1,16 @@
+fileFormatVersion: 2
+guid: 6a0979ce4f89c47bda2f895bbbcceecd
+ShaderImporter:
+  externalObjects: {}
+  defaultTextures: []
+  nonModifiableTextures: []
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 413902
+  packageName: "Nora Squad \u2013 Starter"
+  packageVersion: 1.0
+  assetPath: Assets/Nora Squad/Demo Particles/Shaders/NS_Particle.shader
+  uploadId: 1010958

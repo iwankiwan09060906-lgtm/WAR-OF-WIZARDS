@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: 650fb87034cd8784783d04f04a6d2b54
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 9100000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 246181
+  packageName: 3D Stylized Orc - animations+PBR(13.6k faces)
+  packageVersion: 1.0
+  assetPath: Assets/3D Stylized Orc - animations+PBR(13.6k faces)/orc/Run.controller
+  uploadId: 568516

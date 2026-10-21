@@ -6,7 +6,7 @@
 //   FusionClient    : Quest(또는 에디터)가 PC 서버 세션에 접속.
 //   Auto            : 명령줄 -server / -client 또는 UNITY_SERVER 빌드면 해당 모드, 아니면 LocalVsBot.
 //
-// 데이터 에셋이 비어 있으면 런타임 기본값(S03 / S07 / S08, 기본 수치)으로 동작한다.
+// 데이터 에셋이 비어 있으면 런타임 기본값(스킬 19종, 기본 수치)으로 동작한다.
 // 메뉴 Spellbound > 1. Setup Battle Scene 이 에셋 · 프리팹 · 씬 참조를 자동으로 채운다.
 
 using Fusion;
@@ -61,6 +61,8 @@ namespace SpellboundVR.Core
         public MinionDefinition meleeDefinition;
         public MinionDefinition rangedDefinition;
         public MinionDefinition bruteDefinition;
+        [Tooltip("소환수 · 설치물 정의 (Minion_AxeOrc · Dragon · Skeleton · Turret · SummonHut). 비우면 코드 기본값")]
+        public MinionDefinition[] unitDefinitions = new MinionDefinition[0];
         public VFXCatalog vfxCatalog;
 
         [Header("씬 참조 (비우면 자동 탐색)")]
@@ -86,11 +88,12 @@ namespace SpellboundVR.Core
         public bool showDebugPanels = true;
 
         [Header("룬 인식 테스트")]
-        [Tooltip("true: 덱(스킬창)에 없는 룬 19종도 인식해 손 옆 아이콘 · 조준까지 진행 (시전 요청은 보내지 않고 [RuneTest] 로그만). 덱 안의 룬은 원래대로 시전")]
+        [Tooltip("true: 덱(스킬창)에 없는 룬 19종도 인식해 시전 (로컬 봇전에서만 실제 발동 — 쿨타임 · 횟수 없음). 덱 안의 룬은 원래대로 시전")]
         public bool recognizeAllRunes = true;
 
         [Header("내 덱 (SpellId, 0 = 빈 슬롯) — 마법서(C09) 연동 전 임시")]
-        public int[] localDeck = { SpellIds.S03_Fireball, SpellIds.S07_Gatling, SpellIds.S08_Shield, 0, 0, 0, 0, 0 };
+        public int[] localDeck = { SpellIds.S03_Fireball, SpellIds.S07_Gatling, SpellIds.S08_Shield, SpellIds.S01_Smoke,
+                                   SpellIds.S11_AxeWarrior, SpellIds.S13_Turret, SpellIds.H01_Freeze, SpellIds.H04_ReflectBarrier };
 
         private BootMode _resolvedMode;
         private ClientSession _session;
@@ -206,6 +209,9 @@ namespace SpellboundVR.Core
             uint seed = (uint)System.Environment.TickCount;
             var sim = new MatchSimulation(effectiveRules, spellCatalog, arenaLayout.Geometry, botConfig,
                                           meleeDefinition, rangedDefinition, bruteDefinition, seed);
+            if (unitDefinitions != null)
+                for (int i = 0; i < unitDefinitions.Length; i++) sim.SetUnitDefinition(unitDefinitions[i]);
+            sim.AllowTestCasts = localMode && recognizeAllRunes; // 덱 밖 룬 테스트 시전 (PC 서버는 항상 거절)
             return sim;
         }
 
@@ -236,7 +242,7 @@ namespace SpellboundVR.Core
             aim.markerView = marker;
             var cast = gameObject.AddComponent<CastStateMachine>();
             cast.aimPointer = aim;
-            cast.recognizeAllRunes = recognizeAllRunes;
+            cast.recognizeAllRunes = recognizeAllRunes && !networked; // PC 서버는 덱 밖 테스트 시전을 항상 거절하므로 네트워크 모드에선 덱 룬만 인식
             cast.Initialize(_session, input, _deckManager);
 
             // 표시
@@ -247,6 +253,7 @@ namespace SpellboundVR.Core
             presentation.AddComponent<VFXPlayer>().Initialize(_session, vfxCatalog);
             presentation.AddComponent<ArenaStateView>().Initialize(_session, vfxCatalog, head);
             presentation.AddComponent<DamageTextView>().Initialize(_session, head);
+            presentation.AddComponent<BlindOverlayView>().Initialize(_session, head);
             var hud = gameObject.AddComponent<BattleHudView>();
             if (input is KeyboardInput)
             {

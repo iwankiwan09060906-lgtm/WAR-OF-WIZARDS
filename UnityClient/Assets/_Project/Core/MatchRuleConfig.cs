@@ -75,7 +75,7 @@ namespace SpellboundVR.Core
 
         [Header("타워 (§18)")]
         public float TowerMaxHp = 1500f;
-        [Tooltip("1회 피해. 기본값 88 = Spell_S07_Gatling 총 피해(1.25배 상향 전 22 × 8발)의 절반을 초당 1회")]
+        [Tooltip("1회 피해 (초당 1회). 기본 88 — 터렛(S13)은 55")]
         public float TowerDamage = 88f;
         public float TowerAttacksPerSecond = 1f;
         public float TowerRange = 7f;
@@ -86,6 +86,10 @@ namespace SpellboundVR.Core
 
         [Header("넥서스 (§19)")]
         public float NexusMaxHp = 2000f;
+
+        [Header("설치 구역 (§14.4 S13 · H06)")]
+        [Tooltip("설치물 위치: 타워(없으면 넥서스) 앞 이 거리 (m)")]
+        public float PlacementOffset = 3f;
 
         [Header("돌파 (§11.1)")]
         [Tooltip("돌파 지점: 상대 Commander 발판 앞 거리 (m)")]

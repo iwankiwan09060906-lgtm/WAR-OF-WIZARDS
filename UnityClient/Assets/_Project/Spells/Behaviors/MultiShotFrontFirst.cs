@@ -24,10 +24,12 @@ namespace SpellboundVR.Spells.Behaviors
         private int _shotsLeft;
         private float _timer;
         private bool _castFxSent;
+        private readonly float _focus;
 
         /// <param name="shotCountOverride">0 이하이면 definition.ShotCount 사용</param>
-        public MultiShotFrontFirst(SpellDefinition definition, Team casterTeam, int worldColumn, int shotCountOverride = 0)
+        public MultiShotFrontFirst(SpellDefinition definition, Team casterTeam, int worldColumn, int shotCountOverride = 0, float focus = 1f)
         {
+            _focus = Mathf.Max(1f, focus);
             _def = definition;
             _team = casterTeam;
             _worldColumn = worldColumn;
@@ -78,7 +80,7 @@ namespace SpellboundVR.Spells.Behaviors
                 break;
             }
 
-            if (targetUnit != 0) AddPending(targetUnit, _def.BaseDamage);
+            if (targetUnit != 0) AddPending(targetUnit, _def.BaseDamage * _focus);
 
             var launch = new ProjectileLaunch
             {
@@ -92,7 +94,7 @@ namespace SpellboundVR.Spells.Behaviors
                 TargetUnitId = targetUnit,
                 Dodgeable = _def.Dodgeable,
                 IsPlayerSkill = true,
-                FocusBonus = 1f,
+                FocusBonus = _focus,
             };
             world.LaunchProjectile(launch);
         }

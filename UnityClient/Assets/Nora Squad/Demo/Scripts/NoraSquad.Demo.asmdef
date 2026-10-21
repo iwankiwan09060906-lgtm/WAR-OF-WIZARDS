@@ -1,0 +1,14 @@
+{
+    "name": "NoraSquad.Demo",
+    "rootNamespace": "NoraSquad.Demo",
+    "references": ["NoraSquad.Runtime"],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

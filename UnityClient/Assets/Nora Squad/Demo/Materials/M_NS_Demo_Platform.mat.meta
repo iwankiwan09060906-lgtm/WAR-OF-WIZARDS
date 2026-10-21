@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: 81c5bed7dee254218a3624da4e34eb9b
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 2100000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 413902
+  packageName: "Nora Squad \u2013 Starter"
+  packageVersion: 1.0
+  assetPath: Assets/Nora Squad/Demo/Materials/M_NS_Demo_Platform.mat
+  uploadId: 1010958

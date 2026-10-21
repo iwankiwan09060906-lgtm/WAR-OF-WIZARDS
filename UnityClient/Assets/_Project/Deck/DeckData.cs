@@ -66,10 +66,11 @@ namespace SpellboundVR.Deck
             return "[" + string.Join(", ", parts) + "]";
         }
 
-        /// <summary>현재 구현된 3종 기본 덱 (S03 / S07 / S08)</summary>
+        /// <summary>기본 덱 8장 (공격 · 방어 · 소환 · 고위력 2장 고르게)</summary>
         public static DeckData CreateDefault()
         {
-            return new DeckData(Spells.SpellIds.S03_Fireball, Spells.SpellIds.S07_Gatling, Spells.SpellIds.S08_Shield);
+            return new DeckData(Spells.SpellIds.S03_Fireball, Spells.SpellIds.S07_Gatling, Spells.SpellIds.S08_Shield, Spells.SpellIds.S01_Smoke,
+                                Spells.SpellIds.S11_AxeWarrior, Spells.SpellIds.S13_Turret, Spells.SpellIds.H01_Freeze, Spells.SpellIds.H04_ReflectBarrier);
         }
     }
 }

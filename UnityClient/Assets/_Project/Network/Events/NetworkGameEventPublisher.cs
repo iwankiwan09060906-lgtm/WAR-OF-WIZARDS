@@ -142,6 +142,14 @@ namespace SpellboundVR.Network
                     float remaining = shieldOn ? Mathf.Max(0f, p.ShieldEndTime - s.Header.MatchTime) : 0f;
                     OnStatusEffectChanged?.Invoke(TeamUtil.PlayerId(team), "S08_Shield", shieldOn, remaining);
                 }
+
+                // S01 연막 · S10 집중 · H04 반사 결계 (켜짐/꺼짐만)
+                if (full || p.Flags != pp.Flags)
+                {
+                    PublishFlag(team, p.Flags, pp.Flags, PlayerFlags.Blind, "S01_Blind", full);
+                    PublishFlag(team, p.Flags, pp.Flags, PlayerFlags.Focus, "S10_Focus", full);
+                    PublishFlag(team, p.Flags, pp.Flags, PlayerFlags.Reflect, "H04_Reflect", full);
+                }
             }
 
             // AFK 경고 (내 것만)
@@ -209,6 +217,12 @@ namespace SpellboundVR.Network
 
             CopyToPrev(s);
             _hasPrev = true;
+        }
+
+        private void PublishFlag(Team team, byte flags, byte prevFlags, byte bit, string effectId, bool full)
+        {
+            bool on = (flags & bit) != 0;
+            if (full || on != ((prevFlags & bit) != 0)) OnStatusEffectChanged?.Invoke(TeamUtil.PlayerId(team), effectId, on, 0f);
         }
 
         private void CopyToPrev(MatchSnapshot s)

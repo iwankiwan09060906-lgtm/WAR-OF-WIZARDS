@@ -1,0 +1,14 @@
+fileFormatVersion: 2
+guid: d0bd7482581e6624a9144adbff7de729
+PrefabImporter:
+  externalObjects: {}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 387564
+  packageName: FREE Shield Effect - Procedural Hexagonal Shield (URP)
+  packageVersion: 1.0
+  assetPath: Assets/ShieldEffect/Prefabs/PF_Shield_Sphere.prefab
+  uploadId: 1003628

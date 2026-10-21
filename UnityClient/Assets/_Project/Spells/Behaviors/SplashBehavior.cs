@@ -1,6 +1,6 @@
-// S03 파이어볼 Behavior (§14.3) — 작은 범위 집중 피해
-//   · 범위 공격(즉발): 시전 확정 순간 즉시 적용, 회피 불가 (§11.2)
-//   · 반경 안 적 유닛 전부 + 반경 안에 서 있는 상대 플레이어 (구조물 제외, Rule 5)
+// 지점 범위 피해 (S03 파이어볼 폭발 · S04 화살 1발 · S06 낙뢰 1회)
+//   · 적용 순간의 서버 위치로 판정 (지점 비행 스킬은 착탄 순간 — 그 사이 열을 옮기면 피한다)
+//   · 반경 안 적 유닛 전부 + 반경 안에 서 있는 상대 플레이어 (구조물 · 설치물 제외, Rule 5)
 
 using System.Collections.Generic;
 using SpellboundVR.Contracts;
@@ -12,58 +12,50 @@ namespace SpellboundVR.Spells.Behaviors
     public static class SplashBehavior
     {
         /// <summary>플레이어 몸 반경 (m) — 범위 판정 시 더해준다</summary>
-        public const float PlayerBodyRadius = 0.5f;
+        public const float PlayerBodyRadius = SpellDamage.PlayerBodyRadius;
 
         private static readonly List<int> s_buffer = new List<int>(48);
 
-        public static void Apply(SpellDefinition def, ISpellWorld world, Team casterTeam, Vector2 center, int worldColumn)
+        public static void Apply(SpellDefinition def, ISpellWorld world, Team casterTeam, Vector2 center, int worldColumn,
+                                 float focus = 1f, bool publishImpact = true)
         {
-            Team enemy = casterTeam == Team.Home ? Team.Away : Team.Home;
+            Apply(def.SpellId, def.BaseDamage, def.Radius, world, casterTeam, center, worldColumn, focus, publishImpact);
+        }
 
-            world.PublishFx(def.SpellId, VfxPart.Impact, center, 0f, worldColumn);
+        public static void Apply(int spellId, float damage, float radius, ISpellWorld world, Team casterTeam, Vector2 center,
+                                 int worldColumn, float focus, bool publishImpact)
+        {
+            if (publishImpact) world.PublishFx(spellId, VfxPart.Impact, center, 0f, worldColumn);
 
-            world.CollectEnemyUnitsInRadius(casterTeam, center, def.Radius, s_buffer);
+            world.CollectEnemyUnitsInRadius(casterTeam, center, radius, s_buffer);
             for (int i = 0; i < s_buffer.Count; i++)
-            {
-                int id = s_buffer[i];
-                if (!world.TryGetUnitInfo(id, out _, out TargetKind kind, out _)) continue;
-                var ctx = new DamageContext
-                {
-                    SpellId = def.SpellId,
-                    AttackerTeam = casterTeam,
-                    AttackerKind = TargetKind.Player,
-                    AttackerId = world.GetPlayerId(casterTeam),
-                    TargetKind = kind,
-                    TargetId = id,
-                    BaseDamage = def.BaseDamage,
-                    IsPlayerSkill = true,
-                    FocusBonusMultiplier = 1f,
-                    IsDodgeable = false,
-                };
-                world.Damage.ResolveDamage(ctx);
-            }
+                SpellDamage.HitUnit(world, spellId, casterTeam, s_buffer[i], damage, focus);
 
-            if (world.IsPlayerAlive(enemy))
-            {
-                Vector2 enemyPos = world.GetPlayerPosition(enemy);
-                if ((enemyPos - center).sqrMagnitude <= (def.Radius + PlayerBodyRadius) * (def.Radius + PlayerBodyRadius))
-                {
-                    var ctx = new DamageContext
-                    {
-                        SpellId = def.SpellId,
-                        AttackerTeam = casterTeam,
-                        AttackerKind = TargetKind.Player,
-                        AttackerId = world.GetPlayerId(casterTeam),
-                        TargetKind = TargetKind.Player,
-                        TargetId = world.GetPlayerId(enemy),
-                        BaseDamage = def.BaseDamage,
-                        IsPlayerSkill = true,
-                        FocusBonusMultiplier = 1f,
-                        IsDodgeable = false,
-                    };
-                    world.Damage.ResolveDamage(ctx);
-                }
-            }
+            if (SpellDamage.EnemyPlayerInRadius(world, casterTeam, center, radius))
+                SpellDamage.HitEnemyPlayer(world, spellId, casterTeam, damage, focus);
+        }
+    }
+
+    /// <summary>지점 비행 투사체 착탄 → 범위 피해 (S03 · S04)</summary>
+    public sealed class SplashOnArrive : IProjectileHitHandler
+    {
+        private readonly int _spellId;
+        private readonly float _damage;
+        private readonly float _radius;
+        private readonly bool _publishImpact;
+
+        public SplashOnArrive(int spellId, float damage, float radius, bool publishImpact)
+        {
+            _spellId = spellId;
+            _damage = damage;
+            _radius = radius;
+            _publishImpact = publishImpact;
+        }
+
+        public void OnProjectileArrived(ISpellWorld world, in ProjectileArrival arrival)
+        {
+            SplashBehavior.Apply(_spellId, _damage, _radius, world, arrival.CasterTeam, arrival.Position, arrival.WorldColumn,
+                                 arrival.FocusBonus, _publishImpact);
         }
     }
 }

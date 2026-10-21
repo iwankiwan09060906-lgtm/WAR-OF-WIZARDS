@@ -33,6 +33,35 @@ namespace SpellboundVR.Network
         Attacking = 1,
         Breaching = 2,
         Frozen = 3,
+        /// <summary>S05 토네이도에 붙잡힘</summary>
+        Stunned = 4,
+    }
+
+    /// <summary>PlayerSnap.Flags</summary>
+    public static class PlayerFlags
+    {
+        /// <summary>S01 연막 — 시야 암전</summary>
+        public const byte Blind = 1;
+        /// <summary>S10 집중 대기 중</summary>
+        public const byte Focus = 2;
+        /// <summary>H04 반사 결계</summary>
+        public const byte Reflect = 4;
+    }
+
+    /// <summary>StructureSnap.Flags</summary>
+    public static class StructureFlags
+    {
+        /// <summary>S09 타워 버프</summary>
+        public const byte Buffed = 1;
+        /// <summary>H01 프리즈</summary>
+        public const byte Frozen = 2;
+    }
+
+    /// <summary>UnitSnap.Flags</summary>
+    public static class UnitFlags
+    {
+        /// <summary>H05 분노</summary>
+        public const byte Raged = 1;
     }
 
     public struct MatchHeaderNet : INetworkStruct
@@ -69,6 +98,8 @@ namespace SpellboundVR.Network
         /// <summary>AFK 경고 중이면 남은 초, 아니면 -1 (§10: 20초에 경고)</summary>
         public float AfkSecondsLeft;
         public float Accuracy;
+        /// <summary>PlayerFlags 비트</summary>
+        public byte Flags;
     }
 
     public struct SlotSnap : INetworkStruct
@@ -95,6 +126,8 @@ namespace SpellboundVR.Network
         public int ShotCount;
         /// <summary>마지막 발사 대상 유닛 Id</summary>
         public int ShotTargetId;
+        /// <summary>StructureFlags 비트</summary>
+        public byte Flags;
     }
 
     public struct UnitSnap : INetworkStruct
@@ -103,11 +136,16 @@ namespace SpellboundVR.Network
         public byte Team;
         public byte Kind;
         public byte State;
-        public byte Reserved;
+        /// <summary>UnitFlags 비트</summary>
+        public byte Flags;
         public float U;
         public float V;
         public int Hp;
         public int MaxHp;
+        /// <summary>공격 횟수 (byte 순환) — 늘면 클라이언트가 공격 이펙트를 그린다</summary>
+        public byte AttackCount;
+        /// <summary>현재 공격 대상 (유닛 · 구조물 Id, 없으면 0)</summary>
+        public int TargetId;
     }
 
     public struct ProjectileSnap : INetworkStruct

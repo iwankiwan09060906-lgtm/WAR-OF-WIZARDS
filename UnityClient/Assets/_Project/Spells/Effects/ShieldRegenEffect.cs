@@ -18,11 +18,12 @@ namespace SpellboundVR.Spells.Effects
         private float _regenPerSecond;
         private float _timeSinceHit;
 
-        public ShieldRegenEffect(SpellDefinition definition)
+        /// <param name="durationScale">S10 집중(방어 스킬) 지속 시간 배율</param>
+        public ShieldRegenEffect(SpellDefinition definition, float durationScale = 1f)
         {
             _spellId = definition.SpellId;
             EffectId = string.IsNullOrEmpty(definition.StatusEffectId) ? "S08_Shield" : definition.StatusEffectId;
-            _remaining = Mathf.Max(0.1f, definition.EffectDuration);
+            _remaining = Mathf.Max(0.1f, definition.EffectDuration * Mathf.Max(1f, durationScale));
             _shield = Mathf.Max(0f, definition.ShieldAmount);
             _regenDelay = Mathf.Max(0f, definition.RegenDelay);
             _regenPerSecond = Mathf.Max(0f, definition.RegenPerSecond);

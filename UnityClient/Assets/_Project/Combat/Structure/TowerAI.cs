@@ -14,6 +14,7 @@ namespace SpellboundVR.Combat
         public static void Tick(MatchSimulation sim, StructureState tower, float dt)
         {
             if (tower.IsNexus || !tower.Alive) return;
+            if (tower.IsFrozen(sim.Time)) return; // H01 프리즈: 공격 정지
 
             var rules = sim.Rules;
             Team enemy = TeamUtil.Opponent(tower.Team);
@@ -29,7 +30,7 @@ namespace SpellboundVR.Combat
             for (int i = 0; i < units.Length; i++)
             {
                 var u = units[i];
-                if (!u.Active || u.Dead || u.Team != enemy) continue;
+                if (!u.Active || u.Dead || u.Team != enemy || u.IsStructure) continue; // §11 타워 → 설치물 ✕
                 bool inRange = (u.Position - tower.Position).sqrMagnitude <= rangeSq;
                 if (!inRange)
                 {
@@ -68,13 +69,14 @@ namespace SpellboundVR.Combat
             tower.ShotCount++;
 
             float dmg = rules.TowerDamage * (1f + tower.ComboCount * rules.TowerComboBonusPerHit);
+            if (tower.IsBuffed(now)) dmg *= tower.BuffAttack; // S09 타워 버프
             var ctx = new DamageContext
             {
                 SpellId = 0,
                 AttackerTeam = tower.Team,
                 AttackerKind = TargetKind.Tower,
                 AttackerId = tower.Id,
-                TargetKind = TargetKind.Minion,
+                TargetKind = sim.FindUnit(bestId).TargetKindSelf,
                 TargetId = bestId,
                 BaseDamage = dmg,
                 IsPlayerSkill = false,

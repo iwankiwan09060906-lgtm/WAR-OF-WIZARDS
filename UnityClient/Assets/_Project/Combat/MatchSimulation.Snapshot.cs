@@ -54,6 +54,12 @@ namespace SpellboundVR.Combat
                     ps.ShieldEndTime = 0f;
                 }
 
+                byte flags = 0;
+                if (p.BlindUntil > _matchTime) flags |= PlayerFlags.Blind;
+                if (p.HasFocus) flags |= PlayerFlags.Focus;
+                if (_status.HasStatusEffect(p.Id, ReflectBarrierEffect.Id)) flags |= PlayerFlags.Reflect;
+                ps.Flags = flags;
+
                 for (int i = 0; i < DeckData.SlotCount; i++)
                 {
                     ref readonly SlotRuntime sr = ref p.Slots[i];
@@ -81,6 +87,10 @@ namespace SpellboundVR.Combat
                 ss.V = st.Position.y;
                 ss.ShotCount = st.ShotCount;
                 ss.ShotTargetId = st.LastTargetId;
+                byte sf = 0;
+                if (st.Alive && st.IsBuffed(_matchTime)) sf |= StructureFlags.Buffed;
+                if (st.Alive && st.IsFrozen(_matchTime)) sf |= StructureFlags.Frozen;
+                ss.Flags = sf;
             }
 
             int uc = 0;
@@ -97,6 +107,9 @@ namespace SpellboundVR.Combat
                 us.V = u.Position.y;
                 us.Hp = Mathf.CeilToInt(u.Hp);
                 us.MaxHp = Mathf.CeilToInt(u.MaxHp);
+                us.Flags = (byte)(u.IsRaged(_matchTime) ? UnitFlags.Raged : 0);
+                us.AttackCount = (byte)(u.AttackCount & 0xFF);
+                us.TargetId = u.TargetId;
             }
             h.UnitCount = (byte)uc;
 

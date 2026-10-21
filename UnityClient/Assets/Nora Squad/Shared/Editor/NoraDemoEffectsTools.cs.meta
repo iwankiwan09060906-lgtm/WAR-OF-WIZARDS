@@ -1,0 +1,18 @@
+fileFormatVersion: 2
+guid: 1fd303efef29d49baabcdd5716ffdd7d
+MonoImporter:
+  externalObjects: {}
+  serializedVersion: 2
+  defaultReferences: []
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 413902
+  packageName: "Nora Squad \u2013 Starter"
+  packageVersion: 1.0
+  assetPath: Assets/Nora Squad/Shared/Editor/NoraDemoEffectsTools.cs
+  uploadId: 1010958

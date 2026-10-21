@@ -35,6 +35,10 @@ namespace SpellboundVR.Combat
         public float LastActivityTime;
         public float LastMoveTime = -999f;
         public bool DeathPending;
+        /// <summary>S01 연막 — 시야 암전 종료 시각</summary>
+        public float BlindUntil = -1f;
+        /// <summary>S10 집중 — 다음 스킬에 적용할 배율 (1 = 없음)</summary>
+        public float PendingFocus = 1f;
 
         public PlayerState(Team team)
         {
@@ -56,6 +60,10 @@ namespace SpellboundVR.Combat
             LastActivityTime = 0f;
             LastMoveTime = -999f;
             DeathPending = false;
+            BlindUntil = -1f;
+            PendingFocus = 1f;
         }
+
+        public bool HasFocus => PendingFocus > 1f;
     }
 }

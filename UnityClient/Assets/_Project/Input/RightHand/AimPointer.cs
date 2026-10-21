@@ -34,7 +34,15 @@ namespace SpellboundVR.Input
             _spell = spell;
             IsActive = true;
             _last = default;
-            if (markerView != null) markerView.Show(spell != null ? spell.ThemeColor : Color.white, spell != null && spell.Targeting == SpellTargeting.Area ? spell.Radius : 0f);
+            if (markerView != null)
+            {
+                markerView.Show(spell != null ? spell.ThemeColor : Color.white, spell != null && spell.Targeting == SpellTargeting.Area ? spell.Radius : 0f);
+                var arena = _session.Arena;
+                if (spell != null && spell.Behavior == SpellBehaviorType.PoisonField)
+                    markerView.SetShape(new Vector2(arena.ColumnSpacing * 1.5f, spell.FieldHalfDepth), true);   // 3열 전체 띠
+                else if (spell != null && spell.Behavior == SpellBehaviorType.ArrowVolley)
+                    markerView.SetShape(new Vector2(arena.LaneHalfWidth * 0.8f, spell.FieldHalfDepth), false); // 레인 폭 × 깊이
+            }
             Tick(0f);
         }
 

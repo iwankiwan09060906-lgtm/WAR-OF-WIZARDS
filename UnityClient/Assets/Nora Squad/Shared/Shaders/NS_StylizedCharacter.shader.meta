@@ -1,0 +1,16 @@
+fileFormatVersion: 2
+guid: b5813dbbb8c954dacab929818859e574
+ShaderImporter:
+  externalObjects: {}
+  defaultTextures: []
+  nonModifiableTextures: []
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 413902
+  packageName: "Nora Squad \u2013 Starter"
+  packageVersion: 1.0
+  assetPath: Assets/Nora Squad/Shared/Shaders/NS_StylizedCharacter.shader
+  uploadId: 1010958

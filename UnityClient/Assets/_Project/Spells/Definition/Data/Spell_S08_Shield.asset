@@ -20,6 +20,7 @@ MonoBehaviour:
   Targeting: 5
   Executor: 5
   Behavior: 3
+  FocusCategory: 1
   Dodgeable: 0
   BaseDamage: 50
   Radius: 2
@@ -27,8 +28,22 @@ MonoBehaviour:
   ProjectileSpeed: 20
   ShotCount: 1
   ShotInterval: 0.1
+  ArcHeight: 0
+  TelegraphDelay: 0
+  TickInterval: 0.5
+  TickDamageRamp: 0
+  MaxTickDamage: 0
+  FieldHalfDepth: 2.5
+  LaneStartDepth: 0
+  LaneEndDepth: 1
   StatusEffectId: S08_Shield
   EffectDuration: 8
   ShieldAmount: 180
   RegenDelay: 3
   RegenPerSecond: 12
+  AttackMultiplier: 1
+  AttackSpeedMultiplier: 1
+  MoveSpeedMultiplier: 1
+  IncomingDamageMultiplier: 1
+  EffectRatio: 1
+  SummonKind: 0

@@ -1,0 +1,14 @@
+fileFormatVersion: 2
+guid: 002418beec11341f1852bed3d43d7142
+AssemblyDefinitionImporter:
+  externalObjects: {}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 413902
+  packageName: "Nora Squad \u2013 Starter"
+  packageVersion: 1.0
+  assetPath: Assets/Nora Squad/Shared/Editor/NoraSquad.Editor.asmdef
+  uploadId: 1010958

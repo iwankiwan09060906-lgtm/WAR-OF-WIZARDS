@@ -4,7 +4,7 @@
 //   ③ 회피 판정 (투사체 · 레이저 · 장판)  ─ 회피 → 0
 //   ④ 명중률 판정 (플레이어 스킬만)       ─ MISS → 0
 //   ⑤ 기본 데미지 × TeamAttackMultiplier × 집중 보너스
-//   ⑥ 대상이 플레이어면 × (대상 타워 생존 ? 0.2 : 1.0)
+//   ⑥ 대상이 플레이어면 × (대상 타워 생존 ? 0.2 : 1.0), 그 외 대상은 × 자체 방어 배율 (S09 · H05)
 //   ⑦ 대상 방어 효과: 반사 결계(무효 + 반사) → 쉴드 흡수
 //   ⑧ HP 적용 → 0 이하면 승패 판정
 // 모든 스킬 · 유닛 · 타워 코드는 HP를 직접 바꾸지 않고 이 클래스만 호출한다(Rule 8).
@@ -83,6 +83,8 @@ namespace SpellboundVR.Network
             // ⑥ 플레이어 대상 방어 계층 (상대 플레이어 스킬 피해만 20%)
             if (targetKind == TargetKind.Player && context.IsPlayerSkill)
                 damage *= _defense.SkillDamageRatio(targetTeam, _config);
+            else if (targetKind != TargetKind.Player)
+                damage *= _world.GetIncomingDamageMultiplier(context.TargetId);
 
             // ⑦ 대상 방어 효과 (반사 → 쉴드)
             float beforeEffects = damage;

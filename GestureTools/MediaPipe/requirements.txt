@@ -1,0 +1,4 @@
+# MediaPipe 손 추적기 전용 패키지 — run_hand_tracker.bat 가 .venv 에 자동 설치한다.
+# (전역 파이썬에 설치하면 numpy 2.x 로 올라가 다른 도구와 충돌할 수 있어 가상환경을 쓴다)
+mediapipe>=0.10.14
+pillow

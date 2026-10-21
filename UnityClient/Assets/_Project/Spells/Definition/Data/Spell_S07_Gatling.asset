@@ -15,20 +15,35 @@ MonoBehaviour:
   SpellId: 7
   DisplayName: Gatling
   VfxName: Gatling
-  ThemeColor: {r: 1, g: 0.9, b: 0.3, a: 1}
+  ThemeColor: {r: 1, g: 0.6, b: 0.15, a: 1}
   Tier: 0
   Targeting: 0
   Executor: 0
   Behavior: 1
+  FocusCategory: 0
   Dodgeable: 1
-  BaseDamage: 27.5
+  BaseDamage: 17
   Radius: 0.4
   MaxDepth: 1
-  ProjectileSpeed: 12
-  ShotCount: 8
-  ShotInterval: 0.12
+  ProjectileSpeed: 24
+  ShotCount: 15
+  ShotInterval: 0.135
+  ArcHeight: 0
+  TelegraphDelay: 0
+  TickInterval: 0.5
+  TickDamageRamp: 0
+  MaxTickDamage: 0
+  FieldHalfDepth: 2.5
+  LaneStartDepth: 0
+  LaneEndDepth: 1
   StatusEffectId: 
   EffectDuration: 0
   ShieldAmount: 0
   RegenDelay: 3
   RegenPerSecond: 0
+  AttackMultiplier: 1
+  AttackSpeedMultiplier: 1
+  MoveSpeedMultiplier: 1
+  IncomingDamageMultiplier: 1
+  EffectRatio: 1
+  SummonKind: 0

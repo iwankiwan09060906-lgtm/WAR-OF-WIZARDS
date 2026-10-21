@@ -13,6 +13,22 @@ MonoBehaviour:
   m_Name: SpellCatalog
   m_EditorClassIdentifier: Assembly-CSharp::SpellboundVR.Spells.SpellCatalog
   Spells:
+  - {fileID: 11400000, guid: 828086ab118500a4c8b0de74f898d0e4, type: 2}
+  - {fileID: 11400000, guid: 75732067b7b6e184ab03042d3e0a057f, type: 2}
   - {fileID: 11400000, guid: 5b1f9e7acef5b6a4fbfa6d1f577c1874, type: 2}
+  - {fileID: 11400000, guid: d8d82fb2435cc5047a5acc7fb96c4b77, type: 2}
+  - {fileID: 11400000, guid: d48d5f94bde2c8f4aa3e0d3fea82e3c1, type: 2}
+  - {fileID: 11400000, guid: 2e617f85e84a7d94284fdc15b14447eb, type: 2}
   - {fileID: 11400000, guid: 4a62886b286bf7141b07ab4adc7de69a, type: 2}
   - {fileID: 11400000, guid: 027cf9c940c3267419cb1cc25833de46, type: 2}
+  - {fileID: 11400000, guid: 6f9c47009eb14fb42a50abe52acd37e6, type: 2}
+  - {fileID: 11400000, guid: c187f833ae2afa343890ec7cd350edec, type: 2}
+  - {fileID: 11400000, guid: 1e75f5f79481d6e40b7b6c035df0aa52, type: 2}
+  - {fileID: 11400000, guid: 6e0bc9fb1a6fabf408982c567a4d48e4, type: 2}
+  - {fileID: 11400000, guid: 99b82f6c0b6c71a4dacd03507cfda80e, type: 2}
+  - {fileID: 11400000, guid: a20066322d357dc4b906d0d22356670e, type: 2}
+  - {fileID: 11400000, guid: 510a682ae98c9f8459ed58cc69900d5f, type: 2}
+  - {fileID: 11400000, guid: 41e4a7f840dc59e4f98d47e17534a629, type: 2}
+  - {fileID: 11400000, guid: 0d329d00655d6eb4999731915481d5e4, type: 2}
+  - {fileID: 11400000, guid: 749f4dc4e61efc24dba5f284db8a6d0b, type: 2}
+  - {fileID: 11400000, guid: f403bc286c900eb4db093dfff9b2a718, type: 2}

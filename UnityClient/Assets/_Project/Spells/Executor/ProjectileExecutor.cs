@@ -1,5 +1,4 @@
-// §14.2 ProjectileExecutor — 조준: 열 / 스킬: S01 연막, S05 토네이도, S07 총난사, H03 흡혈
-// 현재 구현: S07 총난사 (MultiShotFrontFirst). 그 외 Behavior는 단발 열 투사체로 동작한다.
+// §14.2 ProjectileExecutor — 조준: 열 / 스킬: S01 연막, S07 총난사
 
 using SpellboundVR.Contracts;
 using SpellboundVR.Core;
@@ -21,15 +20,20 @@ namespace SpellboundVR.Spells.Executor
         public void Execute(in SpellCastRequest request, Team casterTeam)
         {
             int worldColumn = TeamUtil.ToWorldColumn(casterTeam, request.TargetColumn);
+            float focus = SpellDamage.DamageFocus(_def, _world.CastFocus);
             switch (_def.Behavior)
             {
+                case SpellBehaviorType.BlindShot:
+                    BlindShot.Launch(_def, _world, casterTeam, worldColumn, _world.CastFocus);
+                    break;
+
                 case SpellBehaviorType.MultiShotFrontFirst:
-                    _world.StartRoutine(new MultiShotFrontFirst(_def, casterTeam, worldColumn));
+                    _world.StartRoutine(new MultiShotFrontFirst(_def, casterTeam, worldColumn, 0, focus));
                     break;
 
                 default:
                     // 단발 열 투사체: 열 가장 앞 유닛 → 없으면 플레이어
-                    _world.StartRoutine(new MultiShotFrontFirst(_def, casterTeam, worldColumn, 1));
+                    _world.StartRoutine(new MultiShotFrontFirst(_def, casterTeam, worldColumn, 1, focus));
                     break;
             }
         }

@@ -1,0 +1,14 @@
+{
+    "name": "NoraSquad.Demo.Editor",
+    "rootNamespace": "NoraSquad.Demo.Editor",
+    "references": ["NoraSquad.Runtime", "NoraSquad.Demo"],
+    "includePlatforms": ["Editor"],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
