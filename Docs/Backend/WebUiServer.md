@@ -58,6 +58,12 @@ run_server.bat              :: 또는  python wow_server.py  (포트를 바꾸�
    - 관리자 콘솔 → 게임 설정 → `auth.google_client_id`
 4. 서버를 다시 켜면 로그인 화면의 "Google 계정으로 계속하기" 가 동작합니다. (ID 가 없으면 버튼이 설정 방법을 안내)
 
+### Unity · Quest (기기 로그인, Device Flow)
+
+- Unity C01의 Google 버튼은 별도 OAuth 클라이언트(유형 **TV 및 입력 제한 기기**)로 Device Flow를 쓴다 — `UnityClient/Assets/_Project/Backend/GoogleDeviceAuth.cs`.
+- 서버는 그 클라이언트 ID로 발급된 토큰도 `/api/auth/google`에서 받는다: 환경 변수 `GOOGLE_DEVICE_CLIENT_ID` → 관리자 설정 `auth.google_device_client_id` (기본값 `538311580843-8ikodv8md34jflgqn1d8ijevuocpu80m.apps.googleusercontent.com`).
+- `client_secret`은 Unity 쪽 `Backend/Resources/GoogleOAuth/device_client.json`(git 제외)에 둔다. `/api/auth/config`는 `googleDeviceClientId` · `googleDeviceEnabled`도 돌려준다.
+
 ## 4. Unity 연결
 
 ### 4-1. 시전 신호 (웹 → 서버 → Unity)

@@ -19,7 +19,7 @@ MonoBehaviour:
   AttackRange: 7
   MoveSpeed: 0
   DetectRange: 7
-  BodyRadius: 1
+  BodyRadius: 0.7
   StructureDamageMultiplier: 1
   PrefersStructures: 0
   TowerTargetPriority: 1

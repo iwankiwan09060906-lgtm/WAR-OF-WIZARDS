@@ -1,4 +1,4 @@
-// §14.2 BeamExecutor — 조준: 열 (레인 전체) / 스킬: S05 토네이도, S06 번개, H02 레이저 빔
+// §14.2 BeamExecutor — 조준: 열 (레인 전체) / 스킬: S05 토네이도, H02 레이저 빔, H03 흡혈
 
 using SpellboundVR.Contracts;
 using SpellboundVR.Core;
@@ -26,8 +26,8 @@ namespace SpellboundVR.Spells.Executor
                 case SpellBehaviorType.TornadoLane:
                     _world.StartRoutine(new TornadoRoutine(_def, _world, casterTeam, worldColumn, focus));
                     break;
-                case SpellBehaviorType.LightningStrikes:
-                    _world.StartRoutine(new LightningRoutine(_def, _world, casterTeam, worldColumn, focus));
+                case SpellBehaviorType.DrainLife:
+                    DrainLife.Apply(_def, _world, casterTeam, worldColumn, focus);
                     break;
                 default:
                     _world.StartRoutine(new LaserRoutine(_def, _world, casterTeam, worldColumn, focus));

@@ -13,19 +13,19 @@ MonoBehaviour:
   m_Name: Minion_AxeOrc
   m_EditorClassIdentifier: Assembly-CSharp::SpellboundVR.Combat.MinionDefinition
   Kind: 3
-  MaxHp: 700
-  Damage: 40
+  MaxHp: 1100
+  Damage: 65
   AttackInterval: 1.6
-  AttackRange: 1.3
+  AttackRange: 1.5
   MoveSpeed: 1.5
   DetectRange: 7
-  BodyRadius: 0.6
+  BodyRadius: 0.8
   StructureDamageMultiplier: 1.5
   PrefersStructures: 0
   TowerTargetPriority: 0
   IsStructure: 0
   IsSummon: 1
-  SplashRadius: 2
+  SplashRadius: 2.4
   FlightHeight: 0
   Lifetime: 40
   SpawnInterval: 0

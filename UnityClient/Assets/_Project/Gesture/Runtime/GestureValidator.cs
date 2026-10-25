@@ -1,7 +1,7 @@
 // §9 Confidence 검사 + 1 · 2순위 점수 차 검사 (오발동 방지)
-// 기본 임계값은 GestureTools 오프라인 측정값 기준:
-//   정상 룬 최선 거리 평균 2~4.5 / 최대 ~8, 무관한 궤적 최소 ~7.5  → 수락 거리 ≤ 7.0
-//   1 · 2순위 거리 비율 p5 ≈ 1.12                                → 최소 비율 1.08
+// 기본 임계값은 RuneRecognizer v2 오프라인 벤치마크 기준 (사람 손 노이즈 궤적, 19종 전부 후보):
+//   정상 룬 점수 중앙값 0.06~0.10 / p95 0.09~0.15, 무관한 낙서 p5 0.19 · 중앙값 0.23 → 수락 점수 ≤ 0.17
+//   1 · 2순위 점수 비율 1.08 이상                                              → 잘못 시전 0%, 낙서 수락 ~1%
 
 using System;
 using System.Collections.Generic;
@@ -16,10 +16,10 @@ namespace SpellboundVR.Gesture
         public int MinRawPoints = 8;
         [Tooltip("궤적 최소 크기 (월드 m 또는 화면 px 단위 — 녹화 좌표계 기준)")]
         public float MinStrokeSize = 0.06f;
-        [Tooltip("$P+ 최선 거리가 이 값 이하일 때만 수락")]
-        public float MaxAcceptDistance = 7.0f;
-        [Tooltip("2순위(다른 스킬) 거리 / 1순위 거리 ≥ 이 값")]
-        public float MinSecondBestRatio = 1.08f;
+        [Tooltip("인식 점수(작을수록 비슷함)가 이 값 이하일 때만 수락 — 정상 룬은 보통 0.06~0.15")]
+        public float MaxAcceptScore = RuneRecognizer.DefaultAcceptScore;
+        [Tooltip("2순위(다른 스킬) 점수 / 1순위 점수 ≥ 이 값 — 두 룬 사이에서 애매하면 시전하지 않는다")]
+        public float MinScoreRatio = RuneRecognizer.DefaultMinRatio;
     }
 
     public enum GestureRejectReason
@@ -65,9 +65,8 @@ namespace SpellboundVR.Gesture
         public static GestureRejectReason ValidateMatch(in GestureMatch match, GestureValidationSettings s)
         {
             if (!match.HasMatch) return GestureRejectReason.NoCandidates;
-            if (match.Distance > s.MaxAcceptDistance) return GestureRejectReason.LowConfidence;
-            if (match.SecondDistance < float.MaxValue && match.SecondDistance / Mathf.Max(1e-4f, match.Distance) < s.MinSecondBestRatio)
-                return GestureRejectReason.Ambiguous;
+            if (match.Distance > s.MaxAcceptScore) return GestureRejectReason.LowConfidence;
+            if (match.Ratio < s.MinScoreRatio) return GestureRejectReason.Ambiguous;
             return GestureRejectReason.None;
         }
     }

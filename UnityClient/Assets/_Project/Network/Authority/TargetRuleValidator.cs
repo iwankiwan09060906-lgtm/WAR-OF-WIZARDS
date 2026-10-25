@@ -1,7 +1,7 @@
 // §11 타겟팅 규칙 매트릭스 ★
 //
 // | 공격자 ↓ \ 대상 →  | 플레이어           | 미니언·소환수 | 설치물 | 타워 | 넥서스              |
-// | 플레이어 스킬      | ○ (§12 피해 비율)  | ○            | ✕     | ✕   | ✕                   |
+// | 플레이어 스킬      | ○ (§12 피해 비율)  | ○ (지상 · 공중) | ○   | ✕   | ✕                   |
 // | 미니언 · 소환수    | 상대 넥서스 파괴 후 ○ | ○          | ○     | ○   | 상대 타워 파괴 후 ○ |
 // | 타워              | ✕                  | ○            | ✕     | —   | —                   |
 // | 터렛              | ✕                  | ○            | ✕     | ✕   | ✕                   |
@@ -25,8 +25,9 @@ namespace SpellboundVR.Network
             switch (attackerKind)
             {
                 case TargetKind.Player:
-                    // Rule 5: 플레이어 스킬은 구조물에 데미지를 줄 수 없다
-                    return targetKind == TargetKind.Player || targetKind == TargetKind.Minion || targetKind == TargetKind.Summon;
+                    // Rule 5: 플레이어 스킬은 타워 · 넥서스에 데미지를 줄 수 없다 (소환된 설치물 — 터렛 · 소환탑은 맞는다)
+                    return targetKind == TargetKind.Player || targetKind == TargetKind.Minion ||
+                           targetKind == TargetKind.Summon || targetKind == TargetKind.Structure;
 
                 case TargetKind.Minion:
                 case TargetKind.Summon:

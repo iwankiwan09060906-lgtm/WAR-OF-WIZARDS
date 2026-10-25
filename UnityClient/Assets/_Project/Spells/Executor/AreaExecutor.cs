@@ -1,4 +1,4 @@
-// §14.2 AreaExecutor — 조준: 열 + 깊이 / 스킬: S02 독 장판, S03 파이어볼, S04 화살 세례
+// §14.2 AreaExecutor — 조준: 열 + 깊이 / 스킬: S02 독 장판, S03 파이어볼, S04 화살 세례, S06 번개, H05 분노
 // 서버가 Column / Depth로 지점을 계산한다(§7).
 
 using SpellboundVR.Contracts;
@@ -30,7 +30,7 @@ namespace SpellboundVR.Spells.Executor
             switch (_def.Behavior)
             {
                 case SpellBehaviorType.PoisonField:
-                    _world.StartRoutine(new PoisonFieldRoutine(_def, _world, casterTeam, center, worldColumn, focus));
+                    PoisonFlask.Launch(_def, _world, casterTeam, center, worldColumn, focus);
                     break;
 
                 case SpellBehaviorType.FireballLob:
@@ -39,6 +39,14 @@ namespace SpellboundVR.Spells.Executor
 
                 case SpellBehaviorType.ArrowVolley:
                     _world.StartRoutine(new ArrowVolleyRoutine(_def, _world, casterTeam, center, worldColumn, focus));
+                    break;
+
+                case SpellBehaviorType.LightningStrikes:
+                    _world.StartRoutine(new LightningRoutine(_def, _world, casterTeam, center, worldColumn, focus));
+                    break;
+
+                case SpellBehaviorType.RageField:
+                    _world.StartRoutine(new RageRoutine(_def, _world, casterTeam, center, focus));
                     break;
 
                 default:

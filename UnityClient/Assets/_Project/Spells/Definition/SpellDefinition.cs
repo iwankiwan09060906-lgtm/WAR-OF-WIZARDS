@@ -13,9 +13,9 @@ namespace SpellboundVR.Spells
     {
         /// <summary>열 지정 투사체 — S01, S07</summary>
         Projectile,
-        /// <summary>열 + 깊이 지점 — S02, S03, S04</summary>
+        /// <summary>열 + 깊이 지점 — S02, S03, S04, S06, H05</summary>
         Area,
-        /// <summary>열(레인) 전체 — S05, S06, H02</summary>
+        /// <summary>열(레인) 전체 — S05, H02, H03</summary>
         Beam,
         /// <summary>소환 라인 — S11, S12</summary>
         Summon,
@@ -23,7 +23,7 @@ namespace SpellboundVR.Spells
         Structure,
         /// <summary>자기 · 타워 · 다음 스킬 — S08, S09, S10, H04</summary>
         Buff,
-        /// <summary>조준 없음, 전장 · 상대 대상 — H01, H03, H05</summary>
+        /// <summary>조준 없음, 전장 전체 — H01</summary>
         Global,
     }
 
@@ -39,15 +39,15 @@ namespace SpellboundVR.Spells
         ShieldRegen,
         /// <summary>S01 — 상대 플레이어에게 연막탄, 명중 시 시야 암전</summary>
         BlindShot,
-        /// <summary>S02 — 3열을 가로지르는 넓은 띠 장판, 틱마다 피해 누적 증가</summary>
+        /// <summary>S02 — 조준 지점으로 독병을 던지고, 떨어진 깊이에 3열을 가로지르는 띠 장판 (틱마다 피해 누적 증가)</summary>
         PoisonField,
         /// <summary>S03 — 지점으로 포물선 비행 후 폭발</summary>
         FireballLob,
         /// <summary>S04 — 한 열의 지점 주변에 화살 여러 발이 포물선으로 낙하</summary>
         ArrowVolley,
-        /// <summary>S05 — 레인 위 회전 장판, 안의 적 유닛 저지 + 틱 피해</summary>
+        /// <summary>S05 — 레인을 따라 전진하는 회오리, 닿은 적 유닛을 뒤로 밀어냄 + 피해</summary>
         TornadoLane,
-        /// <summary>S06 — 하늘에서 레인 앞쪽 적에게 낙뢰 여러 번</summary>
+        /// <summary>S06 — 조준 지점 중심, 한 레인 폭 × 세로로 긴 범위에 낙뢰 여러 번</summary>
         LightningStrikes,
         /// <summary>S09 — 본인 타워 방어력 · 공격력 증가</summary>
         TowerBuff,
@@ -61,11 +61,11 @@ namespace SpellboundVR.Spells
         FreezeAll,
         /// <summary>H02 — 레인 전체를 지속 빔으로 태움</summary>
         LaserBeam,
-        /// <summary>H03 — 상대 플레이어 피해 → 생명력이 시전자에게 날아와 회복</summary>
+        /// <summary>H03 — 조준 레인의 상대 플레이어(못 맞히면 레인의 유닛 · 설치물) 생명력을 빼앗아 회복</summary>
         DrainLife,
         /// <summary>H04 — 스킬 피해 무효 + 일부 반사</summary>
         ReflectBarrier,
-        /// <summary>H05 — 전장 장판, 아군 유닛 강화</summary>
+        /// <summary>H05 — 조준 깊이에 3열 띠 장판(타워~넥서스 거리 폭), 안에 들어온 아군 유닛 강화</summary>
         RageField,
     }
 
@@ -150,6 +150,10 @@ namespace SpellboundVR.Spells
         [Tooltip("H04 반사 비율 · H03 회복 비율 · S10 집중 배율")]
         public float EffectRatio = 1f;
 
+        [Header("넉백")]
+        [Tooltip("S05 — 닿은 적 유닛을 시전자 반대쪽으로 밀어내는 거리 (m)")]
+        public float KnockbackDistance = 0f;
+
         [Header("소환 · 설치")]
         public MinionKind SummonKind = MinionKind.Melee;
 
@@ -179,7 +183,7 @@ namespace SpellboundVR.Spells
             return def;
         }
 
-        /// <summary>19종 기본값 (밸런스 임시값 — Docs 마스터 프롬프트 §14.3 수치표와 같다)</summary>
+        /// <summary>19종 기본값 (밸런스 임시값 — 마스터 프롬프트 §14.3 수치표와 같다)</summary>
         public static SpellDefinition CreateDefault(int spellId)
         {
             switch (spellId)
@@ -240,6 +244,8 @@ namespace SpellboundVR.Spells
             d.Behavior = SpellBehaviorType.PoisonField;
             d.Dodgeable = false;
             d.BaseDamage = 12f;          // 첫 틱
+            d.ProjectileSpeed = 20f;     // 독병 비행
+            d.ArcHeight = 3.5f;
             d.TickInterval = 0.5f;
             d.TickDamageRamp = 2f;       // 머무를수록 +2
             d.MaxTickDamage = 30f;       // 틱 상한 → 5초 최대 210
@@ -290,27 +296,30 @@ namespace SpellboundVR.Spells
             d.Executor = SpellExecutorType.Beam;
             d.Behavior = SpellBehaviorType.TornadoLane;
             d.Dodgeable = false;
-            d.BaseDamage = 15f;          // 틱 피해
-            d.TickInterval = 0.5f;
-            d.EffectDuration = 5f;       // 5초 저지
-            d.LaneStartDepth = 0.2f;
-            d.LaneEndDepth = 0.8f;
-            d.ShotCount = 3;             // 회오리 기둥 수 (표시)
+            d.BaseDamage = 35f;          // 닿을 때 1회 피해
+            d.EffectDuration = 2.5f;     // 레인을 쓸고 지나가는 시간
+            d.LaneStartDepth = 0.1f;     // 시전자 앞에서 출발
+            d.LaneEndDepth = 0.85f;      // 상대 진영 앞까지
+            d.Radius = 1.6f;             // 회오리 반경 (깊이 방향 판정)
+            d.KnockbackDistance = 7f;    // 뒤로 밀어내는 거리
+            d.EffectRatio = 0.8f;        // 밀려난 뒤 정신 못 차리는 시간 (초)
             return d;
         }
 
         public static SpellDefinition CreateLightningDefault()
         {
             var d = Create(SpellIds.S06_Lightning, "Lightning", "Lightning", new Color(1f, 0.85f, 0.35f));
-            d.Targeting = SpellTargeting.Beam;
-            d.Executor = SpellExecutorType.Beam;
+            d.Targeting = SpellTargeting.Area;
+            d.Executor = SpellExecutorType.Area;
             d.Behavior = SpellBehaviorType.LightningStrikes;
             d.Dodgeable = true;          // 플레이어는 낙뢰 순간 위치로 판정
             d.BaseDamage = 75f;          // 1회
             d.ShotCount = 3;
             d.ShotInterval = 0.55f;
             d.TelegraphDelay = 0.45f;
-            d.Radius = 2f;
+            d.Radius = 2f;               // 조준 링 표시
+            d.FieldHalfDepth = 4.5f;     // 범위: 레인 폭 × 깊이 ±4.5m (세로로 긴 직사각형)
+            d.MaxDepth = 1f;
             return d;
         }
 
@@ -412,8 +421,8 @@ namespace SpellboundVR.Spells
             d.Executor = SpellExecutorType.Global;
             d.Behavior = SpellBehaviorType.FreezeAll;
             d.FocusCategory = SpellFocusCategory.Defense;
-            d.BaseDamage = 40f;
-            d.EffectDuration = 5f;
+            d.BaseDamage = 150f;
+            d.EffectDuration = 7f;
             return d;
         }
 
@@ -424,9 +433,9 @@ namespace SpellboundVR.Spells
             d.Executor = SpellExecutorType.Beam;
             d.Behavior = SpellBehaviorType.LaserBeam;
             d.Dodgeable = true;
-            d.BaseDamage = 30f;          // 0.2초마다 × 10틱 = 300
+            d.BaseDamage = 40f;          // 0.2초마다 × 20틱 = 800
             d.TickInterval = 0.2f;
-            d.EffectDuration = 2f;
+            d.EffectDuration = 4f;       // 빔 유지 시간
             d.TelegraphDelay = 0.5f;     // §11.2 예고선
             d.Radius = 1.2f;             // 빔 반폭
             return d;
@@ -435,13 +444,13 @@ namespace SpellboundVR.Spells
         public static SpellDefinition CreateDrainDefault()
         {
             var d = Create(SpellIds.H03_Drain, "Drain", "Drain", new Color(0.85f, 0.1f, 0.25f));
-            d.Targeting = SpellTargeting.Global;
-            d.Executor = SpellExecutorType.Global;
+            d.Targeting = SpellTargeting.Beam;
+            d.Executor = SpellExecutorType.Beam;
             d.Behavior = SpellBehaviorType.DrainLife;
-            d.Dodgeable = false;         // 무조건 타겟팅 (방어 효과로만 막힘)
-            d.BaseDamage = 200f;
-            d.EffectDuration = 2f;       // 생명력이 돌아오는 시간
-            d.EffectRatio = 1.5f;        // 실제 피해 × 1.5 회복
+            d.Dodgeable = false;         // 조준한 레인에 서 있으면 명중 (쉴드 · 반사 결계로만 막힘)
+            d.BaseDamage = 320f;         // 플레이어 · 레인 유닛 1기당
+            d.EffectDuration = 1.6f;     // 생명력이 돌아오는 시간
+            d.EffectRatio = 2f;          // 플레이어 실제 피해 × 2 회복 (레인 유닛 · 설치물은 그 절반 비율)
             return d;
         }
 
@@ -453,8 +462,8 @@ namespace SpellboundVR.Spells
             d.Behavior = SpellBehaviorType.ReflectBarrier;
             d.FocusCategory = SpellFocusCategory.Defense;
             d.StatusEffectId = "H04_Reflect";
-            d.EffectDuration = 6f;
-            d.EffectRatio = 0.8f;        // 피해의 80% 반사
+            d.EffectDuration = 9f;       // 6초 × 1.5
+            d.EffectRatio = 1f;          // 피해의 100% 반사
             d.ProjectileSpeed = 30f;
             return d;
         }
@@ -462,15 +471,17 @@ namespace SpellboundVR.Spells
         public static SpellDefinition CreateRageDefault()
         {
             var d = Create(SpellIds.H05_Rage, "Rage", "Rage", new Color(1f, 0.25f, 0.15f));
-            d.Targeting = SpellTargeting.Global;
-            d.Executor = SpellExecutorType.Global;
+            d.Targeting = SpellTargeting.Area;
+            d.Executor = SpellExecutorType.Area;
             d.Behavior = SpellBehaviorType.RageField;
             d.FocusCategory = SpellFocusCategory.Defense;
-            d.EffectDuration = 5f;
-            d.AttackMultiplier = 1.5f;
-            d.AttackSpeedMultiplier = 1.5f;
-            d.MoveSpeedMultiplier = 1.4f;
-            d.IncomingDamageMultiplier = 0.7f;
+            d.MaxDepth = 1f;
+            d.FieldHalfDepth = 4f;       // 띠 반폭 기본값 — 실제로는 아레나의 (타워 깊이 − 넥서스 깊이) / 2 를 쓴다
+            d.EffectDuration = 8f;
+            d.AttackMultiplier = 2f;
+            d.AttackSpeedMultiplier = 1.7f;
+            d.MoveSpeedMultiplier = 1.5f;
+            d.IncomingDamageMultiplier = 0.5f;
             return d;
         }
 

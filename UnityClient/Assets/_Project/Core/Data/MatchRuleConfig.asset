@@ -44,12 +44,12 @@ MonoBehaviour:
   BruteEveryNWaves: 3
   MaxAliveUnitsPerTeam: 40
   MinionMaxLifetime: 90
-  TowerMaxHp: 1500
+  TowerMaxHp: 3000
   TowerDamage: 88
   TowerAttacksPerSecond: 1
   TowerRange: 7
   TowerComboBonusPerHit: 0
   TowerComboMaxStacks: 5
   StructureRadius: 1
-  NexusMaxHp: 2000
+  NexusMaxHp: 4000
   BreachPointOffset: 1.5

@@ -1,4 +1,4 @@
-// §14.2 GlobalExecutor — 조준 없음(주먹 즉시 시전) / 스킬: H01 프리즈, H03 흡혈, H05 분노
+// §14.2 GlobalExecutor — 조준 없음(주먹 즉시 시전) / 스킬: H01 프리즈
 
 using SpellboundVR.Contracts;
 using SpellboundVR.Spells.Behaviors;
@@ -23,12 +23,6 @@ namespace SpellboundVR.Spells.Executor
             {
                 case SpellBehaviorType.FreezeAll:
                     FreezeAll.Apply(_def, _world, casterTeam, focus);
-                    break;
-                case SpellBehaviorType.DrainLife:
-                    DrainLife.Apply(_def, _world, casterTeam, focus);
-                    break;
-                case SpellBehaviorType.RageField:
-                    _world.StartRoutine(new RageRoutine(_def, _world, casterTeam, focus));
                     break;
             }
         }

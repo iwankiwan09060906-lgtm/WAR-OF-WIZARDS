@@ -69,6 +69,23 @@ namespace SpellboundVR.Backend
             BackendClient.Instance.Put<PasswordChangeRequestDto, MessageDto>("/api/auth/password", req, _ => onSuccess?.Invoke(), onError);
         }
 
+        /// <summary>비밀번호 재설정 요청 — 메일 서버가 없어 관리자 콘솔 기록으로 남는다 (서버가 돌려준 안내 문구를 넘긴다)</summary>
+        /// <summary>Google 로그인 — GoogleDeviceAuth(기기 로그인)로 받은 토큰을 서버가 Google에 확인하고 게임 토큰을 준다.
+        /// 처음 오는 Google 계정은 서버가 자동으로 계정 · 플레이어를 만든다.</summary>
+        public static void LoginWithGoogle(string idToken, string accessToken,
+            Action<AuthResponseDto> onSuccess = null, Action<string> onError = null)
+        {
+            var req = new GoogleLoginRequestDto { credential = idToken ?? string.Empty, accessToken = accessToken ?? string.Empty };
+            BackendClient.Instance.Post<GoogleLoginRequestDto, AuthResponseDto>("/api/auth/google", req,
+                res => HandleAuth(res, onSuccess), onError);
+        }
+
+        public static void RequestPasswordReset(string email, Action<string> onSuccess = null, Action<string> onError = null)
+        {
+            var req = new PasswordResetRequestDto { email = email };
+            BackendClient.Instance.Post<PasswordResetRequestDto, MessageDto>("/api/auth/password-reset", req, res => onSuccess?.Invoke(res.message), onError);
+        }
+
         public static void Logout()
         {
             if (BackendClient.Instance.HasToken)

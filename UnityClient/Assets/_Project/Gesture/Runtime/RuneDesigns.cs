@@ -48,6 +48,50 @@ namespace SpellboundVR.Gesture
             };
         }
 
+        /// <summary>
+        /// 사람이 같은 룬을 다른 획 구성으로 그리는 방식 (템플릿 에셋과 상관없이 인식기가 템플릿을 만들 때 더한다).
+        /// S02 독 장판(삼각형 + X)은 VR에서 핀치를 쥔 채 한 번에 이어 그리거나, 삼각형을 두 · 세 획으로 나눠 그리는 경우가 많다.
+        /// </summary>
+        public static List<(string label, Vector2[][] strokes)> ExtraStyles(int spellId)
+        {
+            var list = new List<(string, Vector2[][])>();
+            if (spellId == SpellIds.S02_PoisonField && TryGet(spellId, out var d) && d.Strokes.Length == 3)
+            {
+                Vector2[] tri = d.Strokes[0], x1 = d.Strokes[1], x2 = d.Strokes[2];
+                int third = (tri.Length - 1) / 3;
+                Vector2[] e1 = Slice(tri, 0, third), e2 = Slice(tri, third, 2 * third), e3 = Slice(tri, 2 * third, tri.Length - 1);
+                list.Add(("style-tri-xchain", new[] { tri, Chain(x1, x2) }));                      // 삼각형 + X 를 한 획으로
+                list.Add(("style-all-one", new[] { Chain(tri, x1, x2) }));                         // 전부 한 번에 이어서
+                list.Add(("style-x-first-one", new[] { Chain(x1, x2, tri) }));                     // X 부터 이어서
+                list.Add(("style-tri-two", new[] { Chain(e1, e2), e3, x1, x2 }));                  // 삼각형을 두 획으로
+                list.Add(("style-tri-edges", new[] { e1, e2, e3, x1, x2 }));                       // 삼각형을 세 변으로
+                list.Add(("style-tri-edges-xchain", new[] { e1, e2, e3, Chain(x1, x2) }));
+            }
+            return list;
+        }
+
+        private static Vector2[] Slice(Vector2[] pts, int from, int to)
+        {
+            var r = new Vector2[to - from + 1];
+            System.Array.Copy(pts, from, r, 0, r.Length);
+            return r;
+        }
+
+        /// <summary>획들을 펜을 떼지 않고 이은 한 획 — 다음 획의 가까운 끝으로 이어지도록 방향을 고른다</summary>
+        private static Vector2[] Chain(params Vector2[][] parts)
+        {
+            var result = new List<Vector2>(parts[0]);
+            for (int i = 1; i < parts.Length; i++)
+            {
+                var next = parts[i];
+                Vector2 end = result[result.Count - 1];
+                bool reverse = (next[next.Length - 1] - end).sqrMagnitude < (next[0] - end).sqrMagnitude;
+                if (reverse) for (int k = next.Length - 1; k >= 0; k--) result.Add(next[k]);
+                else result.AddRange(next);
+            }
+            return result.ToArray();
+        }
+
         private static Vector2[][] Transform(Vector2[][] strokes, float sx, float sy, float shear)
         {
             var result = new Vector2[strokes.Length][];
@@ -69,11 +113,11 @@ namespace SpellboundVR.Gesture
             {
                 // S01 연막 — 눈: 아몬드 윤곽 + 눈동자
                 D(SpellIds.S01_Smoke, "Smoke", Almond(0.5f, 0.5f, 0.5f, 0.3f), Circle(0.5f, 0.5f, 0.15f)),
-                // S02 독 장판 — 위 ∪ · 가운데 넓은 ⌒ · 아래 ∩
+                // S02 독 장판 — 삼각형(한 획) + 아래쪽 안의 X(두 획). 좌표는 image (4).png 를 비율 그대로 옮긴 것 (폭 1.21 : 높이 1)
                 D(SpellIds.S02_PoisonField, "PoisonField",
-                  Arc(0.5f, 1f, 0.22f, 0.45f, 180f, 360f),
-                  Arc(0.5f, 0.38f, 0.5f, 0.17f, 180f, 0f),
-                  Arc(0.5f, 0f, 0.2f, 0.52f, 180f, 0f)),
+                  Poly(V(0.605f, 1f), V(1.21f, 0f), V(0f, 0f), V(0.605f, 1f)),
+                  Poly(V(0.35f, 0.295f), V(0.85f, 0.11f)),
+                  Poly(V(0.35f, 0.11f), V(0.85f, 0.295f))),
                 // S03 파이어볼 — 왕관
                 D(SpellIds.S03_Fireball, "Fireball",
                   Poly(V(0.05f, 0.78f), V(0.3f, 0.52f), V(0.5f, 1f), V(0.7f, 0.52f), V(0.95f, 0.78f), V(0.8f, 0.08f), V(0.2f, 0.08f), V(0.05f, 0.78f))),

@@ -144,16 +144,17 @@ namespace SpellboundVR.Input
             return true;
         }
 
+        /// <summary>대체 손가락 = 마우스 커서 — 카메라 앞 0.8m 평면 위 커서 지점 (룬이 커서를 따라다닌다)</summary>
         public bool TryGetRightHandPosition(out Vector3 position)
         {
-            var cam = Cam;
-            if (cam == null)
+            if (!TryGetAimRay(out var ray))
             {
                 position = default;
                 return false;
             }
-            Transform t = cam.transform;
-            position = t.position + t.forward * 0.8f + t.right * 0.3f - t.up * 0.25f;
+            Transform t = Cam.transform;
+            float along = Vector3.Dot(ray.direction, t.forward);
+            position = ray.origin + ray.direction * (0.8f / Mathf.Max(0.2f, along));
             return true;
         }
     }

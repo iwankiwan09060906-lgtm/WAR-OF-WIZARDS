@@ -6,6 +6,8 @@
 //   FusionClient    : Quest(또는 에디터)가 PC 서버 세션에 접속.
 //   Auto            : 명령줄 -server / -client 또는 UNITY_SERVER 빌드면 해당 모드, 아니면 LocalVsBot.
 //
+// 메타 UI(metaUi, 기본 켜짐): 전투 전에 C01 로그인 → C02 로비 → … → C11 카운트다운 화면이 먼저 뜨고,
+//   C11에서 BeginBattle(덱)으로 경기를 시작한다 (UI/Common/MetaFlow). 끄면 예전처럼 바로 봇전이 시작된다.
 // 데이터 에셋이 비어 있으면 런타임 기본값(스킬 19종, 기본 수치)으로 동작한다.
 // 메뉴 Spellbound > 1. Setup Battle Scene 이 에셋 · 프리팹 · 씬 참조를 자동으로 채운다.
 
@@ -87,6 +89,10 @@ namespace SpellboundVR.Core
         public bool localAfkEnabled = true;
         public bool showDebugPanels = true;
 
+        [Header("메타 UI (C01~C13)")]
+        [Tooltip("true: 로그인 · 로비 · 마법서 · 매칭 등 게임 밖 화면을 먼저 띄우고, 대전을 시작하면 전투로 들어간다. false: 바로 봇전 (전투만 테스트)")]
+        public bool metaUi = true;
+
         [Header("룬 인식 테스트")]
         [Tooltip("true: 덱(스킬창)에 없는 룬 19종도 인식해 시전 (로컬 봇전에서만 실제 발동 — 쿨타임 · 횟수 없음). 덱 안의 룬은 원래대로 시전")]
         public bool recognizeAllRunes = true;
@@ -102,17 +108,32 @@ namespace SpellboundVR.Core
         private FusionServerLauncher _serverLauncher;
         private ClientConnector _clientConnector;
         private MatchSimulation _serverSim;
+        private ISpellInputSource _input;
+        private CastStateMachine _cast;
+        private bool _allowAllRunes;
+        private bool _battleOnline;
 
         public BootMode ResolvedMode => _resolvedMode;
 
         public ClientSession Session => _session;
+
+        /// <summary>지금 경기가 PC 서버(Fusion)에 접속한 경기인지 (false = 이 기기 안의 로컬 봇전)</summary>
+        public bool IsOnlineBattle => _battleOnline;
 
         private void Awake()
         {
             ResolveData();
             ResolveSceneReferences();
             _resolvedMode = ResolveMode();
+            _allowAllRunes = recognizeAllRunes;
             Debug.Log($"[GameBootstrap] 실행 모드: {_resolvedMode}");
+
+            if (_resolvedMode != BootMode.DedicatedServer && metaUi)
+            {
+                // 전투는 C11 카운트다운에서 BeginBattle로 시작한다
+                gameObject.AddComponent<SpellboundVR.UI.MetaFlow>().Initialize(this, WantsHandTracking(), head, rightHandAnchor);
+                return;
+            }
 
             switch (_resolvedMode)
             {
@@ -131,6 +152,63 @@ namespace SpellboundVR.Core
         private void OnDestroy()
         {
             _deckManager?.Dispose();
+        }
+
+        /// <summary>메타 UI(C11)에서 대전 시작 — deck: SpellId 8개 (0 = 빈 슬롯). 한 씬에서 한 번만.</summary>
+        public void BeginBattle(int[] deck) => BeginBattle(deck, _resolvedMode == BootMode.FusionClient, recognizeAllRunes);
+
+        /// <summary>
+        /// online: PC 서버(Fusion) 경기 (FusionClient 빌드의 랭킹전 · 친선전) / false: 이 기기 안에서 봇과 (봇 연습 · 스킬 테스트).
+        /// allowAllRunes: 덱 밖 룬 19종도 시전 (스킬 테스트 전용 — 로컬 경기에서만 동작).
+        /// </summary>
+        public void BeginBattle(int[] deck, bool online, bool allowAllRunes)
+        {
+            if (_session != null) return;
+            if (deck != null && deck.Length == localDeck.Length) localDeck = deck;
+            _allowAllRunes = allowAllRunes && !online;
+            StartClient(networked: online);
+        }
+
+        /// <summary>경기 중 메뉴를 여는 동안 룬 그리기 · 조준 · 이동 입력을 멈춘다 (경기 자체는 계속된다)</summary>
+        public void SetBattleInputEnabled(bool enabled)
+        {
+            if (_cast != null)
+            {
+                if (!enabled) _cast.Cancel(CastCancelReason.None);
+                _cast.enabled = enabled;
+            }
+            if (_input is MonoBehaviour mb && mb != null) mb.enabled = enabled;
+        }
+
+        /// <summary>기권 — 로컬 경기는 다음 틱에 패배(연결 끊김과 같은 규칙), PC 서버 경기는 접속을 끊고 이 기기에서 패배로 마무리한다</summary>
+        public bool Forfeit()
+        {
+            if (_localHost != null && _localHost.Simulation != null)
+            {
+                if (_localHost.Simulation.Phase != MatchPhase.Playing) return false;
+                _localHost.Simulation.NotifyDisconnected(localTeam);
+                return true;
+            }
+            if (_clientConnector != null && _session != null)
+            {
+                var events = _session.Events;
+                float duration = events.Latest != null ? events.Latest.Header.MatchTime : 0f;
+                _clientConnector.Leave();
+                events.RaiseLocalMatchEnd(MatchResult.Lose, MatchEndReason.Disconnect, duration);
+                return true;
+            }
+            return false;
+        }
+
+        /// <summary>헤드셋 핸드트래킹을 쓸지 (전투 입력 · 메타 UI 조작 방식이 같이 바뀐다)</summary>
+        public bool WantsHandTracking()
+        {
+            switch (inputMode)
+            {
+                case InputMode.HandTracking: return leftHandAnchor != null && rightHandAnchor != null;
+                case InputMode.Keyboard: return false;
+                default: return UnityEngine.XR.XRSettings.isDeviceActive && leftHandAnchor != null && rightHandAnchor != null;
+            }
         }
 
         // ── 준비 ─────────────────────────────────────────────
@@ -200,18 +278,22 @@ namespace SpellboundVR.Core
         private MatchSimulation CreateSimulation(bool localMode)
         {
             var effectiveRules = rules;
-            if (localMode && !localAfkEnabled)
+            if (localMode && (!localAfkEnabled || metaUi))
             {
                 effectiveRules = Instantiate(rules); // 에셋 원본을 바꾸지 않도록 사본 사용
-                effectiveRules.AfkForfeitSeconds = 1e9f;
-                effectiveRules.AfkWarningSeconds = 1e9f;
+                if (!localAfkEnabled)
+                {
+                    effectiveRules.AfkForfeitSeconds = 1e9f;
+                    effectiveRules.AfkWarningSeconds = 1e9f;
+                }
+                if (metaUi) effectiveRules.AutoRestartDelay = 0f; // 경기가 끝나면 결과 화면(C13) — 자동 재시작 없음
             }
             uint seed = (uint)System.Environment.TickCount;
             var sim = new MatchSimulation(effectiveRules, spellCatalog, arenaLayout.Geometry, botConfig,
                                           meleeDefinition, rangedDefinition, bruteDefinition, seed);
             if (unitDefinitions != null)
                 for (int i = 0; i < unitDefinitions.Length; i++) sim.SetUnitDefinition(unitDefinitions[i]);
-            sim.AllowTestCasts = localMode && recognizeAllRunes; // 덱 밖 룬 테스트 시전 (PC 서버는 항상 거절)
+            sim.AllowTestCasts = localMode && _allowAllRunes; // 덱 밖 룬 테스트 시전 (스킬 테스트 · 메타 UI 없는 개발 모드, PC 서버는 항상 거절)
             return sim;
         }
 
@@ -225,6 +307,8 @@ namespace SpellboundVR.Core
             _deckManager = new EightSlotDeckManager(deck, events);
 
             ISpellInputSource input = CreateInput();
+            _input = input;
+            _battleOnline = networked;
 
             // 리그 · 이동
             var platform = gameObject.AddComponent<CommanderPlatform>();
@@ -242,8 +326,9 @@ namespace SpellboundVR.Core
             aim.markerView = marker;
             var cast = gameObject.AddComponent<CastStateMachine>();
             cast.aimPointer = aim;
-            cast.recognizeAllRunes = recognizeAllRunes && !networked; // PC 서버는 덱 밖 테스트 시전을 항상 거절하므로 네트워크 모드에선 덱 룬만 인식
+            cast.recognizeAllRunes = _allowAllRunes && !networked; // PC 서버는 덱 밖 테스트 시전을 항상 거절하므로 네트워크 모드에선 덱 룬만 인식
             cast.Initialize(_session, input, _deckManager);
+            _cast = cast;
 
             // 표시
             var lineGo = new GameObject("[MagicLine]", typeof(LineRenderer));
@@ -301,13 +386,7 @@ namespace SpellboundVR.Core
 
         private ISpellInputSource CreateInput()
         {
-            bool useHands;
-            switch (inputMode)
-            {
-                case InputMode.HandTracking: useHands = true; break;
-                case InputMode.Keyboard: useHands = false; break;
-                default: useHands = UnityEngine.XR.XRSettings.isDeviceActive; break;
-            }
+            bool useHands = WantsHandTracking();
 
             var inputGo = new GameObject("[Input]");
             inputGo.transform.SetParent(transform, false);
@@ -346,12 +425,8 @@ namespace SpellboundVR.Core
             presentation.AddComponent<ArenaStateView>().Initialize(_session, vfxCatalog, head);
             presentation.AddComponent<DamageTextView>().Initialize(_session, head);
 
-            if (playerRig != null)
-            {
-                var g = arenaLayout.Geometry;
-                playerRig.SetPositionAndRotation(g.ToWorld(g.PlayerPosition(Team.Home, 1), 6f) - g.Forward * 4f,
-                                                 Quaternion.LookRotation(g.Forward * 2f - Vector3.up, Vector3.up));
-            }
+            // 서버 창 카메라: 대기 중엔 Home 뒤 시점, 경기가 시작되면 위에서 비스듬히 내려다보는 사이드뷰 (V로 전환)
+            gameObject.AddComponent<ServerSpectatorCamera>().Initialize(arenaLayout.Geometry, playerRig, head, view);
 
             _serverLauncher = gameObject.AddComponent<FusionServerLauncher>();
             _serverLauncher.StartServer(sessionName, serverPort, matchStatePrefab, playerPrefab, _serverSim, view);

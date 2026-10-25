@@ -1061,6 +1061,7 @@ MonoBehaviour:
   localTeam: 0
   localAfkEnabled: 1
   showDebugPanels: 1
+  metaUi: 1
   recognizeAllRunes: 1
   localDeck: 030000000700000008000000010000000b0000000d0000006500000068000000
 --- !u!4 &165065891

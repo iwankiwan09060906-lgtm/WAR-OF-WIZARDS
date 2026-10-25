@@ -17,12 +17,12 @@ MonoBehaviour:
   VfxName: Drain
   ThemeColor: {r: 0.85, g: 0.1, b: 0.25, a: 1}
   Tier: 1
-  Targeting: 7
-  Executor: 6
+  Targeting: 2
+  Executor: 2
   Behavior: 16
   FocusCategory: 0
   Dodgeable: 0
-  BaseDamage: 200
+  BaseDamage: 320
   Radius: 2
   MaxDepth: 1
   ProjectileSpeed: 20
@@ -37,7 +37,7 @@ MonoBehaviour:
   LaneStartDepth: 0
   LaneEndDepth: 1
   StatusEffectId: 
-  EffectDuration: 2
+  EffectDuration: 1.6
   ShieldAmount: 0
   RegenDelay: 3
   RegenPerSecond: 0
@@ -45,5 +45,6 @@ MonoBehaviour:
   AttackSpeedMultiplier: 1
   MoveSpeedMultiplier: 1
   IncomingDamageMultiplier: 1
-  EffectRatio: 1.5
+  EffectRatio: 2
+  KnockbackDistance: 0
   SummonKind: 0

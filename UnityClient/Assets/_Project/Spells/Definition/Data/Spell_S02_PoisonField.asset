@@ -28,7 +28,7 @@ MonoBehaviour:
   ProjectileSpeed: 20
   ShotCount: 1
   ShotInterval: 0.1
-  ArcHeight: 0
+  ArcHeight: 3.5
   TelegraphDelay: 0
   TickInterval: 0.5
   TickDamageRamp: 2
@@ -46,4 +46,5 @@ MonoBehaviour:
   MoveSpeedMultiplier: 1
   IncomingDamageMultiplier: 1
   EffectRatio: 1
+  KnockbackDistance: 0
   SummonKind: 0

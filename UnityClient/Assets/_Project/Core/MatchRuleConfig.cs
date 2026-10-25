@@ -74,7 +74,7 @@ namespace SpellboundVR.Core
         public float MinionMaxLifetime = 90f;
 
         [Header("타워 (§18)")]
-        public float TowerMaxHp = 1500f;
+        public float TowerMaxHp = 3000f;
         [Tooltip("1회 피해 (초당 1회). 기본 88 — 터렛(S13)은 55")]
         public float TowerDamage = 88f;
         public float TowerAttacksPerSecond = 1f;
@@ -85,7 +85,7 @@ namespace SpellboundVR.Core
         public float StructureRadius = 1.0f;
 
         [Header("넥서스 (§19)")]
-        public float NexusMaxHp = 2000f;
+        public float NexusMaxHp = 4000f;
 
         [Header("설치 구역 (§14.4 S13 · H06)")]
         [Tooltip("설치물 위치: 타워(없으면 넥서스) 앞 이 거리 (m)")]

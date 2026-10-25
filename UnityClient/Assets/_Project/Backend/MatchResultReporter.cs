@@ -25,8 +25,14 @@ namespace SpellboundVR.Backend
         [Tooltip("매칭 · 친선전 세션 없이 시작한 경기(로컬 봇전)를 저장할 모드. 비우면 저장하지 않는다.")]
         [SerializeField] private string fallbackMode = MatchResultService.ModeBot;
 
+        /// <summary>세션 없이 시작한 경기를 저장할 모드 ("" = 저장 안 함 — 스킬 테스트)</summary>
+        public string FallbackMode { get => fallbackMode; set => fallbackMode = value; }
+
         /// <summary>저장 결과 (성공 여부, 안내 문구) — 결과 화면(C13)에서 레이팅 변화를 보여줄 때</summary>
         public event Action<bool, string> OnResultSaved;
+
+        /// <summary>랭킹전 결과가 저장됨 (레이팅 변화, 새 레이팅) — C13</summary>
+        public event Action<int, int> OnRatingChanged;
 
         private NetworkGameEventPublisher _events;
         private Team _localTeam = Team.Home;
@@ -143,7 +149,12 @@ namespace SpellboundVR.Backend
                     damageTaken = _damageTaken,
                 };
                 MatchResultService.ReportResult(matchId, req,
-                    match => Saved($"전적 저장 완료 (레이팅 {match.ratingDelta:+0;-0;0} → {match.me.rating})"),
+                    match =>
+                    {
+                        int newRating = match.me != null ? match.me.rating : 0;
+                        OnRatingChanged?.Invoke(match.ratingDelta, newRating);
+                        Saved($"전적 저장 완료 (레이팅 {match.ratingDelta:+0;-0;0} → {newRating})");
+                    },
                     err => Saved(null, err));
             }
             else

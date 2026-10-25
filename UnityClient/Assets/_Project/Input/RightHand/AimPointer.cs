@@ -6,6 +6,7 @@ using SpellboundVR.Contracts;
 using SpellboundVR.Core;
 using SpellboundVR.Presentation;
 using SpellboundVR.Spells;
+using SpellboundVR.Spells.Behaviors;
 using UnityEngine;
 
 namespace SpellboundVR.Input
@@ -38,10 +39,17 @@ namespace SpellboundVR.Input
             {
                 markerView.Show(spell != null ? spell.ThemeColor : Color.white, spell != null && spell.Targeting == SpellTargeting.Area ? spell.Radius : 0f);
                 var arena = _session.Arena;
-                if (spell != null && spell.Behavior == SpellBehaviorType.PoisonField)
-                    markerView.SetShape(new Vector2(arena.ColumnSpacing * 1.5f, spell.FieldHalfDepth), true);   // 3열 전체 띠
-                else if (spell != null && spell.Behavior == SpellBehaviorType.ArrowVolley)
-                    markerView.SetShape(new Vector2(arena.LaneHalfWidth * 0.8f, spell.FieldHalfDepth), false); // 레인 폭 × 깊이
+                var behavior = spell != null ? spell.Behavior : SpellBehaviorType.None;
+                if (behavior == SpellBehaviorType.PoisonField)
+                    markerView.SetShape(new Vector2(arena.ColumnSpacing * 1.5f, spell.FieldHalfDepth), true);                // 3열 전체 띠
+                else if (behavior == SpellBehaviorType.RageField)
+                    markerView.SetShape(new Vector2(arena.ColumnSpacing * 1.5f, RageRoutine.HalfDepth(spell, arena)), true); // 3열 × 타워~넥서스 폭
+                else if (behavior == SpellBehaviorType.ArrowVolley)
+                    markerView.SetShape(new Vector2(arena.LaneHalfWidth * 0.8f, spell.FieldHalfDepth), false);              // 레인 폭 × 깊이
+                else if (behavior == SpellBehaviorType.LightningStrikes)
+                    markerView.SetShape(new Vector2(arena.LaneHalfWidth, spell.FieldHalfDepth), false);                     // 레인 폭 × 세로로 긴 범위
+                else
+                    markerView.SetShape(Vector2.zero, false);
             }
             Tick(0f);
         }

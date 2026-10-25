@@ -195,6 +195,14 @@ namespace SpellboundVR.EditorTools
             var rune = Add(root, P52 + "RuneOfMagic.prefab", 0.12f, name: "Rune");
             Recolor(rune, green);
             Save(root);
+
+            // 파이어볼처럼 조준 지점으로 날아가는 독병
+            root = NewRoot("VFX_S02_PoisonField_Projectile");
+            var flask = Add(root, P52 + "SwampBall.prefab", 0.06f, name: "Flask");
+            Recolor(flask, green);
+            SetSimulationSpace(flask, ParticleSystemSimulationSpace.World);
+            GlowCore(root, "Core", new Color(0.45f, 1f, 0.25f, 1f), 0.5f, false);
+            Save(root);
         }
 
         // ── S03 파이어볼 (Hun0FX 불꽃으로 새로 만든 불덩이) ─────────────
@@ -918,7 +926,7 @@ namespace SpellboundVR.EditorTools
             anim.wrapMode = WrapMode.Loop;
         }
 
-        // ── H05 분노 (3열을 덮는 붉은 장판) ──────────────────────
+        // ── H05 분노 (조준 깊이에 3열을 가로지르는 붉은 띠 — 폭 = 타워 ~ 넥서스 거리 8m) ─────
 
         private static void BuildH05Rage()
         {
@@ -944,7 +952,7 @@ namespace SpellboundVR.EditorTools
             var es = embers.shape;
             es.enabled = true;
             es.shapeType = ParticleSystemShapeType.Box;
-            es.scale = new Vector3(laneSpacing * 3f, 0.1f, 12f);
+            es.scale = new Vector3(laneSpacing * 3f, 0.1f, 8f);
             var ev = embers.velocityOverLifetime;
             ev.enabled = true;
             // 세 축은 같은 모드여야 한다 (다르면 "Particle Velocity curves must all be in the same mode" 오류)

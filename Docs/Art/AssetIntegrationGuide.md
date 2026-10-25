@@ -31,7 +31,7 @@
 | 파일명 | **`{SkillId}_s.png`** — 현재 19종 (`S01_s.png` ~ `H06_s.png`). `Icon_{SkillId}_{Name}.png`도 인식한다 |
 | 규격 | PNG, 투명 배경 위 선 (현재 500×500 검은 선). 표시할 때 선을 스킬 색으로 칠하고 뒤에 반투명 원판을 깐다 (`Presentation/Resources/RuneIcon.shader`) |
 | 등록 | 메뉴 `Spellbound > Runes > Build Rune Templates` 또는 `Spellbound > Assets > Assign Rune Icons` → 각 `Rune_*.asset`의 `Icon`에 자동 할당 (알파 · Clamp · 밉맵 · 최대 512 설정도 자동) |
-| 쓰이는 곳 | HUD 8슬롯 배경, 룬 인식 후 RuneReady · Armed · Aiming 동안 오른손 옆 (원본 가로세로 비율 유지, 긴 변 10cm, 천천히 회전) |
+| 쓰이는 곳 | HUD 8슬롯 배경, 룬 인식 후 RuneReady · Armed · Aiming 동안 **검지 끝 위를 따라다님** (키보드 모드는 마우스 커서, 원본 가로세로 비율 유지, 긴 변 0.5m, 천천히 회전 — `RuneReadyDisplay`) |
 
 ### 1.2 룬 모양 (인식 템플릿)
 
@@ -79,25 +79,26 @@
 | --- | --- | --- |
 | 스킬 정의 19종 + SpellCatalog | `_Project/Spells/Definition/Data/Spell_*.asset` | 코드 기본값 (`SpellDefinition.CreateDefault`) — **수치를 에셋에서 고쳤다면 이 메뉴가 덮어쓴다** (따로: `Rebuild Spell Definitions (19)`) |
 | 소환수 · 설치물 정의 | `_Project/Combat/Minion/Data/Minion_AxeOrc · Dragon · Skeleton · Turret · SummonHut.asset` | 없을 때만 생성 (튜닝 보존) |
-| 스킬 VFX 56개 | `Prefabs/VFX/Skills/VFX_*.prefab` | 52SpecialEffectPack · Hun0FX · Eric VFX Studio · ShieldEffect · ZNS3D |
+| 스킬 VFX 57개 | `Prefabs/VFX/Skills/VFX_*.prefab` | 52SpecialEffectPack · Hun0FX · Eric VFX Studio · ShieldEffect · ZNS3D |
 | 유닛 연출 | `Prefabs/VFX/Skills/VFX_Unit_*` (등장 · 사라짐 · 오크 베기 · 드래곤 화염 · 터렛 화살) | 52 · Eric · Hun0FX · ZNS3D |
 | 모델 5종 + Animator | `Prefabs/Summon/MDL_Summon_AxeOrc · Dragon · Skeleton`, `MDL_Structure_Turret · SummonHut`, `Art/Models/Summon/AC_*.controller` | 3D Stylized Orc · FourEvilDragons(Usurper Red) · Mini Simple Skeleton · StoneKeep Tower_c + Nora Squad Archer · ZNS3D 벽/지붕 |
 | Built-in 변환 재질 | `Art/Materials/Skills/Converted/` · `Art/Materials/Skills/Mat_*` | URP 셰이더 → `Spellbound/FxAdditiveFlow · FxAlphaFlow · HexShield`(`Art/Shaders/Skills`), HDRP · Nora → Standard |
 
 - 크기 확인: `Spellbound > Skills > Render VFX Previews` — `UnityClient/Temp/vfx_preview_request.txt`의 각 줄(`프리팹경로|출력.png|시간들|카메라거리|카메라높이|바라볼높이`)을 1m 격자 · 1.8m 사람 막대와 함께 PNG로 렌더한다.
 - 에셋 팩을 손볼 때 주의: 52SpecialEffectPack 이펙트는 원본 반경이 8~20m라 빌더가 0.1~0.2배로 줄인다. `MagicCircleRelease`는 서 있는 마법진이라 바닥 표시에는 `SummonMagicCircle2`를 쓴다.
-- 함께 고친 에셋 팩 스크립트: `52SpecialEffectPack/Animation&Script/csShowAllEffect.cs`(Unity 6에서 삭제된 GUIText → 컴파일 실패), `Mini Simple Characters Skeleton Demo/Readme/.../ReadmeEditor.cs`(창 배치 강제 로드 예외 → Error Pause로 플레이 정지).
+- 함께 고친 에셋 팩 스크립트: `52SpecialEffectPack/Animation&Script/csShowAllEffect.cs`(Unity 6에서 삭제된 GUIText → 컴파일 실패). Mini Simple Skeleton의 데모 Readme 스크립트는 에셋 정리 때 삭제했다.
+- 소환수 · 설치물 **크기**는 프리팹을 다시 만들지 않고 `ArenaStateView`의 배율로 조정한다: 오크 ×1.5 · 드래곤 ×0.55 · 터렛 ×0.6 · 소환탑 ×0.6 (HP바 높이 · 공격 연출 위치도 같이 맞춰진다).
 
 ### 2.2 스킬별 프리팹 (VfxName · Part)
 
 | 스킬 | 프리팹 (VFX_{Code}_{VfxName}_…) |
 | --- | --- |
 | S01 Smoke | Cast · Projectile(연막탄) · Impact(검은 연기 폭발) · Loop(연막 맞은 상대 머리) |
-| S02 PoisonField | Cast · Impact(3열 독 폭발) · Field(3열 × 깊이 5m 띠) |
+| S02 PoisonField | Cast · Projectile(독병 — 없으면 초록 구체) · Impact(3열 독 폭발) · Field(3열 × 깊이 5m 띠, 전장 가운데에 발행) |
 | S03 Fireball | Cast · Projectile(Hun0FX 불덩이) · Telegraph(착탄 마법진) · Impact(폭발 + 바닥 불) |
 | S04 ArrowRain | Cast · Projectile(ZNS3D 화살) · Telegraph · Impact(흙먼지) |
-| S05 Tornado | Cast · Field(회오리 기둥 1개 — 서버가 레인에 3개 발행) |
-| S06 Lightning | Cast · Telegraph(먹구름) · Impact(낙뢰) |
+| S05 Tornado | Cast · Field(회오리 기둥 1개 — 레인을 따라 움직이는 투사체 비주얼로도 쓴다. `_Projectile`이 있으면 그것을 우선) |
+| S06 Lightning | Cast · Telegraph(먹구름 — 서버가 세로로 긴 범위에 3곳 발행) · Impact(낙뢰 — 낙뢰마다 2줄기) |
 | S07 Gatling | Cast(손 화염 2초) · Projectile · Impact |
 | S08 Shield | Cast · Loop(구형 쉴드, 반경 1m) |
 | S09 TowerBuff | Cast · Loop(상자 방어막, 1m 상자 — 코드가 타워 크기로 맞춤) |
@@ -105,9 +106,9 @@
 | S11 AxeWarrior · S12 Mage · S13 Turret · H06 SummonTower | Cast(소환 마법진) |
 | H01 Freeze | Cast · Field(얼음 장판 1칸 — 서버가 3열 × 5줄 발행) · Loop(타워 빙결) |
 | H02 Laser | Cast · Telegraph(예고선) · Field(빔) · Impact |
-| H03 Drain | Telegraph(시전) · Impact(상대) · Projectile(생명의 불) · Loop(회복) |
+| H03 Drain | Telegraph(시전) · Impact(상대 플레이어 또는 레인의 유닛 · 설치물마다) · Projectile(생명의 불) · Loop(회복) |
 | H04 ReflectBarrier | Cast · Loop(육각 결계, 반경 1m · 높이 2m) · Projectile(반사 탄) · Impact |
-| H05 Rage | Cast · Field(붉은 장판 — 서버가 3곳 발행) |
+| H05 Rage | Cast · Field(붉은 띠 장판 — 조준 깊이에 1곳, 3열 폭 × 타워~넥서스 거리 8m) |
 
 ---
 
@@ -115,7 +116,7 @@
 
 ### 3.1 공통 절차
 
-1. FBX를 `UnityClient/Assets/Art/Models/{Category}/`에 넣는다. Import: Scale Factor 1, 필요하면 Materials 추출.
+1. FBX를 `UnityClient/Assets/Art/Models/{Category}/`에 넣는다 (폴더가 없으면 만든다). Import: Scale Factor 1, 필요하면 Materials 추출.
 2. FBX를 씬에 끌어다 놓고 머티리얼 · 크기 · 방향(+Z 앞)을 맞춘다.
 3. 그것을 `UnityClient/Assets/Prefabs/{Category}/`로 끌어 **프리팹**으로 만든다. 이름은 아래 표 그대로.
 4. 메뉴 `Spellbound > 3. Refresh VFX Catalog` (모델도 이 카탈로그로 찾는다).
@@ -159,7 +160,7 @@
 | `Arena/Art_Bridge`, `Arena/Lanes/*` | — | 메뉴 6이 만드는 바닥 · 벽 · 절벽 · 장식 (레인 폭 5m — 레인 사이 빈틈 없음, 전장 길이 41m). 레인 판은 렌더러만 꺼져 있다 | — |
 
 - **Home 쪽 높이 주의**: 플레이어(크기 2배) 눈높이가 지면 10m라, 자기 타워 · 넥서스가 높으면 가운데 레인 교전이 가려진다. 현재 타워는 4.8m.
-- 파괴 연출: 코드는 파괴 시 **부모의 Y 스케일을 15%로 줄인다** → 모델 피벗이 바닥이어야 땅으로 무너지듯 보인다.
+- 파괴 연출: HP가 0이 되면 코드가 **구조물 오브젝트를 꺼서 전장에서 없애고**, 폭발(`VFX_S03_Fireball_Impact` + `VFX_Unit_Death`, `ArenaStateView.destroyFxScale`)과 돌무더기를 남긴다. 경기가 다시 시작되면 다시 켠다.
 - **현재 적용된 아트**: 메뉴 `Spellbound > 6. Apply Arena Art`가 다음을 적용한다. 만든 오브젝트는 `Art_` 접두라 다시 실행하면 갈아 끼운다. 씬 저장은 직접(Ctrl+S).
   - 타워 `Turret.fbx`(4.8m) · 넥서스 `castle.fbx`(2.4m): 원본이 약 50만 삼각형이라 Unity Mesh LOD로 줄인 3단계(약 1만 · 2,700 · 700 삼각형, `Art/Models/Arena/MESH_Structure_*_LOD3/4/5.asset`, 압축 · 최적화)를 LODGroup으로 쓴다 — 가까운 자기 진영만 1만, 상대 진영은 2,700 이하. 원본 FBX는 씬이 참조하지 않아 빌드에 들어가지 않는다 (`StructureLodLevels` · `StructureLodHeights`, 처음 한 번 약 40초).
   - 재질은 **보는 사람 기준**(`TeamArt` — 로컬 진영 = 아군): 타워 아군 `roughness` · 적 `basecolor`, 넥서스 본인 `basecolor` · 적 `roughness`, 발판 본인 `platform_blue` · 적 `platform_red`. 각 앵커 아래 `Art_Ally` / `Art_Enemy`.
@@ -173,7 +174,16 @@
 
 ---
 
-## 4. 아이디어 (선택)
+## 4. 에셋 정리 규칙 (2026-10-24 정리)
+
+- 프로젝트가 쓰지 않는 에셋은 지운다. 기준은 **GUID 참조 폐포**: 빌드 씬(`04_Battle`) · `_Project` · `Prefabs` · `Resources` · `Settings` · `XR` · `Photon` · `Art/Runes`에서 참조를 따라가 닿지 않는 파일, 그리고 빌더 코드(`_Project/Editor/*Builder*.cs`)가 경로 · 이름으로 읽지 않는 파일.
+- 이번 정리로 각 팩의 데모 씬 · Readme · 쓰지 않는 색 · 모델(FourEvilDragons 나머지 3종, KayKit gltf · obj 사본, ZNS3D 미사용 소품 등)과 통째로 안 쓰던 `Stylized Crystal`을 지웠다 (약 850MB). 부분적으로 쓰는 팩의 C# 스크립트 · 셰이더는 컴파일 보호를 위해 남겼다.
+- 빌더가 새 원본(프리팹 · FBX)을 쓰도록 바꿀 때는 그 원본이 아직 있는지 먼저 확인한다. 지운 원본은 에셋 스토어 / 원 배포처에서 다시 받을 수 있다 (`Docs/Art/Licenses.md`).
+- 빌드 임시 · 디버그 산출물(`UnityClient/.utmp`, `UnityClient/Apks`, `UnityClient/.unity/captures`)은 저장소에 넣지 않는다 (`.gitignore`).
+
+---
+
+## 5. 아이디어 (선택)
 
 - **시야 문제 해결안**: ① Home 구조물을 낮고 넓게(성벽 · 제단 느낌) ② 자기 구조물은 반투명/디졸브 셰이더(시점 쪽에서 가릴 때만 투명) ③ 타워를 중앙이 아닌 레인 사이 경계에 두기(이 경우 `[ArenaLayout]` 깊이 값과 함께 ㅊㄱㅇ와 협의).
 - **룬 = 스킬 아이덴티티**: 아이콘 · 손 위 표시 · VFX Cast가 같은 문양을 공유하면 학습이 쉽다. 아이콘을 그대로 Cast VFX의 파티클 텍스처로 재사용.

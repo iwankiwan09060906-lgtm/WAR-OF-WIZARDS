@@ -39,15 +39,15 @@ namespace SpellboundVR.Spells.Executor
         Vector2 GetPlayerPosition(Team team);
 
         /// <summary>
-        /// 시전자 기준 적 유닛(미니언 · 소환수) 중 해당 열에 있는 것을 시전자에 가까운 순서로 채운다.
-        /// 구조물 · 설치물은 포함하지 않는다(§11 플레이어 스킬은 구조물 공격 불가).
+        /// 시전자 기준 적 유닛(지상 · 공중 미니언 · 소환수 · 소환된 설치물) 중 해당 열에 있는 것을 시전자에 가까운 순서로 채운다.
+        /// 타워 · 넥서스는 유닛이 아니므로 포함되지 않는다(§11 플레이어 스킬은 타워 · 넥서스 공격 불가).
         /// </summary>
         int CollectEnemyUnitsInColumn(Team casterTeam, int worldColumn, List<int> results);
 
-        /// <summary>시전자 기준 적 유닛 중 반경 안에 있는 것을 채운다 (구조물 · 설치물 제외).</summary>
+        /// <summary>시전자 기준 적 유닛(설치물 포함) 중 반경 안에 있는 것을 채운다.</summary>
         int CollectEnemyUnitsInRadius(Team casterTeam, Vector2 center, float radius, List<int> results);
 
-        /// <summary>시전자 기준 적 유닛 중 v가 [vMin, vMax], u가 [uMin, uMax] 안인 것 (설치물 제외)</summary>
+        /// <summary>시전자 기준 적 유닛(설치물 포함) 중 v가 [vMin, vMax], u가 [uMin, uMax] 안인 것</summary>
         int CollectEnemyUnitsInRect(Team casterTeam, float uMin, float uMax, float vMin, float vMax, List<int> results);
 
         /// <summary>팀의 살아있는 모든 유닛 (includeStructures면 설치물 포함)</summary>
@@ -76,8 +76,11 @@ namespace SpellboundVR.Spells.Executor
         /// <summary>H01 — 그 팀의 타워 공격 정지</summary>
         void FreezeTower(Team team, float duration);
 
-        /// <summary>S05 — 유닛 붙잡기 (이동 · 공격 정지)</summary>
+        /// <summary>유닛 붙잡기 (이동 · 공격 정지)</summary>
         void StunUnit(int unitId, float duration);
+
+        /// <summary>S05 — 유닛을 delta만큼 밀어내고 잠시 정지 (설치물은 움직이지 않음)</summary>
+        void PushUnit(int unitId, Vector2 delta, float stunDuration);
 
         /// <summary>H05 — 유닛 강화</summary>
         void RageUnit(int unitId, float duration, float attack, float attackSpeed, float move, float incomingDamage);

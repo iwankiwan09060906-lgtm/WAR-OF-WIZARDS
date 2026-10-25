@@ -7,6 +7,7 @@ namespace SpellboundVR.Backend
 {
     [Serializable] public class ErrorDto { public int status; public string message; }
     [Serializable] public class MessageDto { public string message; public string status; }
+    [Serializable] public class PasswordResetRequestDto { public string email; }
     [Serializable] public class HealthDto { public string status; public string server; public string version; public string time; }
 
     // ── 인증 ─────────────────────────────────────────────
@@ -14,6 +15,8 @@ namespace SpellboundVR.Backend
     [Serializable] public class LoginRequestDto { public string email; public string password; }
     [Serializable] public class RegisterRequestDto { public string email; public string password; public string nickname; }
     [Serializable] public class GuestRequestDto { public string nickname; }
+    /// <summary>/api/auth/google — credential = Google id_token, accessToken = Google access_token (둘 중 하나 이상)</summary>
+    [Serializable] public class GoogleLoginRequestDto { public string credential; public string accessToken; }
     [Serializable] public class PasswordChangeRequestDto { public string currentPassword; public string newPassword; }
 
     [Serializable]

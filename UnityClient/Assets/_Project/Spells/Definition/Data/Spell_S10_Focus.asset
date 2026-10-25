@@ -46,4 +46,5 @@ MonoBehaviour:
   MoveSpeedMultiplier: 1
   IncomingDamageMultiplier: 1
   EffectRatio: 1.5
+  KnockbackDistance: 0
   SummonKind: 0

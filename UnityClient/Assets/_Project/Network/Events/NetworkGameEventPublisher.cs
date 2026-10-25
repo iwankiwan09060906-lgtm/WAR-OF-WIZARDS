@@ -262,6 +262,12 @@ namespace SpellboundVR.Network
             OnHitFeedback?.Invoke(targetId, world, amount, kind);
         }
 
+        /// <summary>서버 스냅숏 없이 이 기기에서 경기를 끝낸다 (PC 서버 경기 중 기권 · 접속 포기) — 결과 화면 · 전적 저장이 같은 경로로 처리된다</summary>
+        public void RaiseLocalMatchEnd(MatchResult result, MatchEndReason reason, float duration)
+        {
+            OnMatchEnded?.Invoke(result, reason, duration);
+        }
+
         /// <summary>클라이언트 자체 사유 (예: 인식 실패)를 같은 거절 채널로 표시</summary>
         public void RaiseLocalRejection(string message)
         {

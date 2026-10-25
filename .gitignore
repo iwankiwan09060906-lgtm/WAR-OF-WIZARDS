@@ -67,6 +67,13 @@ Backend/*.sqlite
 Backend/*.sqlite-journal
 # Google 로그인 클라이언트 ID (Docs/Backend/WebUiServer.md)
 Backend/google_client_id.txt
+# Google Cloud Console에서 받은 OAuth 클라이언트 JSON (client_secret 포함) — 어디에 두어도 커밋하지 않는다
+client_secret_*.json
+# Google 기기 로그인(Device Flow) client_secret — 저장소에 올리지 않는다 (예시: device_client.example.json)
+UnityClient/Assets/_Project/Backend/Resources/GoogleOAuth/device_client.json
+UnityClient/Assets/_Project/Backend/Resources/GoogleOAuth/device_client.json.meta
+# Quest 빌드가 자동으로 쓰는 이 PC의 백엔드 주소 (PC마다 다름)
+UnityClient/Assets/_Project/Backend/Resources/ServerConfig/
 # Unity WebGL 빌드 산출물 자리
 Backend/static/game/
 
@@ -93,3 +100,9 @@ Desktop.ini
 .idea/
 *.swp
 *.swo
+
+# Unity 빌드 임시 · 디버그 산출물 · 에디터 캡처 (자동 생성)
+UnityClient/.utmp/
+UnityClient/Apks/
+UnityClient/.unity/
+*_BurstDebugInformation_DoNotShip/

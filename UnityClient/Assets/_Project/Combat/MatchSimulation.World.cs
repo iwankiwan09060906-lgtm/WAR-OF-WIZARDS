@@ -156,7 +156,7 @@ namespace SpellboundVR.Combat
             for (int i = 0; i < Units.Length; i++)
             {
                 var u = Units[i];
-                if (!u.Active || u.Dead || u.Team != enemy || u.IsStructure) continue;
+                if (!u.Active || u.Dead || u.Team != enemy) continue; // 지상 · 공중 유닛 · 설치물 전부
                 if (Mathf.Abs(u.Position.x - laneU) > half) continue;
                 // 거리순 삽입 정렬 (시전자 발판에서 가까운 순)
                 float key = Mathf.Abs(u.Position.y - baseV);
@@ -182,7 +182,7 @@ namespace SpellboundVR.Combat
             for (int i = 0; i < Units.Length; i++)
             {
                 var u = Units[i];
-                if (!u.Active || u.Dead || u.Team != enemy || u.IsStructure) continue;
+                if (!u.Active || u.Dead || u.Team != enemy) continue; // 지상 · 공중 유닛 · 설치물 전부
                 float r = radius + u.Def.BodyRadius;
                 if ((u.Position - center).sqrMagnitude <= r * r) results.Add(u.Id);
             }
@@ -196,7 +196,7 @@ namespace SpellboundVR.Combat
             for (int i = 0; i < Units.Length; i++)
             {
                 var u = Units[i];
-                if (!u.Active || u.Dead || u.Team != enemy || u.IsStructure) continue;
+                if (!u.Active || u.Dead || u.Team != enemy) continue; // 지상 · 공중 유닛 · 설치물 전부
                 float r = u.Def.BodyRadius;
                 if (u.Position.x < uMin - r || u.Position.x > uMax + r) continue;
                 if (u.Position.y < vMin - r || u.Position.y > vMax + r) continue;
@@ -283,6 +283,14 @@ namespace SpellboundVR.Combat
         {
             var u = FindUnit(unitId);
             if (u != null) u.StunnedUntil = Mathf.Max(u.StunnedUntil, _matchTime + duration);
+        }
+
+        public void PushUnit(int unitId, Vector2 delta, float stunDuration)
+        {
+            var u = FindUnit(unitId);
+            if (u == null || u.IsStructure) return; // 설치물은 고정 — 피해만 받는다
+            u.Position = Arena.ClampToField(u.Position + delta);
+            if (stunDuration > 0f) u.StunnedUntil = Mathf.Max(u.StunnedUntil, _matchTime + stunDuration);
         }
 
         public void RageUnit(int unitId, float duration, float attack, float attackSpeed, float move, float incomingDamage)

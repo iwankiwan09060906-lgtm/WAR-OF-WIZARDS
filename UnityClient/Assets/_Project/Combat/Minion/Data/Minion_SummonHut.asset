@@ -13,13 +13,13 @@ MonoBehaviour:
   m_Name: Minion_SummonHut
   m_EditorClassIdentifier: Assembly-CSharp::SpellboundVR.Combat.MinionDefinition
   Kind: 7
-  MaxHp: 800
+  MaxHp: 1400
   Damage: 0
   AttackInterval: 0
   AttackRange: 0
   MoveSpeed: 0
   DetectRange: 0
-  BodyRadius: 1
+  BodyRadius: 0.8
   StructureDamageMultiplier: 1
   PrefersStructures: 0
   TowerTargetPriority: 1
@@ -27,6 +27,6 @@ MonoBehaviour:
   IsSummon: 0
   SplashRadius: 0
   FlightHeight: 0
-  Lifetime: 25
-  SpawnInterval: 3
+  Lifetime: 40
+  SpawnInterval: 2.5
   SpawnKind: 5

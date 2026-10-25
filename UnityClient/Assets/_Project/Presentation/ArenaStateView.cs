@@ -18,6 +18,7 @@ using SpellboundVR.Contracts;
 using SpellboundVR.Core;
 using SpellboundVR.Network;
 using SpellboundVR.Pooling;
+using SpellboundVR.Spells;
 using UnityEngine;
 
 namespace SpellboundVR.Presentation
@@ -49,8 +50,9 @@ namespace SpellboundVR.Presentation
             public Transform Root;
             public Transform HpFill;
             public bool WasAlive = true;
-            public Vector3 OriginalScale;
             public Team Team;
+            /// <summary>파괴 후 남는 잔해 (평소엔 꺼둠)</summary>
+            public GameObject Rubble;
             /// <summary>총알이 나가는 높이 (비주얼 윗면의 80%)</summary>
             public float MuzzleHeight;
             public Vector3 Size;
@@ -85,7 +87,21 @@ namespace SpellboundVR.Presentation
         [Tooltip("타워 총알 속도 (m/s) — 마법 불꽃이 날아가는 게 보이도록 느리게 (사거리 약 10m → 약 0.8초)")]
         public float towerShotSpeed = 12f;
         [Tooltip("드래곤 비행 높이 (m)")]
-        public float dragonFlightHeight = 3.5f;
+        public float dragonFlightHeight = 3f;
+
+        [Header("소환수 · 설치물 모델 크기 배율 (MDL_* 프리팹 기준)")]
+        [Tooltip("S11 도끼 전사 — 미니언 사이에서 눈에 띄게 크게")]
+        public float axeOrcScale = 1.5f;
+        [Tooltip("S12 드래곤 — 날개 폭 6m 프리팹을 줄여서")]
+        public float dragonScale = 0.55f;
+        [Tooltip("S13 터렛")]
+        public float turretScale = 0.6f;
+        [Tooltip("H06 소환탑")]
+        public float summonHutScale = 0.6f;
+
+        [Header("타워 · 넥서스 파괴")]
+        [Tooltip("파괴 폭발 연출 크기 배율")]
+        public float destroyFxScale = 3f;
         [Tooltip("내 쉴드 · 결계 윗면을 눈높이보다 이만큼 아래(가슴 높이)에 둔다 (전장을 내려다보는 시야 방해 금지)")]
         public float selfBarrierBelowEyes = 0.65f;
         [Tooltip("내 쉴드 · 결계 육각 막의 밝기 (상대에게 보이는 것보다 옅게)")]
@@ -138,7 +154,23 @@ namespace SpellboundVR.Presentation
 
         private static bool IsSummonKind(MinionKind kind) => (int)kind >= (int)MinionKind.AxeOrc;
 
-        /// <summary>HP바 높이 (모델 키 + 여유)</summary>
+        /// <summary>모델 크기 배율 (인스펙터 값)</summary>
+        private float ModelScale(MinionKind kind)
+        {
+            switch (kind)
+            {
+                case MinionKind.AxeOrc: return axeOrcScale;
+                case MinionKind.Dragon: return dragonScale;
+                case MinionKind.Turret: return turretScale;
+                case MinionKind.SummonHut: return summonHutScale;
+                default: return 1f;
+            }
+        }
+
+        /// <summary>HP바 높이 — 모델 크기 배율 적용</summary>
+        private float ScaledHpBarHeight(MinionKind kind) => HpBarHeight(kind) * ModelScale(kind);
+
+        /// <summary>HP바 높이 (배율 1 기준 모델 키 + 여유)</summary>
         private static float HpBarHeight(MinionKind kind)
         {
             switch (kind)
@@ -224,10 +256,21 @@ namespace SpellboundVR.Presentation
                 body.transform.localScale = size;
                 body.transform.localPosition = new Vector3(0f, shape == PrimitiveType.Cube ? size.y * 0.5f : size.y, 0f);
             }
+            // 모델 크기 배율: 자식(모델)만 키우고 줄인다 — HP바 두께 · 폭은 그대로
+            float scale = ModelScale(kind);
+            if (!Mathf.Approximately(scale, 1f))
+            {
+                for (int i = 0; i < go.transform.childCount; i++)
+                {
+                    var child = go.transform.GetChild(i);
+                    child.localPosition *= scale;
+                    child.localScale *= scale;
+                }
+            }
             var renderers = go.GetComponentsInChildren<Renderer>(true);
             _modelRenderers[go] = renderers;
             ApplyTint(renderers, BaseTint(team, kind));
-            AttachHpBar(go.transform, HpBarHeight(kind), IsStructureKind(kind) ? 1.4f : 0.6f);
+            AttachHpBar(go.transform, ScaledHpBarHeight(kind), IsStructureKind(kind) ? 1.4f : 0.6f);
             return go;
         }
 
@@ -266,7 +309,12 @@ namespace SpellboundVR.Presentation
         {
             if (_projectilePools.TryGetValue(spellId, out var pool)) return pool;
             var def = _session.Catalog.Get(spellId);
-            if (def != null && _catalog != null && _catalog.TryGet(def.GetVfxPrefabName(VfxPart.Projectile), out var prefab))
+            GameObject prefab = null;
+            bool hasPrefab = def != null && _catalog != null &&
+                             (_catalog.TryGet(def.GetVfxPrefabName(VfxPart.Projectile), out prefab) ||
+                              // S05 토네이도: 레인을 따라 움직이는 회오리 = 장판(Field) 프리팹을 투사체처럼 이동
+                              (def.Behavior == SpellBehaviorType.TornadoLane && _catalog.TryGet(def.GetVfxPrefabName(VfxPart.Field), out prefab)));
+            if (hasPrefab)
             {
                 pool = new ObjectPool(prefab, _poolRoot, def.ShotCount > 4 ? projectilePrewarm : 4);
             }
@@ -390,10 +438,10 @@ namespace SpellboundVR.Presentation
                     {
                         Root = visual,
                         HpFill = AttachHpBar(holder, isNexus ? 3.2f : 5.4f, 1.6f), // 아트 높이: 넥서스 2.4m · 타워 4.8m
-                        OriginalScale = visual.localScale,
                         Team = team,
                         MuzzleHeight = size.y * 0.8f,
                         Size = size,
+                        Rubble = CreateRubble(holder, size),
                     };
                     if (!isNexus)
                     {
@@ -406,6 +454,29 @@ namespace SpellboundVR.Presentation
                     _structures[MatchSnapshot.StructureIndex(team, isNexus)] = view;
                 }
             }
+        }
+
+        /// <summary>파괴된 타워 · 넥서스 자리에 남는 돌무더기 (구조물 크기에 맞춤, 회색 돌)</summary>
+        private static GameObject CreateRubble(Transform parent, Vector3 size)
+        {
+            var root = new GameObject("Rubble");
+            root.transform.SetParent(parent, false);
+            var mat = FallbackVisuals.Opaque(new Color(0.38f, 0.36f, 0.34f));
+            float w = Mathf.Clamp(Mathf.Max(size.x, size.z), 1.5f, 6f);
+            const int pieces = 9;
+            for (int i = 0; i < pieces; i++)
+            {
+                float a = i * 2.39996f; // 황금각 — 고르게 흩어지게
+                float r = w * 0.45f * Mathf.Sqrt((i + 0.5f) / pieces);
+                float s = w * (0.32f - 0.02f * i);
+                var piece = FallbackVisuals.Primitive(PrimitiveType.Cube, "Stone" + i, mat);
+                piece.transform.SetParent(root.transform, false);
+                piece.transform.localScale = new Vector3(s, s * 0.6f, s * 0.8f);
+                piece.transform.localPosition = new Vector3(Mathf.Cos(a) * r, s * 0.25f, Mathf.Sin(a) * r);
+                piece.transform.localRotation = Quaternion.Euler(i * 23f % 40f - 20f, i * 47f, i * 31f % 30f - 15f);
+            }
+            root.SetActive(false);
+            return root;
         }
 
         /// <summary>비주얼 피벗(바닥) 기준 크기 (가로 · 높이 · 세로). 렌더러가 없으면 2m 상자</summary>
@@ -631,15 +702,16 @@ namespace SpellboundVR.Presentation
         private void PlayAttackFx(UnitView view, int targetId)
         {
             Transform t = view.Go.transform;
+            float k = ModelScale(view.Kind);
             bool hasTarget = TryGetTargetPosition(targetId, out Vector3 targetPos);
             switch (view.Kind)
             {
                 case MinionKind.AxeOrc:
-                    PlayUnitFx("VFX_Unit_AxeOrc_Attack", t.position + t.forward * 1.1f + Vector3.up * 1.1f, t.rotation, 1.2f);
+                    PlayUnitFx("VFX_Unit_AxeOrc_Attack", t.position + (t.forward * 1.1f + Vector3.up * 1.1f) * k, t.rotation, 1.2f);
                     break;
                 case MinionKind.Dragon:
                 {
-                    Vector3 mouth = t.position + t.forward * 1.6f + Vector3.up * 0.6f;
+                    Vector3 mouth = t.position + (t.forward * 1.6f + Vector3.up * 0.6f) * k;
                     Vector3 dir = hasTarget ? (targetPos + Vector3.up * 0.5f - mouth) : t.forward;
                     if (dir.sqrMagnitude < 1e-4f) dir = t.forward;
                     PlayUnitFx("VFX_Unit_Dragon_Attack", mouth, Quaternion.LookRotation(dir, Vector3.up), 1.6f);
@@ -649,12 +721,12 @@ namespace SpellboundVR.Presentation
                 case MinionKind.Turret:
                     if (hasTarget)
                     {
-                        Vector3 from = t.position + Vector3.up * (HpBarHeight(MinionKind.Turret) - 0.9f);
+                        Vector3 from = t.position + Vector3.up * (HpBarHeight(MinionKind.Turret) - 0.9f) * k;
                         FireShot(_arrowShotPool, from, targetPos + Vector3.up * 0.6f, targetId, 1.2f, 18f);
                     }
                     break;
                 case MinionKind.SummonHut:
-                    PlayUnitFx("VFX_Unit_Spawn", t.position + t.forward * 1.8f, Quaternion.identity, 1.5f);
+                    PlayUnitFx("VFX_Unit_Spawn", t.position + t.forward * 1.8f * k, Quaternion.identity, 1.5f);
                     break;
             }
         }
@@ -743,10 +815,13 @@ namespace SpellboundVR.Presentation
                     if (view.LastShotCount >= 0 && st.ShotCount > view.LastShotCount && alive) FireTowerShot(view, st.ShotTargetId);
                     view.LastShotCount = st.ShotCount;
                 }
+                // HP 0 → 전장에서 없애고 폭발 + 돌무더기 (경기 재시작 때 다시 세운다)
                 if (alive != view.WasAlive)
                 {
                     view.WasAlive = alive;
-                    view.Root.localScale = alive ? view.OriginalScale : new Vector3(view.OriginalScale.x, view.OriginalScale.y * 0.15f, view.OriginalScale.z);
+                    if (!alive) PlayStructureDestroyFx(view);
+                    view.Root.gameObject.SetActive(alive);
+                    SetActive(view.Rubble, !alive);
                     if (view.HpFill != null) view.HpFill.parent.gameObject.SetActive(alive);
                 }
                 // 넥서스 Lock 표시 (§19): 잠긴 동안 HP바를 회색으로
@@ -770,6 +845,15 @@ namespace SpellboundVR.Presentation
                     else for (int k = 0; k < renderers.Length; k++) renderers[k].SetPropertyBlock(null);
                 }
             }
+        }
+
+        private void PlayStructureDestroyFx(StructureView view)
+        {
+            if (_vfx == null) return;
+            Vector3 basePos = view.Rubble != null ? view.Rubble.transform.position : view.Root.position;
+            _vfx.PlayNamed("VFX_S03_Fireball_Impact", basePos + Vector3.up * view.Size.y * 0.4f, Quaternion.identity, 3f,
+                           Vector3.one * destroyFxScale * 0.5f);
+            _vfx.PlayNamed("VFX_Unit_Death", basePos + Vector3.up * 0.5f, Quaternion.identity, 3f, Vector3.one * destroyFxScale);
         }
 
         private static void SetActive(GameObject go, bool active)

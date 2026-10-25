@@ -236,7 +236,7 @@ namespace SpellboundVR.Input
                 else _templates.Rebuild(_session.LocalDeck, _deck.GetState, _session.Runes);
                 _templatesDirty = false;
             }
-            if (_templates.Candidates.Count == 0)
+            if (_templates.CandidateCount == 0)
             {
                 Fail("No ready runes");
                 return;
@@ -245,11 +245,15 @@ namespace SpellboundVR.Input
             var match = _templates.Recognize(strokes);
             var reject = GestureValidator.ValidateMatch(match, recognition);
             if (logRecognition)
-                Debug.Log($"[CastStateMachine] $P+ → {SpellIds.Code(match.SpellId)} d={match.Distance:0.00} " +
-                          $"2nd={SpellIds.Code(match.SecondSpellId)} d2={(match.SecondDistance < float.MaxValue ? match.SecondDistance.ToString("0.00") : "-")} → {reject} ({strokes.Length}획)");
+                Debug.Log($"[CastStateMachine] 룬 인식 → {SpellIds.Code(match.SpellId)} 점수 {match.Distance:0.000} " +
+                          $"2위 {SpellIds.Code(match.SecondSpellId)} {(match.SecondDistance < float.MaxValue ? match.SecondDistance.ToString("0.000") : "-")} " +
+                          $"(비율 {(match.Ratio < float.MaxValue ? match.Ratio.ToString("0.00") : "-")}) → {reject} ({strokes.Length}획, 후보 {_templates.CandidateCount}종)");
             if (reject != GestureRejectReason.None)
             {
-                Fail(reject == GestureRejectReason.Ambiguous ? "Rune unclear" : "Rune not recognized");
+                // 애매하면 잘못 시전하지 않고 두 후보를 알려 준다 → 다시 그리기
+                Fail(reject == GestureRejectReason.Ambiguous
+                    ? $"Rune unclear: {SpellIds.Code(match.SpellId)} or {SpellIds.Code(match.SecondSpellId)}? Draw again"
+                    : "Rune not recognized");
                 return;
             }
 

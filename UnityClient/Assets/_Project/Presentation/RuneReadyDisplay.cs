@@ -1,4 +1,5 @@
-// §6.2 RuneReady — 인식된 룬이 손 위에 표시된다. Armed · Aiming 단계 안내도 함께 보여준다.
+// §6.2 RuneReady — 인식된 룬이 손가락(검지 끝 · 키보드 모드는 마우스 커서) 위에 표시되고, 시전할 때까지 손가락을 따라다닌다.
+//   Armed · Aiming 단계 안내도 함께 보여준다.
 //   룬 아이콘(RuneTemplate.Icon = Art/Runes/Icons/{SkillId}_s.png)을 원본 가로세로 비율대로 띄운다.
 //   선은 스킬 색, 뒤에 반투명 원형 받침 (Resources/RuneIcon.shader). 아이콘이 없는 룬만 예전처럼 색 구체.
 // 여러 획 룬을 그리는 중(획 사이)에는 "FIST to finish" 안내를 보여준다.
@@ -12,8 +13,10 @@ namespace SpellboundVR.Presentation
 {
     public sealed class RuneReadyDisplay : MonoBehaviour
     {
-        [Tooltip("손 위 표시 위치 — 룬이 커서 손을 가리지 않도록 아이콘 반지름만큼 위로")]
-        public Vector3 offsetAboveHand = new Vector3(0f, 0.32f, 0f);
+        [Tooltip("손가락 위 표시 위치 — 룬이 손가락을 가리지 않도록 아이콘 반지름만큼 위로")]
+        public Vector3 offsetAboveHand = new Vector3(0f, 0.3f, 0f);
+        [Tooltip("손가락을 따라가는 속도 (클수록 바로 붙음, 0 = 즉시) — 트래킹 떨림 완화")]
+        public float followSharpness = 30f;
         public float textSize = 0.006f;
         [Tooltip("아이콘 긴 변 길이 (m) — 손 크기(약 0.1m)의 5배")]
         public float iconSize = 0.5f;
@@ -63,10 +66,17 @@ namespace SpellboundVR.Presentation
             bool strokeGap = state == CastState.Drawing && !_input.IsDrawing && _cast.StrokeCount > 0;
             bool show = strokeGap ||
                         ((state == CastState.RuneReady || state == CastState.Armed || state == CastState.Aiming) && _cast.SelectedSpell != null);
+            bool appeared = show && !_root.gameObject.activeSelf;
             if (show != _root.gameObject.activeSelf) _root.gameObject.SetActive(show);
             if (!show) return;
 
-            if (_input.TryGetRightHandPosition(out var hand)) _root.position = hand + offsetAboveHand;
+            if (_input.TryGetRightHandPosition(out var finger))
+            {
+                Vector3 target = finger + offsetAboveHand;
+                _root.position = appeared || followSharpness <= 0f
+                    ? target
+                    : Vector3.Lerp(_root.position, target, 1f - Mathf.Exp(-followSharpness * Time.deltaTime));
+            }
             if (_head != null)
             {
                 Vector3 toHead = _root.position - _head.position;

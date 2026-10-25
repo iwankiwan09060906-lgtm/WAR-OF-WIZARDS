@@ -1,6 +1,6 @@
 // §15 미니언 웨이브 · §14.5 소환수 · 설치물 — 모든 수치는 MinionDefinition SO, 추후 설정
 // 소환수(S11 · S12 · H06 해골)와 설치물(S13 터렛 · H06 소환탑)도 같은 유닛 풀 · AI를 쓴다.
-//   · 설치물(IsStructure): 이동하지 않음, 타겟 종류 = Structure (플레이어 스킬 · 타워의 대상이 아님, §11)
+//   · 설치물(IsStructure): 이동하지 않음, 타겟 종류 = Structure (타워의 대상은 아니지만 플레이어 스킬에는 맞는다, §11)
 //   · SpawnInterval > 0 이면 그 간격으로 SpawnKind 유닛을 앞쪽에 소환한다 (H06 소환탑)
 
 using SpellboundVR.Contracts;
@@ -14,7 +14,7 @@ namespace SpellboundVR.Combat
         Melee = 0,
         Ranged = 1,
         Brute = 2,
-        /// <summary>S11 도끼 전사 (오크) — 넓은 근접 범위 공격</summary>
+        /// <summary>S11 도끼 전사 (오크) — 넓은 근접 범위 공격, 탱커</summary>
         AxeOrc = 3,
         /// <summary>S12 드래곤 — 비행, 원거리 화염</summary>
         Dragon = 4,
@@ -50,7 +50,7 @@ namespace SpellboundVR.Combat
         public int TowerTargetPriority = 1;
 
         [Header("소환수 · 설치물")]
-        [Tooltip("설치물: 이동하지 않고 플레이어 스킬 · 타워의 대상이 아니다 (§11)")]
+        [Tooltip("설치물: 이동하지 않고 타워의 대상이 아니다 (플레이어 스킬에는 맞는다, §11)")]
         public bool IsStructure;
         [Tooltip("소환수 (미니언과 같은 규칙, 타겟 종류만 Summon)")]
         public bool IsSummon;
@@ -91,11 +91,11 @@ namespace SpellboundVR.Combat
                     d.StructureDamageMultiplier = 2f; d.PrefersStructures = true; d.TowerTargetPriority = 0;
                     break;
                 case MinionKind.AxeOrc:
-                    // 미니언 3~4기를 한 번에 베는 탱커형 근접 (도끼 휘두르기 반경 2m)
+                    // 미니언 3~4기를 한 번에 베는 탱커형 근접 (도끼 휘두르기 반경 2.4m)
                     d.IsSummon = true;
-                    d.MaxHp = 700f; d.Damage = 40f; d.AttackInterval = 1.6f; d.AttackRange = 1.3f;
-                    d.MoveSpeed = 1.5f; d.DetectRange = 7f; d.BodyRadius = 0.6f;
-                    d.SplashRadius = 2.0f; d.StructureDamageMultiplier = 1.5f; d.TowerTargetPriority = 0;
+                    d.MaxHp = 1100f; d.Damage = 65f; d.AttackInterval = 1.6f; d.AttackRange = 1.5f;
+                    d.MoveSpeed = 1.5f; d.DetectRange = 7f; d.BodyRadius = 0.8f;
+                    d.SplashRadius = 2.4f; d.StructureDamageMultiplier = 1.5f; d.TowerTargetPriority = 0;
                     d.Lifetime = 40f;
                     break;
                 case MinionKind.Dragon:
@@ -117,15 +117,16 @@ namespace SpellboundVR.Combat
                     // 타워(초당 88, 사거리 7)보다 약간 약한 고정 포탑
                     d.IsStructure = true;
                     d.MaxHp = 900f; d.Damage = 55f; d.AttackInterval = 1f; d.AttackRange = 7f;
-                    d.MoveSpeed = 0f; d.DetectRange = 7f; d.BodyRadius = 1.0f;
+                    d.MoveSpeed = 0f; d.DetectRange = 7f; d.BodyRadius = 0.7f;
                     d.Lifetime = 45f;
                     break;
                 case MinionKind.SummonHut:
                     d.IsStructure = true;
-                    d.MaxHp = 800f; d.Damage = 0f; d.AttackInterval = 0f; d.AttackRange = 0f;
-                    d.MoveSpeed = 0f; d.DetectRange = 0f; d.BodyRadius = 1.0f;
-                    d.SpawnInterval = 3f; d.SpawnKind = MinionKind.Skeleton;
-                    d.Lifetime = 25f;
+                    // 고위력(게임당 3회) — 단단하고 오래 버티며 해골을 빠르게 내보낸다
+                    d.MaxHp = 1400f; d.Damage = 0f; d.AttackInterval = 0f; d.AttackRange = 0f;
+                    d.MoveSpeed = 0f; d.DetectRange = 0f; d.BodyRadius = 0.8f;
+                    d.SpawnInterval = 2.5f; d.SpawnKind = MinionKind.Skeleton;
+                    d.Lifetime = 40f;
                     break;
             }
             return d;

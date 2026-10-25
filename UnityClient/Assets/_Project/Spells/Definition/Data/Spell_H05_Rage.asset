@@ -17,8 +17,8 @@ MonoBehaviour:
   VfxName: Rage
   ThemeColor: {r: 1, g: 0.25, b: 0.15, a: 1}
   Tier: 1
-  Targeting: 7
-  Executor: 6
+  Targeting: 1
+  Executor: 1
   Behavior: 18
   FocusCategory: 1
   Dodgeable: 0
@@ -33,17 +33,18 @@ MonoBehaviour:
   TickInterval: 0.5
   TickDamageRamp: 0
   MaxTickDamage: 0
-  FieldHalfDepth: 2.5
+  FieldHalfDepth: 4
   LaneStartDepth: 0
   LaneEndDepth: 1
   StatusEffectId: 
-  EffectDuration: 5
+  EffectDuration: 8
   ShieldAmount: 0
   RegenDelay: 3
   RegenPerSecond: 0
-  AttackMultiplier: 1.5
-  AttackSpeedMultiplier: 1.5
-  MoveSpeedMultiplier: 1.4
-  IncomingDamageMultiplier: 0.7
+  AttackMultiplier: 2
+  AttackSpeedMultiplier: 1.7
+  MoveSpeedMultiplier: 1.5
+  IncomingDamageMultiplier: 0.5
   EffectRatio: 1
+  KnockbackDistance: 0
   SummonKind: 0

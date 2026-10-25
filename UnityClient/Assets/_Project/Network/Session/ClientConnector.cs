@@ -26,6 +26,11 @@ namespace SpellboundVR.Network
         private bool _connecting;
 
         public string Status { get; private set; } = "Idle";
+        public int Attempts => _attempts;
+        public int MaxAttempts => maxRetries;
+        /// <summary>마지막 접속 실패를 사람이 읽을 수 있게 (대기 화면에 표시)</summary>
+        public string LastFailure { get; private set; } = "";
+        public bool IsConnected => _runner != null && _runner.IsRunning && _clientBound;
 
         /// <summary>서버 왕복 지연 (ms), 미접속 시 -1 (§21.3 실측 지연 확인용)</summary>
         public float PingMs => _runner != null && _runner.IsRunning
@@ -57,6 +62,22 @@ namespace SpellboundVR.Network
             Status = "Gave up connecting";
         }
 
+        private static string Explain(ShutdownReason reason)
+        {
+            switch (reason)
+            {
+                case ShutdownReason.GameNotFound:
+                    return "PC 게임 서버를 찾지 못했습니다. PC에서 SpellboundServer(RunServer.bat)를 먼저 켜 주세요.";
+                case ShutdownReason.GameIsFull: return "서버 방이 가득 찼습니다.";
+                case ShutdownReason.GameClosed: return "서버 방이 닫혀 있습니다.";
+                case ShutdownReason.PhotonCloudTimeout:
+                case ShutdownReason.ConnectionTimeout: return "Photon 서버에 연결하지 못했습니다. 인터넷 연결을 확인하세요.";
+                case ShutdownReason.InvalidAuthentication:
+                case ShutdownReason.AuthenticationTicketExpired: return "Photon 인증에 실패했습니다. AppId 설정을 확인하세요.";
+                default: return "서버 접속 실패 (" + reason + ")";
+            }
+        }
+
         private async System.Threading.Tasks.Task<bool> StartRunner()
         {
             if (_runner != null)
@@ -86,6 +107,7 @@ namespace SpellboundVR.Network
             if (!result.Ok)
             {
                 Debug.LogWarning("[ClientConnector] 접속 실패: " + result.ShutdownReason + " " + result.ErrorMessage);
+                LastFailure = Explain(result.ShutdownReason);
                 return false;
             }
             Status = "Connected";
@@ -116,6 +138,21 @@ namespace SpellboundVR.Network
             }
         }
 
+        /// <summary>접속을 시도하지 못하고 포기했는지 (서버가 꺼져 있음)</summary>
+        public bool GaveUp => !_left && _attempts >= maxRetries && !_connecting && (_runner == null || !_runner.IsRunning);
+
+        private bool _left;
+
+        /// <summary>경기를 떠난다 (기권 · 나가기) — 다시 접속하지 않는다</summary>
+        public void Leave()
+        {
+            _left = true;
+            _attempts = maxRetries;
+            StopAllCoroutines();
+            if (_runner != null && _runner.IsRunning) _ = _runner.Shutdown();
+            Status = "Left";
+        }
+
         public override void OnDisconnectedFromServer(NetworkRunner runner, NetDisconnectReason reason)
         {
             Status = "Disconnected: " + reason;
@@ -129,7 +166,7 @@ namespace SpellboundVR.Network
             Status = "Shutdown: " + shutdownReason;
             _clientBound = false;
             _viewBound = false;
-            if (isActiveAndEnabled && _attempts < maxRetries) StartCoroutine(ReconnectLater());
+            if (isActiveAndEnabled && !_left && _attempts < maxRetries) StartCoroutine(ReconnectLater());
         }
 
         private IEnumerator ReconnectLater()

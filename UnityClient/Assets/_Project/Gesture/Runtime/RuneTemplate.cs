@@ -49,26 +49,31 @@ namespace SpellboundVR.Gesture
         public Texture2D Icon;
         public List<RuneSample> Samples = new List<RuneSample>();
 
-        [NonSerialized] private List<PointCloud> _clouds;
+        [NonSerialized] private List<RuneFeatures> _features;
+        [NonSerialized] private int _featureSampleCount = -1;
 
-        public IReadOnlyList<PointCloud> GetClouds()
+        /// <summary>인식용 템플릿 특징 (샘플 + 증강 변형, 처음 한 번만 계산)</summary>
+        public IReadOnlyList<RuneFeatures> GetFeatures()
         {
-            if (_clouds != null && _clouds.Count == CountValidSamples()) return _clouds;
-            _clouds = new List<PointCloud>(Samples.Count);
+            int valid = CountValidSamples();
+            if (_features != null && _featureSampleCount == valid) return _features;
+            var samples = new List<(string, Vector2[][])>(Samples.Count);
             for (int i = 0; i < Samples.Count; i++)
             {
                 var s = Samples[i];
                 if (s?.Points == null || s.Points.Length < 2) continue;
-                _clouds.Add(PointCloud.FromStrokes(SpellId, RuneName + "/" + s.Label, s.SplitStrokes()));
+                samples.Add((s.Label ?? "sample", s.SplitStrokes()));
             }
-            return _clouds;
+            _features = RuneRecognizer.BuildTemplateFeatures(SpellId, RuneName, samples);
+            _featureSampleCount = valid;
+            return _features;
         }
 
         /// <summary>새 샘플 추가 (에디터 녹화 · 튜닝용)</summary>
         public void AddSample(string label, Vector2[] points)
         {
             Samples.Add(new RuneSample { Label = label, Points = points });
-            _clouds = null;
+            _features = null;
         }
 
         /// <summary>여러 획 샘플 추가 (획 순서대로)</summary>
@@ -83,7 +88,7 @@ namespace SpellboundVR.Gesture
                 points.AddRange(strokes[s]);
             }
             Samples.Add(new RuneSample { Label = label, Points = points.ToArray(), StrokeStarts = starts.ToArray() });
-            _clouds = null;
+            _features = null;
         }
 
         private int CountValidSamples()
@@ -94,6 +99,6 @@ namespace SpellboundVR.Gesture
             return n;
         }
 
-        private void OnValidate() => _clouds = null;
+        private void OnValidate() => _features = null;
     }
 }

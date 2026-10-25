@@ -57,6 +57,10 @@ TOKEN_EXPIRY_HOURS = 24
 
 # Google 로그인: 클라이언트 ID 는 환경변수 GOOGLE_CLIENT_ID → 이 파일 첫 줄 → 관리자 설정 auth.google_client_id 순서로 찾는다
 GOOGLE_CLIENT_ID_FILE = os.path.join(SERVER_DIR, "google_client_id.txt")
+# Unity · Quest 기기 로그인(Device Flow)용 클라이언트 ID ("TV 및 입력 제한 기기" 유형) — 환경변수 GOOGLE_DEVICE_CLIENT_ID → 관리자 설정 auth.google_device_client_id
+DEFAULT_GOOGLE_DEVICE_CLIENT_ID = "538311580843-8ikodv8md34jflgqn1d8ijevuocpu80m.apps.googleusercontent.com"
+# 예전에 쓰던 기기 로그인 클라이언트도 계속 받는다 (이미 만들어진 DB 설정값에 남아 있을 수 있음)
+KNOWN_GOOGLE_DEVICE_CLIENT_IDS = ("538311580843-8ikodv8md34jflgqn1d8ijevuocpu80m.apps.googleusercontent.com", "538311580843-5u7lsc83jpkilmnufhhucsg0ggo7fcec.apps.googleusercontent.com")
 
 # 시전 신호를 받을 Unity (SpellCastReceiver.cs). 관리자 설정 unity.spell_udp 로도 바꿀 수 있다.
 UNITY_SPELL_UDP = os.environ.get("WOW_UNITY_SPELL_UDP", "127.0.0.1:5067")
@@ -103,11 +107,11 @@ UDP_SOCK = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 # (id, 코드, 이름, 영문, 등급, 대상, UI 종류, 쿨타임, 피해, 회복, 색, 설명)
 SKILLS = [
     (1, "S01", "연막", "Smoke", "Normal", "Column", "projectile", 5.0, 0, 0, "#94a3b8", "적중 시 상대 명중률 감소 및 시야 외곽 안개 부여"),
-    (2, "S02", "독 장판", "PoisonField", "Normal", "Area", "area", 5.0, 3, 0, "#84cc16", "구역 내 초당 지속 피해 누적"),
+    (2, "S02", "독 장판", "PoisonField", "Normal", "Area", "area", 5.0, 3, 0, "#84cc16", "조준 지점에 독병을 던져 3열을 가로지르는 독 장판 (머물수록 피해 증가)"),
     (3, "S03", "파이어볼", "Fireball", "Normal", "Area", "area", 5.0, 14, 0, "#f97316", "소범위 집중 즉발 피해"),
     (4, "S04", "화살 세례", "ArrowRain", "Normal", "Area", "area", 5.0, 8, 0, "#fbbf24", "광범위 다수 분산 피해"),
-    (5, "S05", "토네이도", "Tornado", "Normal", "Column", "projectile", 5.0, 6, 0, "#67e8f9", "경로 상 적 유닛 넉백 및 피해"),
-    (6, "S06", "번개", "Lightning", "Normal", "Area", "area", 5.0, 16, 0, "#a78bfa", "지정 위치 타격 및 스플래시 피해"),
+    (5, "S05", "토네이도", "Tornado", "Normal", "Column", "projectile", 5.0, 6, 0, "#67e8f9", "레인을 쓸고 지나가는 회오리 — 닿은 적 유닛을 뒤로 밀어내고 피해"),
+    (6, "S06", "번개", "Lightning", "Normal", "Area", "area", 5.0, 16, 0, "#a78bfa", "지정 위치의 세로로 긴 범위(한 레인)에 낙뢰 3번"),
     (7, "S07", "총난사", "Barrage", "Normal", "Column", "projectile", 5.0, 12, 0, "#ec4899", "열 전방 유닛부터 순차 연사 타격"),
     (8, "S08", "방어 쉴드", "Shield", "Normal", "Self", "buff", 5.0, 0, 0, "#22d3ee", "피해 흡수 쉴드 생성 (피격 없을 시 HP 회복)"),
     (9, "S09", "타워 버프", "TowerBuff", "Normal", "Self", "buff", 5.0, 0, 0, "#c4b5fd", "본인 타워 방어력/공격력 일시 강화 (타워 파괴 시 비활성화)"),
@@ -115,11 +119,11 @@ SKILLS = [
     (11, "S11", "도끼 전사", "AxeWarrior", "Normal", "Summon", "summon", 5.0, 0, 0, "#dc2626", "근접 공격형 소환수 소환"),
     (12, "S12", "드래곤", "Dragon", "Normal", "Summon", "summon", 5.0, 0, 0, "#818cf8", "공중 비행 원거리 화염 소환수 소환"),
     (13, "S13", "터렛", "Turret", "Normal", "Structure", "install", 5.0, 0, 0, "#71717a", "적 유닛 요격용 고정 포탑 설치 (진영당 1기)"),
-    (101, "H01", "프리즈", "Freeze", "HighPower", "Global", "global", 20.0, 0, 0, "#38bdf8", "적 전체 미니언 및 소환수 5초간 행동 정지"),
-    (102, "H02", "레이저 빔", "LaserBeam", "HighPower", "Beam", "beam", 20.0, 30, 0, "#e879f9", "0.5초 예고선 후 열 전체 관통 타격 (유닛 및 끝의 플레이어)"),
-    (103, "H03", "흡혈", "Vampire", "HighPower", "Column", "projectile", 20.0, 12, 0, "#be123c", "적 플레이어/유닛 타격 시 실 피해량 비례 HP 회복"),
-    (104, "H04", "반사 결계", "ReflectBarrier", "HighPower", "Self", "buff", 20.0, 0, 0, "#2dd4bf", "상대 플레이어의 스킬 공격 1회 무효화 및 일부 피해 반사"),
-    (105, "H05", "분노", "Rage", "HighPower", "Global", "global", 20.0, 0, 0, "#ef4444", "필드 내 기존 아군 유닛들의 공격력/공격속도 증가"),
+    (101, "H01", "프리즈", "Freeze", "HighPower", "Global", "global", 20.0, 0, 0, "#38bdf8", "적 전체 미니언 · 소환수 · 설치물 · 타워 7초간 정지 + 피해"),
+    (102, "H02", "레이저 빔", "LaserBeam", "HighPower", "Beam", "beam", 20.0, 30, 0, "#e879f9", "0.5초 예고선 후 4초간 유지되는 빔으로 열 전체 관통 타격 (유닛 및 끝의 플레이어)"),
+    (103, "H03", "흡혈", "Vampire", "HighPower", "Beam", "beam", 20.0, 12, 0, "#be123c", "조준 레인의 적 플레이어 HP를 흡수 (못 맞히면 레인의 유닛 · 설치물에서 흡수)"),
+    (104, "H04", "반사 결계", "ReflectBarrier", "HighPower", "Self", "buff", 20.0, 0, 0, "#2dd4bf", "9초간 상대 플레이어의 스킬 피해 무효화 및 100% 반사"),
+    (105, "H05", "분노", "Rage", "HighPower", "Area", "area", 20.0, 0, 0, "#ef4444", "지정 위치에 3열 분노 장판 — 들어온 아군 유닛 공격력 · 공격 속도 · 이동 속도 · 방어력 대폭 증가"),
     (106, "H06", "소환탑", "SummonTower", "HighPower", "Structure", "install", 20.0, 0, 0, "#8b5cf6", "주기적으로 소형 근접 소환수를 생성하는 탑 설치"),
 ]
 SKILL_BY_CODE = {s[1]: s for s in SKILLS}
@@ -480,6 +484,7 @@ def init_db():
             ("rating.ranked_win", "16", "랭킹전 승리 시 레이팅 +"),
             ("rating.ranked_lose", "16", "랭킹전 패배 시 레이팅 -"),
             ("auth.google_client_id", "", "Google 로그인 OAuth 클라이언트 ID (웹 애플리케이션)"),
+            ("auth.google_device_client_id", DEFAULT_GOOGLE_DEVICE_CLIENT_ID, "Google 기기 로그인(Unity · Quest Device Flow) OAuth 클라이언트 ID (TV 및 입력 제한 기기)"),
             ("unity.spell_udp", UNITY_SPELL_UDP, "시전 신호를 보낼 Unity 주소 (호스트:포트)"),
             ("cooldown.normal", "5.0", "일반 스킬 기본 쿨타임 (초)"),
             ("cooldown.highpower", "20.0", "고위력 스킬 기본 쿨타임 (초)"),
@@ -755,7 +760,9 @@ class WowHttpHandler(BaseHTTPRequestHandler):
         # 0. 로그인 설정 (웹 UI 가 Google 버튼을 쓸 수 있는지)
         if path == "/api/auth/config":
             cid = google_client_id()
-            return self.send_json(200, {"googleClientId": cid, "googleEnabled": bool(cid)})
+            dev = google_device_client_id()
+            return self.send_json(200, {"googleClientId": cid, "googleEnabled": bool(cid),
+                                        "googleDeviceClientId": dev, "googleDeviceEnabled": bool(dev)})
 
         # 0-1. 접속 중인 플레이어 id (하트비트 60초 이내 + 데모 NPC 4명)
         if path == "/api/presence/online":
@@ -1249,11 +1256,11 @@ class WowHttpHandler(BaseHTTPRequestHandler):
 
         # 2-1. Google 로그인 (/api/auth/google) — 웹 UI 가 Google 팝업에서 받은 토큰을 서버가 Google 에 확인
         if path == "/api/auth/google":
-            cid = google_client_id()
-            if not cid:
+            cids = google_client_ids()
+            if not cids:
                 return self.send_error_json(400, "서버에 Google 클라이언트 ID 가 설정되지 않았습니다. (Docs/Backend/WebUiServer.md 참고)")
             try:
-                info = verify_google_token(cid, body.get("accessToken"), body.get("credential"))
+                info = verify_google_token(cids, body.get("accessToken"), body.get("credential"))
             except PermissionError as e:
                 return self.send_error_json(401, str(e))
             except Exception as e:
@@ -2052,6 +2059,25 @@ def google_client_id():
         return ""
 
 
+def google_device_client_id():
+    cid = os.environ.get("GOOGLE_DEVICE_CLIENT_ID", "").strip()
+    if cid:
+        return cid
+    try:
+        with get_db() as conn:
+            return get_config(conn, "auth.google_device_client_id", DEFAULT_GOOGLE_DEVICE_CLIENT_ID).strip()
+    except Exception:
+        return DEFAULT_GOOGLE_DEVICE_CLIENT_ID
+
+
+def google_client_ids():
+    """이 서버가 받아 주는 Google 토큰의 대상(aud) — 웹 UI 클라이언트 + Unity 기기 로그인 클라이언트(설정값은 쉼표로 여러 개 가능)"""
+    ids = {google_client_id()}
+    ids.update(c.strip() for c in google_device_client_id().split(","))
+    ids.update(KNOWN_GOOGLE_DEVICE_CLIENT_IDS)
+    return {c for c in ids if c}
+
+
 def _http_json(url, headers=None):
     req = urllib.request.Request(url, headers=headers or {})
     try:
@@ -2063,16 +2089,18 @@ def _http_json(url, headers=None):
         raise
 
 
-def verify_google_token(client_id, access_token=None, id_token=None):
-    """Google 에 토큰을 직접 물어 본다 (서명 · 만료 확인은 Google 이 함). 우리 클라이언트 ID 로 발급된 것만 인정."""
+def verify_google_token(client_ids, access_token=None, id_token=None):
+    """Google 에 토큰을 직접 물어 본다 (서명 · 만료 확인은 Google 이 함). 우리 클라이언트 ID(웹 · 기기) 로 발급된 것만 인정."""
+    if isinstance(client_ids, str):
+        client_ids = {client_ids}
     if id_token:
         info = _http_json("https://oauth2.googleapis.com/tokeninfo?" + urlencode({"id_token": id_token}))
-        if info.get("aud") != client_id:
+        if info.get("aud") not in client_ids:
             raise PermissionError("다른 앱용으로 발급된 Google 토큰입니다.")
         name = info.get("name", "")
     elif access_token:
         info = _http_json("https://oauth2.googleapis.com/tokeninfo?" + urlencode({"access_token": access_token}))
-        if client_id not in (info.get("aud"), info.get("azp")):
+        if info.get("aud") not in client_ids and info.get("azp") not in client_ids:
             raise PermissionError("다른 앱용으로 발급된 Google 토큰입니다.")
         profile = _http_json("https://openidconnect.googleapis.com/v1/userinfo",
                              {"Authorization": "Bearer " + access_token})
@@ -2136,6 +2164,47 @@ def send_spell_to_unity(msg):
 # ─────────────────────────────────────────────────────────────────────────────
 # 메인 서버 실행 진입점
 # ─────────────────────────────────────────────────────────────────────────────
+DISCOVERY_PORT = 48080
+
+
+def start_discovery_responder(http_port):
+    """같은 Wi-Fi의 Quest가 "WOW_DISCOVER"를 UDP 방송하면 "WOW_SERVER <포트>"로 답한다 — 헤드셋에서 서버 IP를 칠 필요가 없게."""
+    import socket
+    import threading
+
+    def loop():
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            sock.bind(("0.0.0.0", DISCOVERY_PORT))
+        except OSError as e:
+            print(f"    - 서버 자동 찾기: 꺼짐 (UDP {DISCOVERY_PORT} 사용 불가: {e})")
+            return
+        print(f"    - 서버 자동 찾기: 켜짐 (UDP {DISCOVERY_PORT}) — Quest의 C01 '서버 자동 찾기'가 이 서버를 찾습니다")
+        while True:
+            try:
+                data, addr = sock.recvfrom(256)
+                if data.startswith(b"WOW_DISCOVER"):
+                    sock.sendto(f"WOW_SERVER {http_port}".encode("utf-8"), addr)
+            except OSError:
+                continue
+
+    threading.Thread(target=loop, daemon=True).start()
+
+
+def lan_addresses():
+    import socket
+    ips = set()
+    try:
+        for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
+            ip = info[4][0]
+            if not ip.startswith("127."):
+                ips.add(ip)
+    except OSError:
+        pass
+    return sorted(ips)
+
+
 def main():
     try:
         if hasattr(sys.stdout, "reconfigure"):
@@ -2163,15 +2232,19 @@ def main():
     print(f"    - 메인 웹 페이지: http://localhost:{port}/")
     print(f"    - 관리자 콘솔:   http://localhost:{port}/#/admin (관리자 계정으로 로그인)")
     print(f"    - 헬스 체크:     http://localhost:{port}/api/health")
+    for ip in lan_addresses():
+        print(f"    - Quest 접속 주소: http://{ip}:{port}   (C01 '서버 자동 찾기'가 못 찾으면 이 IP를 '주소 변경'에)")
     print("    - 기본 계정: 데모(demo@wow.dev / demo1234), 관리자(admin@wow.dev / admin1234)")
     print("=================================================================")
     print("[*] 서버가 요청을 기다리고 있습니다. (종료하려면 Ctrl+C)...")
 
     host, uport = unity_spell_target()
     print(f"    - 웹 UI 룬 시전 → Unity UDP {host}:{uport} (+ SSE /api/live/events 'spell')")
-    print(f"    - Google 로그인: {'켜짐' if google_client_id() else '꺼짐 (Backend/google_client_id.txt 에 클라이언트 ID)'}")
+    print(f"    - Google 로그인 (웹): {'켜짐' if google_client_id() else '꺼짐 (Backend/google_client_id.txt 에 클라이언트 ID)'}")
+    print(f"    - Google 기기 로그인 (Unity · Quest): {google_device_client_id() or '꺼짐'}")
     print(f"    - 룬 인식기: {'GestureTools/MediaPipe/wow_runes.py' if wow_runes else '없음 (룬 인식 API 503)'}")
 
+    start_discovery_responder(port)
     server = ThreadingHTTPServer(("0.0.0.0", port), WowHttpHandler)
     server.daemon_threads = True      # SSE 연결이 남아 있어도 Ctrl+C 로 바로 종료
     try:

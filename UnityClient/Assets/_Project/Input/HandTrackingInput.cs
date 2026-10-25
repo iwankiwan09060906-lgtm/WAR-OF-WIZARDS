@@ -162,9 +162,16 @@ namespace SpellboundVR.Input
             return true;
         }
 
+        /// <summary>룬 표시 기준점 = 검지 끝 (없으면 손바닥) — 인식된 룬이 손가락을 따라다닌다</summary>
         public bool TryGetRightHandPosition(out Vector3 position)
         {
-            if (rightHand != null && rightHand.TryGetJoint(HandJoint.Palm, out position)) return true;
+            if (rightHand == null)
+            {
+                position = default;
+                return false;
+            }
+            if (rightHand.TryGetJoint(HandJoint.IndexTip, out position)) return true;
+            if (rightHand.TryGetJoint(HandJoint.Palm, out position)) return true;
             position = default;
             return false;
         }

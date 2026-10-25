@@ -37,7 +37,7 @@ MonoBehaviour:
   LaneStartDepth: 0
   LaneEndDepth: 1
   StatusEffectId: H04_Reflect
-  EffectDuration: 6
+  EffectDuration: 9
   ShieldAmount: 0
   RegenDelay: 3
   RegenPerSecond: 0
@@ -45,5 +45,6 @@ MonoBehaviour:
   AttackSpeedMultiplier: 1
   MoveSpeedMultiplier: 1
   IncomingDamageMultiplier: 1
-  EffectRatio: 0.8
+  EffectRatio: 1
+  KnockbackDistance: 0
   SummonKind: 0
