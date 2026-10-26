@@ -1,7 +1,7 @@
-// 관리자 콘솔 (ROLE_ADMIN) — 현황 · 사용자 · 게임 설정 · 공지 작성 · 실시간 방송 · 로그인 기록 · 감사 로그
+// 관리자 콘솔 (ROLE_ADMIN) — 현황 · 사용자 · 게임 설정 · 공지 작성 · 실시간 방송 · AI 학습 · 로그인 기록 · 감사 로그
 import { api, toast, busy, icon, esc, headerHTML } from "../core.js";
 
-const TABS = [["dash", "현황"], ["users", "사용자"], ["configs", "게임 설정"], ["notice", "공지 · 방송"], ["logins", "로그인 기록"], ["audit", "감사 로그"]];
+const TABS = [["dash", "현황"], ["users", "사용자"], ["configs", "게임 설정"], ["notice", "공지 · 방송"], ["ai", "AI 학습"], ["logins", "로그인 기록"], ["audit", "감사 로그"]];
 
 export default {
   title: "관리자",
@@ -23,7 +23,7 @@ export default {
       try {
         if (tab === "dash") {
           const d = await api.admin.dashboard();
-          pane.innerHTML = `<div class="kpis">${[["totalUsers", "가입자"], ["totalMatches", "대전 기록"], ["gestureSamples", "제스처 샘플"], ["motionRecordings", "모션 녹화"], ["activeSseClients", "실시간 연결"]]
+          pane.innerHTML = `<div class="kpis">${[["totalUsers", "가입자"], ["totalMatches", "대전 기록"], ["gestureSamples", "제스처 샘플"], ["motionRecordings", "모션 녹화"], ["aiExperiences", "AI 학습 경험"], ["activeSseClients", "실시간 연결"]]
             .map(([k, l]) => `<div class="card kpi"><b>${d[k] ?? 0}</b><span>${l}</span></div>`).join("")}</div>
             <div class="note info" style="margin-top:16px">DB: ${esc(d.dbStatus)}</div>`;
         }
@@ -65,6 +65,32 @@ export default {
             e.preventDefault();
             try { await api.admin.broadcast(pane.querySelector("#bm").value.trim()); toast("방송했습니다.", "ok"); e.target.reset(); } catch (ex) { toast(ex.message, "error"); }
           });
+        }
+        if (tab === "ai") {
+          const draw = (L, note = "") => {
+            const p = L.policy || {};
+            pane.innerHTML = `<div class="kpis">${[[L.experiences, "모은 경험"], [L.labeled, "결과 이름표"], [L.games, "판"], [L.frames, "화면 사진"]]
+              .map(([v, l]) => `<div class="card kpi"><b>${v ?? 0}</b><span>${l}</span></div>`).join("")}</div>
+              <section class="card card-pad stack" style="margin-top:16px">
+                <h2 class="h2">${icon("chart")}배운 것</h2>
+                ${p.trained ? `<p class="muted">${esc(p.trainedAt)} · 경험 ${p.samples}개 · ${p.games}판 · 상황 ${p.situations}갈래</p>
+                  <div class="list">${(p.topSpells || []).map((s) => `<div class="row"><span class="grow"><span class="t">${esc(s.spellId)}</span><br><span class="s">${s.n}번 사용</span></span><span class="chip ${s.value > 0 ? "green" : "red"}">가치 ${s.value} · 승률 ${Math.round(s.winRate * 100)}%</span></div>`).join("")}</div>
+                  ${p.follow?.followed ? `<p class="hint">AI 추천대로 쓴 수: 승률 ${Math.round(p.follow.followed.winRate * 100)}% (${p.follow.followed.n}번) · 직접 고른 수: ${p.follow.own ? Math.round(p.follow.own.winRate * 100) : 0}%</p>` : ""}`
+                : `<p class="muted">아직 학습 전입니다. 판이 끝나 결과가 붙은 경험이 쌓이면 자동으로 학습합니다 (게임 설정 ai.train_every).</p>`}
+                <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn play" data-ai="train">${icon("refresh")}지금 학습</button>
+                  <button class="btn" data-ai="dataset">${icon("book")}VLM 미세조정 데이터셋 만들기</button></div>
+                ${note ? `<div class="note info">${note}</div>` : ""}
+              </section>`;
+          };
+          draw(await api.aiLearning());
+          pane.onclick = async (e) => {
+            const b = e.target.closest("[data-ai]");
+            if (!b) return;
+            try {
+              if (b.dataset.ai === "train") { await busy(b, () => api.admin.aiTrain(), "학습 중…"); draw(await api.aiLearning(), "다시 학습했습니다. 다음 전략 요청부터 반영됩니다."); }
+              else { const r = await busy(b, () => api.admin.aiDataset(), "만드는 중…"); draw(await api.aiLearning(), `데이터셋 ${r.lines}줄 (화면 사진 ${r.withImage}장) → 서버 PC ${esc(r.dir)}`); }
+            } catch (ex) { toast(ex.message, "error"); }
+          };
         }
         if (tab === "logins") pane.innerHTML = table(await api.admin.loginHistory(), [["created_at", "시간"], ["email", "이메일"], ["status", "구분"], ["failure_reason", "비고"]]);
         if (tab === "audit") pane.innerHTML = table(await api.admin.auditLogs(), [["created_at", "시간"], ["admin_user_id", "관리자"], ["action", "작업"], ["target_type", "대상"], ["details", "내용"]]);

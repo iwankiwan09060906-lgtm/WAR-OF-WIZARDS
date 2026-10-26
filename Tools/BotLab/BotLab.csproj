@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- War of Wizards 봇 승률 측정기: Unity 없이 실제 전투 코드(UnityClient/Assets/_Project)를 그대로 컴파일해서 봇끼리 대전 -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <LangVersion>9.0</LangVersion>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <NoWarn>CS0414;CS0649;CS0169;CS0067;CS8632</NoWarn>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <P>../../UnityClient/Assets/_Project/</P>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="*.cs" />
+    <Compile Include="$(P)Combat/**/*.cs" />
+    <Compile Include="$(P)Spells/**/*.cs" />
+    <Compile Include="$(P)Contracts/**/*.cs" />
+    <Compile Include="$(P)Bot/**/*.cs" />
+    <Compile Include="$(P)Deck/**/*.cs" />
+    <Compile Include="$(P)Arena/ArenaGeometry.cs" />
+    <Compile Include="$(P)Core/MatchRuleConfig.cs" />
+    <Compile Include="$(P)Core/TeamUtil.cs" />
+    <Compile Include="$(P)Utils/DeterministicRandom.cs" />
+    <Compile Include="$(P)Network/Authority/**/*.cs" />
+    <Compile Include="$(P)Network/Events/IMatchEventSink.cs" />
+    <Compile Include="$(P)Network/Sync/MatchSnapshot.cs" />
+  </ItemGroup>
+</Project>

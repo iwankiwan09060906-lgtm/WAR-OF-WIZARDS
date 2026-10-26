@@ -13,8 +13,12 @@ Unity 게임 코드(전투 · 입력 · 네트워크 · 스킬)는 건드리지 
 ```text
 WAR-OF-WIZARDS/
 ├── Backend/                         ★ 백엔드 서버 (Python 3.10+, 외부 패키지 없음)
-│   ├── wow_server.py                  - 서버 하나에 전부: 인증 · 덱 · 전적 · 매칭 큐 · 친선전 · 친구 · 우편 · 랭킹 · 관리자
+│   ├── wow_server.py                  - 서버 하나에 전부: 인증 · 덱 · 전적 · 매칭 큐(1:1 · 3 · 4인 개인전) · 친선전 · 친구 · 우편 · 랭킹 · 관리자
+│   ├── wow_ai.py                      - AI 전략 코치: VLM(Claude · Ollama) / 규칙 AI → /api/ai/strategy
+│   ├── wow_hands.py                   - 서버 MediaPipe 손 추적 → /api/mediapipe/frame
+│   ├── wow_learn.py                   - AI 학습: 경기 경험 → 판 결과로 학습 → 전략 반영 · VLM 미세조정 데이터셋
 │   ├── run_server.bat                 - 더블 클릭으로 실행 (http://localhost:8080)
+│   ├── run_server_ai.bat              - AI 까지 켜서 실행 (MediaPipe · anthropic 을 GestureTools/MediaPipe/.venv 에 설치)
 │   ├── open-firewall.bat              - Quest/다른 PC 에서 접속할 때 8080 포트 열기 (관리자 권한, 한 번만)
 │   ├── test_web_ui_api.py             - 자동 검사 59개 (임시 DB 로 서버를 따로 띄움)
 │   ├── test_server.py                 - 실행 중인 서버 간단 확인
@@ -35,6 +39,9 @@ WAR-OF-WIZARDS/
 │
 └── Docs/
     ├── Backend/WebUiServer.md         - 웹 화면 목록 · Google 로그인 · Unity 연결 상세
+    ├── Backend/MultiplayerAi.md       - 개인전 2~4명 · 공식 팀 계정(1조~4조) · AI 전략 코치 · 서버 MediaPipe · Unity 담당 메모
+    ├── Backend/AiLearning.md          - AI 가 게임을 배우게 하기: 경험 수집 · 자동 학습 · VLM 미세조정(LoRA, Backend/ai_finetune/run_finetune.bat)
+    ├── Bot/AiStrategyBot.md           - Unity AI 전략 봇 (Bot/Brains/AiStrategyBrain · Backend/AiStrategyLink) · 승률 측정기 Tools/BotLab
     ├── Backend/WebDesign.md, WebProduct.md - 웹 UI 디자인 규칙 · 제품 설명
     └── Input/MediaPipeHandInput.md    - 손 추적기 메시지 형식 · 기준값 조정
 ```
@@ -45,6 +52,8 @@ WAR-OF-WIZARDS/
 
 1. `Backend/run_server.bat` 더블 클릭 → 브라우저에서 `http://localhost:8080/`
    - 데모 계정 `demo@wow.dev` / `demo1234`, 관리자 `admin@wow.dev` / `admin1234`
+   - 공식 팀 계정 `1조`/`1111` · `2조`/`2222` · `3조`/`3333` · `4조`/`4444` (Unity 는 `group1@wow.dev` ~ `group4@wow.dev`)
+   - AI(VLM 전략 코치 · 서버 MediaPipe)까지 쓰려면 `Backend/run_server_ai.bat` — [`Docs/Backend/MultiplayerAi.md`](Docs/Backend/MultiplayerAi.md)
    - DB(`Backend/wow_database.sqlite`)는 첫 실행 때 자동 생성 + 데모 데이터 시딩 (git 에는 안 올라감)
 2. Quest 실기: 서버 PC 에서 `open-firewall.bat` 을 관리자 권한으로 한 번 실행 →
    Unity `BackendClient` 의 Server Url 을 `http://<서버 PC IP>:8080` 으로.

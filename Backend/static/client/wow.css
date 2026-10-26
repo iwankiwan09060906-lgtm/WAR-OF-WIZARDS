@@ -427,6 +427,9 @@ a.row:hover, button.row:hover { background: rgba(255, 255, 255, 0.03); }
 .seat.foe .side { color: var(--enemy); }
 .seat.empty { align-items: center; justify-content: center; text-align: center; color: var(--text-3); outline: 1px dashed var(--line-2); outline-offset: -1px; background: rgba(255, 255, 255, 0.015); }
 .seats .vs { align-self: center; font-family: var(--tech); font-weight: 700; font-size: 1.4rem; color: var(--text-3); }
+/* 3 · 4인 개인전 방: 자리 N개를 한 줄로 (좁으면 두 줄) */
+.ffa-seats { display: grid; grid-template-columns: repeat(var(--n, 4), minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 760px) { .ffa-seats { grid-template-columns: 1fr 1fr; } }
 .rank-no { font-family: var(--tech); font-weight: 700; font-size: 1.05rem; }
 .rank-1 { color: #ffd166; }
 .rank-2 { color: #d9e2ec; }
@@ -533,11 +536,24 @@ a.row:hover, button.row:hover { background: rgba(255, 255, 255, 0.03); }
 .lanes { display: flex; gap: 0; box-shadow: inset 0 0 0 1px var(--line-2); width: max-content; }
 .lanes button { min-width: 44px; min-height: 36px; border: 0; background: none; color: var(--text-2); font-family: var(--tech); font-weight: 700; cursor: pointer; }
 .lanes button[aria-pressed="true"] { background: var(--cyan); color: #04131c; }
+.lanes.size button { padding: 0 16px; min-height: 38px; }
 .lane-pick { position: absolute; left: 0; right: 0; bottom: 0; z-index: 4; display: grid; grid-template-columns: repeat(3, 1fr); height: 34%; }
 .lane-pick button { border: 0; background: linear-gradient(0deg, rgba(60, 200, 255, 0.18), transparent); color: #fff; font-family: var(--tech); font-weight: 700; font-size: 1.1rem; cursor: crosshair; box-shadow: inset 1px 0 0 rgba(255, 255, 255, 0.08); }
 .lane-pick button:hover { background: linear-gradient(0deg, rgba(60, 200, 255, 0.35), rgba(60, 200, 255, 0.04)); }
 .feed { margin-top: 10px; font-size: 0.8rem; color: var(--text-3); display: flex; flex-direction: column; gap: 3px; }
 .feed b { color: var(--text-2); }
+/* 로그인: 조별 계정 바로 시작 */
+.group-login { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.group-login .hint { margin-right: auto; }
+/* 전투: AI 전략 코치 · 웹캠 손 추적 */
+.coach { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+.coach #coach-body { display: flex; flex-direction: column; gap: 4px; line-height: 1.45; }
+.coach .coach-sum { color: var(--text); font-size: 0.88rem; }
+.coach .coach-plan { margin: 2px 0 0; padding-left: 18px; }
+.coach .red { color: #ff9fb0; }
+.coach .chip { min-height: 24px; padding: 0 8px; align-self: flex-start; }
+.cam { margin-top: 8px; aspect-ratio: 4 / 3; background: #000; box-shadow: inset 0 0 0 1px var(--line-2); }
+.cam video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
 
 /* ───────────── 관리자 · 룬 연습 · 오류 ───────────── */
 .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; }

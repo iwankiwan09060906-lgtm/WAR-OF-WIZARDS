@@ -13,8 +13,8 @@ export default {
         <div class="who">${esc(me.nickname)}</div><div class="meta">${tierOf(me.rating)} · <span class="num">${me.rating}</span></div>
         <div class="vs-hand">${state.deck.map((id) => skHTML(id, 34)).join("")}</div></div>
       <div style="text-align:center"><div class="count-num" id="count" aria-live="assertive">${RULES.countdown}</div>
-        <div class="muted" style="margin-top:6px">${MODE[ctx.mode] || ""}</div>${ctx.roomCode ? `<div class="hint" style="margin-top:6px">게임 방 ${esc(ctx.roomCode)}</div>` : ""}</div>
-      <div class="vs-side"><span class="side-label red">ENEMY${opp.bot ? " · BOT" : ""}</span><div class="fig wiz">${wizardSVG("foe")}</div>
+        <div class="muted" style="margin-top:6px">${MODE[ctx.mode] || ""}${ctx.maxPlayers > 2 ? ` · ${ctx.maxPlayers}인 개인전` : ""}</div>${ctx.roomCode ? `<div class="hint" style="margin-top:6px">게임 방 ${esc(ctx.roomCode)}</div>` : ""}</div>
+      <div class="vs-side"><span class="side-label red">ENEMY${ctx.maxPlayers > 2 ? ` ×${ctx.maxPlayers - 1}` : ""}${opp.bot ? " · BOT" : ""}</span><div class="fig wiz">${wizardSVG("foe")}</div>
         <div class="who">${esc(opp.name)}</div><div class="meta">${opp.rating ? `${tierOf(opp.rating)} · <span class="num">${opp.rating}</span>` : ""}</div>
         <div class="vs-hand">${Array.from({ length: 8 }, () => `<span class="cover">?</span>`).join("")}</div></div>
     </div>

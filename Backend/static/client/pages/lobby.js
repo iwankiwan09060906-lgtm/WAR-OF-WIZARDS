@@ -1,5 +1,5 @@
-// 2. 메인 로비 — 왼쪽: 1:1 마법 대전 카드(마법사 1:1 그림 · 게임 방법 · 매칭 버튼 · 내 마법서), 오른쪽: 메뉴 타일 6개
-import { api, state, subscribe, go, beginMatch, refreshMails, signOut, toast, icon, esc, headerHTML, duelHTML, skHTML, deckProblem, tierOf, winRate, unread, isAdmin } from "../core.js";
+// 2. 메인 로비 — 왼쪽: 마법 대전 카드(마법사 1:1 그림 · 게임 방법 · 1:1 / 3 · 4인 개인전 선택 · 매칭 버튼 · 내 마법서), 오른쪽: 메뉴 타일 6개
+import { api, state, subscribe, go, beginMatch, beginServerMatch, updateSettings, refreshMails, signOut, toast, icon, esc, headerHTML, duelHTML, skHTML, deckProblem, tierOf, winRate, unread, isAdmin } from "../core.js";
 
 export default {
   title: "메인 로비",
@@ -10,6 +10,7 @@ export default {
       const p = state.profile;
       const problem = deckProblem(state.deck);
       const n = unread();
+      const size = [3, 4].includes(state.settings.players) ? state.settings.players : 2;
       root.innerHTML = `
         ${headerHTML("메인 로비", { back: false, right: `
           <div style="text-align:right;line-height:1.3"><b style="font-size:1.05rem">${esc(p.nickname)}</b><br><span class="tech cyan" style="font-size:.85rem">${tierOf(p.rating)} · ${p.rating}</span></div>
@@ -18,7 +19,10 @@ export default {
           <section class="card battle-card" aria-labelledby="battle-h">
             <div class="hero">${duelHTML({ foe: false })}</div>
             <div class="battle-body">
-              <div><h2 id="battle-h">1 : 1 마법 대전</h2><p style="margin-top:6px">룬을 그려 마법을 쓰고, 유닛을 밀어 상대 넥서스를 무너뜨리세요.</p></div>
+              <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
+                <div><h2 id="battle-h">${size > 2 ? `${size}인 개인전` : "1 : 1 마법 대전"}</h2><p style="margin-top:6px">${size > 2 ? `팀 없이 ${size}명이 겨룹니다. 나 빼고 모두 적 — 마지막까지 남으세요. 빈자리는 봇이 채웁니다.` : "룬을 그려 마법을 쓰고, 유닛을 밀어 상대 넥서스를 무너뜨리세요."}</p></div>
+                <div class="lanes size" role="group" aria-label="대전 인원">${[2, 3, 4].map((k) => `<button data-size="${k}" aria-pressed="${k === size}">${k > 2 ? `${k}인` : "1 : 1"}</button>`).join("")}</div>
+              </div>
               <ol class="how" aria-label="게임 방법">
                 <li class="on"><span class="n">01</span><b>룬 그리기</b><span>핀치한 채 허공에</span></li>
                 <li><span class="n">02</span><b>준비</b><span>주먹을 쥔다</span></li>
@@ -26,7 +30,7 @@ export default {
                 <li><span class="n">04</span><b>발동</b><span>마법진이 터진다</span></li>
               </ol>
               <div class="battle-actions">
-                <button class="btn play xl" data-act="ranked" ${problem ? "disabled" : ""}>${icon("play")}랭킹전 매칭</button>
+                <button class="btn play xl" data-act="ranked" ${problem ? "disabled" : ""}>${icon("play")}${size > 2 ? `${size}인 개인전 매칭` : "랭킹전 매칭"}</button>
                 <button class="btn info" data-act="friendly">${icon("door")}친선전</button>
                 <button class="btn ghost" data-act="bot" ${problem ? "disabled" : ""}>${icon("bot")}봇 연습전</button>
               </div>
@@ -61,6 +65,8 @@ export default {
       .catch(() => {});
 
     root.addEventListener("click", (e) => {
+      const sz = e.target.closest("[data-size]")?.dataset.size;
+      if (sz) { updateSettings({ players: Number(sz) }); draw(); return; }
       const a = e.target.closest("[data-act]")?.dataset.act;
       if (!a) return;
       const problem = deckProblem(state.deck);
@@ -68,17 +74,18 @@ export default {
       if (a === "friendly") go("room");
       if ((a === "ranked" || a === "bot") && problem) return toast(problem, "error");
       if (a === "ranked") { beginMatch("ranked", { name: "탐색 중…", rating: 0, bot: false }); go("queue"); }
-      if (a === "bot") { beginMatch("bot", { name: "Bot", rating: state.profile.rating, bot: true }); go("countdown"); }
+      if (a === "bot") { beginMatch("bot", { name: "Bot", rating: state.profile.rating, bot: true }); go("countdown"); }   // 봇 연습은 1:1
     });
 
     draw();
     countFriends();
     refreshMails().catch(() => {});
-    // 끝나지 않은 랭킹전 게임 방이 있으면 이어서
+    // 끝나지 않은 게임 방(랭킹전 · 개인전 친선전)이 있으면 이어서
     api.currentMatch().then((m) => {
       if (m && (m.status === "MATCHED" || m.status === "PLAYING")) {
-        beginMatch("ranked", { name: m.opponent.nickname, rating: m.opponent.rating, bot: m.opponent.bot }, { matchId: m.matchId, roomCode: m.roomCode });
-        toast("진행 중인 랭킹전이 있어 이어서 들어갑니다.", "ok");
+        const mode = m.mode === "friendly" ? "friendly" : "ranked";
+        beginServerMatch(mode, m);
+        toast(`진행 중인 ${mode === "friendly" ? "친선전" : "랭킹전"}이 있어 이어서 들어갑니다.`, "ok");
         go("battle");
       }
     }).catch(() => {});

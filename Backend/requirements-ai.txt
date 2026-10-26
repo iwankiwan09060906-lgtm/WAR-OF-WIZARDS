@@ -1,0 +1,4 @@
+# AI 기능을 켜는 패키지 (서버 본체는 표준 라이브러리만 쓴다) — run_server_ai.bat 가 GestureTools/MediaPipe/.venv 에 설치
+# - mediapipe : 서버 손 추적 (/api/mediapipe/frame 카메라 프레임)  ← GestureTools/MediaPipe/requirements.txt
+# - anthropic : VLM 전략 코치 Claude (/api/ai/strategy, ANTHROPIC_API_KEY 필요). 없으면 규칙 AI 로 답한다
+anthropic>=2.3

@@ -22,9 +22,16 @@ namespace SpellboundVR.Bot
         {
             Team = team;
             Deck = deck;
-            _autoBrain = brainOverride ?? new TimerRandomBrain(deck, catalog, config, seed);
+            _autoBrain = brainOverride ?? CreateBrain(team, deck, catalog, config, seed);
             _manualBrain = new ManualKeyBrain(team, deck) { RequireAlt = requireAlt };
             _manualKeysEnabled = manualKeysEnabled;
+        }
+
+        /// <summary>BotConfig.Brain 에 따라: AI 전략 두뇌(기본, 서버 연결이 있으면 같이 씀) · 예전 랜덤 두뇌</summary>
+        public static IBotBrain CreateBrain(Team team, int[] deck, SpellCatalog catalog, BotConfig config, uint seed)
+        {
+            if (config != null && config.Brain == BotBrainKind.TimerRandom) return new TimerRandomBrain(deck, catalog, config, seed);
+            return new AiStrategyBrain(team, deck, catalog, config, seed, StrategyAdvisors.Current);
         }
 
         public Team Team { get; }
@@ -57,6 +64,7 @@ namespace SpellboundVR.Bot
 
         public void Tick(MatchSimulation sim)
         {
+            if (!ManualMode && _autoBrain is IWorldAwareBrain worldAware) worldAware.Observe(sim, Team);
             var obs = sim.BuildObservation(Team);
             var cmd = default(BotCommand);
             if (ManualMode) _manualBrain.Tick(obs, ref cmd);

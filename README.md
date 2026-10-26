@@ -25,7 +25,10 @@ Quest 3 핸드트래킹으로 룬을 그려 마법을 쓰는 1:1 VR 대전 게�
 | [`Docs/Art/AssetIntegrationGuide.md`](Docs/Art/AssetIntegrationGuide.md) | 룬 · 스킬 VFX · 모델 에셋 규칙, 에셋 빌더, 에셋 정리 규칙 |
 | [`Docs/Art/Licenses.md`](Docs/Art/Licenses.md) | 외부 에셋 팩 출처 · 사용처 |
 | [`Docs/Backend/`](Docs/Backend/) | 웹 디자인 · 제품 · 서버 API |
+| [`Docs/Backend/MultiplayerAi.md`](Docs/Backend/MultiplayerAi.md) | 개인전 2~4명 매칭 · 공식 팀 계정(1조~4조) · AI 전략 코치(VLM) · 서버 MediaPipe |
+| [`Docs/Backend/AiLearning.md`](Docs/Backend/AiLearning.md) | AI 가 게임을 배우게 하기 — 경험 수집 · 판 결과로 자동 학습 · VLM 미세조정 |
 | [`Docs/Bot/ManualControlKeys.md`](Docs/Bot/ManualControlKeys.md) | 키보드 조작 · 봇 수동 조종 키 |
+| [`Docs/Bot/AiStrategyBot.md`](Docs/Bot/AiStrategyBot.md) | AI 전략 봇 (랜덤 봇 대신, 같은 시전 속도에서 승률 90%) · 서버 학습 연결 · 승률 측정기 BotLab |
 | [`Docs/Input/MediaPipeHandInput.md`](Docs/Input/MediaPipeHandInput.md) | MediaPipe 손동작 입력 · **19종 룬 안내표** (그림: `GestureTools/MediaPipe/rune_sheet.png`) |
 
 ## 빠르게 실행

@@ -157,7 +157,7 @@
     async recordMatch(id, rec) {
       var r = await request('POST', '/api/matches', {
         mode: rec.mode, result: String(rec.result).toUpperCase(), opponent: rec.opponent,
-        durationSec: rec.durationSec, casts: rec.casts
+        durationSec: rec.durationSec, casts: rec.casts, gameId: rec.gameId
       });
       return Object.assign({}, rec, { id: r.matchId, ratingDelta: r.ratingDelta, newRating: r.newRating, endedAt: new Date().toISOString() });
     },
@@ -210,8 +210,8 @@
       await request('POST', '/api/mails/invite', { friendId: friendId, roomCode: roomCode });
     },
 
-    // ── 랭킹전 매칭 (서버 대기열 · 15초 넘으면 봇) ──────────────────────
-    async joinQueue() { return request('POST', '/api/matchmaking/queue', {}); },
+    // ── 랭킹전 매칭 (서버 대기열 · 15초 넘으면 봇) — players 2 = 1:1, 3 · 4 = 개인전 (빈자리는 봇) ──
+    async joinQueue(players) { return request('POST', '/api/matchmaking/queue', { players: players || 2 }); },
     async queueStatus() { return request('GET', '/api/matchmaking/status'); },
     async leaveQueue() { return request('DELETE', '/api/matchmaking/queue'); },
 
@@ -229,7 +229,9 @@
       loginHistory: function () { return request('GET', '/api/admin/login-history'); },
       auditLogs: function () { return request('GET', '/api/admin/audit-logs'); },
       postNotice: function (title, body) { return request('POST', '/api/admin/notices', { title: title, body: body }); },
-      broadcast: function (message) { return request('POST', '/api/admin/live/broadcast', { message: message }); }
+      broadcast: function (message) { return request('POST', '/api/admin/live/broadcast', { message: message }); },
+      aiTrain: function () { return request('POST', '/api/ai/train', {}); },
+      aiDataset: function () { return request('POST', '/api/ai/dataset', {}); }
     },
 
     // ── 게임 연결 (매칭 → 게임 방 → Unity 접속 · 결과) ─────────────────
@@ -245,7 +247,9 @@
     async matchLeave(id) { var r = await request('POST', '/api/match/' + id + '/leave', {}); return r.match; },
 
     // ── 친선전 룸 ───────────────────────────────────────────────────────
-    async createRoom() { return request('POST', '/api/rooms', {}); },
+    async createRoom(players) { return request('POST', '/api/rooms', { players: players || 2 }); },
+    async roomBot(code) { return request('POST', '/api/rooms/' + encodeURIComponent(code) + '/bot', {}); },
+    async kickMember(code, memberId) { return request('POST', '/api/rooms/' + encodeURIComponent(code) + '/kick', { memberId: memberId }); },
     async getRoom(code) { return request('GET', '/api/rooms/' + encodeURIComponent(code)); },
     async joinRoom(code) { return request('POST', '/api/rooms/' + encodeURIComponent(code) + '/join', {}); },
     async setReady(code, ready) { return request('POST', '/api/rooms/' + encodeURIComponent(code) + '/ready?ready=' + (ready ? 'true' : 'false'), {}); },
@@ -264,7 +268,18 @@
       return request('POST', '/api/spells/cast', payload).catch(function () { return null; });
     },
     // 시전 신호를 받을 Unity 주소 + 최근 신호 (게임 화면의 연결 표시용)
-    async spellLink() { return request('GET', '/api/spells/recent'); }
+    async spellLink() { return request('GET', '/api/spells/recent'); },
+
+    // ── AI: VLM 전략 코치 · 서버 MediaPipe 손 추적 ─────────────────────
+    async aiStatus() { return request('GET', '/api/ai/status'); },
+    // body: { state: {deck, ready, selfHp, selfColumn, ...}, image?: 'data:image/jpeg;base64,...', matchId? }
+    async aiStrategy(body) { return request('POST', '/api/ai/strategy', body); },
+    // AI 학습 데이터: { gameId, matchId, state, action: {spellId, slot, column, followedAdvice}, image? }
+    async aiRecord(body) { return request('POST', '/api/ai/experience', body); },
+    async aiLearning() { return request('GET', '/api/ai/learning'); },
+    // body: { image: 카메라 프레임 data URL, t: performance.now(), candidates: [...], session }
+    async handFrame(body) { return request('POST', '/api/mediapipe/frame', body); },
+    async handReset(session) { return request('POST', '/api/mediapipe/reset', { session: session }).catch(function () { return null; }); }
   };
 
   window.WOW_SERVER_API = api;

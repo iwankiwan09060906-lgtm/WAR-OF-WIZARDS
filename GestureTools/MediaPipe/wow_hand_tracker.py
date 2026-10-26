@@ -109,7 +109,7 @@ def recognize_rune(points, candidates, args):
         try:
             body = json.dumps({"points": [{"x": x, "y": y} for x, y in points],
                                "candidates": candidates}).encode("utf-8")
-            req = urllib.request.Request(args.server.rstrip("/") + "/api/stage6/ai/recognize", data=body,
+            req = urllib.request.Request(args.server.rstrip("/") + "/api/runes/recognize", data=body,
                                          headers={"Content-Type": "application/json"}, method="POST")
             with urllib.request.urlopen(req, timeout=1.0) as resp:
                 r = json.loads(resp.read().decode("utf-8"))["result"]

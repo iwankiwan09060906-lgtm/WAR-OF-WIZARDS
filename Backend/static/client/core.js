@@ -62,6 +62,7 @@ const SETTINGS_KEY = "wow.settings.v1";
 export const DEFAULT_SETTINGS = {
   camSensitivity: 65, comfortVignette: true, snapTurning: false, sfx: 80, bgm: 45, spatialAudio: true,
   gestureSensitivity: 70, holdFrames: 15, haptics: true, subtitles: false, uiLarge: false, colorblind: false,
+  players: 2,    // 대전 인원: 2 = 1:1, 3 · 4 = 개인전 (팀 없이 나 빼고 모두 적)
 };
 function loadSettings() {
   try { return { ...DEFAULT_SETTINGS, ...JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}") }; } catch { return { ...DEFAULT_SETTINGS }; }
@@ -119,8 +120,19 @@ export function applySettings() {
 
 // 대전 시작 · 끝. 랭킹전은 서버 게임 방(matchId)에 결과를 보고하고, 친선전 · 봇 연습은 전적만 기록한다.
 export function beginMatch(mode, opponent, extra = {}) {
-  setState({ matchCtx: { mode, opponent, startedAt: Date.now(), done: false, ...extra }, lastMatch: null });
+  // gameId = 한 판 구분 (AI 학습: 이 판의 시전 기록에 결과 이름표를 붙인다)
+  const gameId = extra.matchId ? `m${extra.matchId}` : `g${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+  setState({ matchCtx: { mode, opponent, startedAt: Date.now(), done: false, maxPlayers: 2, opponents: [], gameId, ...extra }, lastMatch: null });
 }
+// 서버 게임 방(매칭 결과 · /api/match/current)으로 시작 — 1:1 · 개인전 공용. 개인전 상대 이름은 "A · B · C"
+export function beginServerMatch(mode, m) {
+  const opponent = m.opponent
+    ? { name: m.opponent.nickname, rating: m.opponent.rating, bot: m.opponent.bot }
+    : { name: m.opponentNickname, rating: m.opponentRating, bot: m.bot !== false };
+  beginMatch(mode, opponent, { matchId: m.matchId, roomCode: m.roomCode, maxPlayers: m.maxPlayers || 2, seat: m.seat,
+    opponents: m.opponents || [] });
+}
+export const playersLabel = (n) => (n > 2 ? `${n}인 개인전` : "1 : 1");
 export async function finishMatch({ result, reason = "", durationSec, stats = {} }) {
   const ctx = state.matchCtx;
   if (!ctx || ctx.done) return;
@@ -130,10 +142,11 @@ export async function finishMatch({ result, reason = "", durationSec, stats = {}
   try {
     let saved;
     if (ctx.matchId) {
-      const m = await api.matchResult(ctx.matchId, { result: result.toUpperCase(), durationSec, casts: stats.casts || 0 });
+      const m = await api.matchResult(ctx.matchId, { result: result.toUpperCase(), durationSec, casts: stats.casts || 0, gameId: ctx.gameId,
+        place: result === "win" ? 1 : undefined });
       saved = { ratingDelta: m.ratingDelta, matchId: m.matchId };
     } else {
-      saved = await api.recordMatch(state.user.id, { mode: ctx.mode, result, opponent: ctx.opponent.name, durationSec, casts: stats.casts || 0 });
+      saved = await api.recordMatch(state.user.id, { mode: ctx.mode, result, opponent: ctx.opponent.name, durationSec, casts: stats.casts || 0, gameId: ctx.gameId });
     }
     await refreshProfile();
     setState({ lastMatch: { ...state.lastMatch, record: { ...saved, newRating: state.profile?.rating } } });

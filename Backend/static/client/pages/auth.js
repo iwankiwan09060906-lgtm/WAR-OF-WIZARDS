@@ -22,6 +22,9 @@ function artHTML() {
   </section>`;
 }
 
+// 공식 팀 계정 (서버 wow_server.py GROUP_ACCOUNTS 와 같다) — 아이디로 바로 로그인
+const TEAM_PW = { "1조": "1111", "2조": "2222", "3조": "3333", "4조": "4444" };
+
 function render(root, mode) {
   const signup = mode === "signup";
   root.innerHTML = `<div class="auth">${artHTML()}
@@ -30,7 +33,7 @@ function render(root, mode) {
       <p class="muted" style="margin-bottom:22px">${signup ? "새 계정을 만들고 전장에 참여하세요" : "마법사 계정으로 로그인"}</p>
       ${signup ? `
         <div class="field"><label for="nick">마법사 이름 (닉네임)</label><input class="input" id="nick" maxlength="12" placeholder="2~12자 · 한글 · 영문 · 숫자 · _" autocomplete="nickname"><span class="hint" id="nick-hint">2~12자, 한글·영문·숫자·_ 사용 가능</span></div>` : ""}
-      <div class="field"><label for="email">이메일</label><div class="input-wrap">${icon("at")}<input class="input" id="email" type="email" placeholder="wizard@example.com" autocomplete="email"></div></div>
+      <div class="field"><label for="email">${signup ? "이메일" : "이메일 또는 아이디"}</label><div class="input-wrap">${icon("at")}<input class="input" id="email" type="${signup ? "email" : "text"}" placeholder="${signup ? "wizard@example.com" : "wizard@example.com · 1조"}" autocomplete="${signup ? "email" : "username"}"></div></div>
       <div class="field"><label for="pw">비밀번호</label><div class="input-wrap">${icon("lock")}<input class="input" id="pw" type="password" placeholder="6자 이상" autocomplete="${signup ? "new-password" : "current-password"}">
         <button type="button" class="btn ghost sm icon-only end" data-act="peek" aria-label="비밀번호 보기">${icon("eye")}</button></div></div>
       ${signup ? `
@@ -47,6 +50,7 @@ function render(root, mode) {
         <div class="stack" style="gap:8px;margin-top:10px">
           <div style="display:flex;gap:8px"><input class="input" id="gnick" maxlength="12" placeholder="게스트 이름 (2~12자)" aria-label="게스트 이름"><button type="button" class="btn info" data-act="guest">게스트 입장</button></div>
           <button type="button" class="btn ghost block" data-act="demo">데모 계정으로 바로 시작</button>
+          <div class="group-login" role="group" aria-label="조별 계정으로 바로 시작"><span class="hint">공식 팀 계정</span>${["1조", "2조", "3조", "4조"].map((g) => `<button type="button" class="btn sm" data-group="${g}">${g}</button>`).join("")}</div>
         </div>`}
       <p class="switch-line">${signup ? `이미 계정이 있으신가요? <a href="#/login">로그인</a>` : `계정이 없으신가요? <a href="#/signup">회원가입</a>`}</p>
       <p class="hint" style="text-align:center;margin-top:14px"><span class="dot ${state.server ? "on" : "bad"}" style="display:inline-block;margin-right:6px"></span>${state.server ? "파이썬 게임 서버 연결됨" : "서버 꺼짐"}</p>
@@ -89,19 +93,20 @@ function render(root, mode) {
         toast(`${nick} 마법사님, 환영합니다!`, "ok");
         await enter(await api.signIn(email, pw));
       } else {
-        if (!email.includes("@")) return err("올바른 이메일 주소를 입력해주세요.");
-        if (pw.length < 6) return err("비밀번호는 6자 이상이어야 합니다.");
+        if (!email) return err("이메일 또는 아이디를 입력해주세요.");   // 아이디(1조 등)도 된다
+        if (!pw) return err("비밀번호를 입력해주세요.");
         await enter(await busy(btn, () => api.signIn(email, pw), "로그인 중…"));
       }
     } catch (ex) { err(ex.message); }
   });
 
   form.addEventListener("click", async (e) => {
-    const b = e.target.closest("[data-act]");
+    const b = e.target.closest("[data-act], [data-group]");
     if (!b) return;
     const a = b.dataset.act;
     err("");
     try {
+      if (b.dataset.group) await enter(await busy(b, () => api.signIn(b.dataset.group, TEAM_PW[b.dataset.group]), "입장 중…"));   // 공식 팀 계정
       if (a === "peek") {
         const pw = $("pw");
         pw.type = pw.type === "password" ? "text" : "password";

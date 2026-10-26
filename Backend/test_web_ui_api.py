@@ -91,7 +91,11 @@ def main():
         shutil.copy(src, db)
     env = dict(os.environ, WOW_DB_FILE=db, WOW_UNITY_SPELL_UDP=f"127.0.0.1:{UNITY_PORT}", PYTHONIOENCODING="utf-8")
     env.pop("GOOGLE_CLIENT_ID", None)
-    proc = subprocess.Popen([sys.executable, os.path.join(HERE, "wow_server.py"), str(PORT)], env=env,
+    env["WOW_AI_DATA"] = os.path.join(tmp, "ai_data")       # 학습 데이터 · 화면 사진은 임시 폴더에
+    for k in ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_PROFILE"):   # 검사 중 유료 VLM 호출 금지 (규칙 AI 로)
+        env.pop(k, None)
+    # WOW_TEST_PYTHON=GestureTools/MediaPipe/.venv/Scripts/python.exe 로 주면 카메라 프레임(MediaPipe)까지 검사한다
+    proc = subprocess.Popen([os.environ.get("WOW_TEST_PYTHON") or sys.executable, os.path.join(HERE, "wow_server.py"), str(PORT)], env=env,
                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     unity = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     unity.bind(("127.0.0.1", UNITY_PORT))
@@ -122,7 +126,10 @@ def run_checks(unity):
         st, body, _ = call("GET", "/" + page, raw=True)
         check(f"에러 화면 {page}", st == 200 and b"client/wow.css" in body)
     st, body, h = call("GET", "/assets/skills/circle/S06.png", raw=True)
-    check("스킬 마법진 그림 PNG", st == 200 and body[:4] == b"\x89PNG")
+    if body.startswith(b"version https://git-lfs"):   # GitHub ZIP 으로 받으면 그림이 LFS 포인터 파일이다 (git lfs pull 필요)
+        print("  --  스킬 마법진 그림: Git LFS 포인터 파일이라 건너뜀 (git lfs pull 로 실제 그림을 받으세요)")
+    else:
+        check("스킬 마법진 그림 PNG", st == 200 and body[:4] == b"\x89PNG")
     st, _, _ = call("GET", "/assets/skills/circle/X99.png", raw=True)
     check("없는 그림은 404 (index.html 로 대신하지 않음)", st == 404)
     st, _, _ = call("GET", "/..%2Fwow_database.sqlite", raw=True)
@@ -135,12 +142,24 @@ def run_checks(unity):
     print("[로그인 · 설정]")
     st, cfg, _ = call("GET", "/api/auth/config")
     check("Google 설정 조회 (ID 없으면 꺼짐)", st == 200 and cfg["googleEnabled"] is False)
+    # Unity 기기 로그인용 클라이언트 ID 가 서버에 늘 들어 있어 400(설정 없음)이 아니라 가짜 토큰 거부(401 · 502)가 나온다
     st, r, _ = call("POST", "/api/auth/google", {"accessToken": "x"})
-    check("Google ID 없으면 400 안내", st == 400 and "클라이언트 ID" in r["message"])
+    check("가짜 Google 토큰은 로그인 안 됨", st in (400, 401, 502) and "accessToken" not in r)
     demo = login("demo@wow.dev", "demo1234")
     tok = demo["accessToken"]
     st, me, _ = call("GET", "/api/auth/me", token=tok)
     check("세션 복구 /api/auth/me", st == 200 and me["playerId"] == demo["playerId"])
+    groups = [call("POST", "/api/auth/login", {"email": f"{i}조", "password": str(i) * 4})[1] for i in range(1, 5)]
+    check("공식 팀 계정 1조/1111 ~ 4조/4444 아이디로 로그인", all(g.get("nickname") == f"{i}조" and g.get("official") is True
+                                                         for i, g in enumerate(groups, 1)), str(groups[0]))
+    st, r, _ = call("POST", "/api/auth/login", {"email": "group3@wow.dev", "password": "3333"})
+    check("Unity 로그인 화면용 이메일 group3@wow.dev 로도 로그인", st == 200 and r["nickname"] == "3조")
+    st, r, _ = call("POST", "/api/auth/login", {"id": "2조", "password": "2222"})
+    check("{id} 로도 로그인", st == 200 and r["nickname"] == "2조")
+    st, r, _ = call("POST", "/api/auth/login", {"email": "1조", "password": "2222"})
+    check("다른 조 비밀번호는 거부", st == 400)
+    fr = call("GET", "/api/friends", token=groups[0]["accessToken"])[1]
+    check("1조는 2조 · 3조 · 4조와 처음부터 친구", sorted(f["nickname"] for f in fr) == ["2조", "3조", "4조"])
     st, r, _ = call("POST", "/api/auth/password-reset", {"email": "demo@wow.dev"})
     check("비밀번호 재설정 요청 접수", st == 200 and "접수" in r["message"])
     st, r, _ = call("POST", "/api/auth/password-reset", {"email": "nobody@x.dev"})
@@ -262,6 +281,11 @@ def run_checks(unity):
     st, _, _ = call("GET", "/api/admin/login-history")
     check("관리자 기록은 토큰 없이 못 봄", st == 403)
 
+    ffa_checks(admin["accessToken"])
+    ai_checks(tok)
+    learn_checks(tok, admin["accessToken"])
+    unity_link_checks()
+
     print("[룬 그림 인식 · Unity 시전 신호]")
     rng = random.Random(5)
     for code in ("S01", "S06", "H05"):
@@ -280,6 +304,275 @@ def run_checks(unity):
     check("없는 스킬 시전 거부", st == 400)
     st, recent, _ = call("GET", "/api/spells/recent")
     check("최근 시전 기록", recent["recent"][0]["spellId"] == "S06")
+
+
+def ffa_checks(admin_tok):
+    print("[개인전 2~4명: 매칭 큐 · 게임 방 · 친선전 방]")
+    ps = [register(f"개인{i}") for i in range(5)]
+    tk = [p["accessToken"] for p in ps]
+    call("PUT", "/api/admin/configs/matchmaking.bot_timeout", {"value": "30"}, admin_tok)
+    st, r, _ = call("POST", "/api/matchmaking/queue", {"players": 4}, tk[0])
+    check("4인 개인전 큐 등록", st == 200 and r["maxPlayers"] == 4 and r["playersNeeded"] == 4 and r["format"] == "ffa4")
+    st, s0, _ = call("GET", "/api/matchmaking/status", token=tk[0])
+    check("혼자면 4인전 탐색 중 (1/4명)", s0["state"] == "searching" and s0["playersFound"] == 1 and s0["playersNeeded"] == 4)
+    call("POST", "/api/matchmaking/queue", {}, tk[4])                       # 1:1 큐 사람은 4인전에 섞이지 않는다
+    for t in tk[1:4]:
+        call("POST", "/api/matchmaking/queue", {"players": 4}, t)
+    ms = [call("GET", "/api/matchmaking/status", token=t)[1] for t in tk[:4]]
+    check("네 사람 4인 개인전 매칭 (같은 게임 방 · 봇 없음)", all(m["state"] == "matched" and m["maxPlayers"] == 4 for m in ms)
+          and len({m["matchId"] for m in ms}) == 1 and all(m["bot"] is False for m in ms))
+    check("팀 없음: 각자 상대 3명 · 자리 0~3", all(len(m["opponents"]) == 3 and "allies" not in m for m in ms)
+          and sorted(m["seat"] for m in ms) == [0, 1, 2, 3])
+    check("1:1 큐 사람은 4인전에 안 들어감", call("GET", "/api/matchmaking/status", token=tk[4])[1]["state"] == "searching")
+    call("DELETE", "/api/matchmaking/queue", token=tk[4])
+    mid = ms[0]["matchId"]
+    cur = call("GET", "/api/match/current", token=tk[0])[1]["match"]
+    check("게임 방 보기: 4자리 · 상대 이름 'A · B · C'", cur["maxPlayers"] == 4 and len(cur["players"]) == 4
+          and cur["opponent"]["nickname"].count(" · ") == 2 and len(cur["opponents"]) == 3)
+    for t in tk[:3]:
+        call("POST", f"/api/match/{mid}/join", {}, t)
+    check("4명 중 3명 접속 → 아직 MATCHED", call("GET", "/api/match/current", token=tk[0])[1]["match"]["status"] == "MATCHED")
+    call("POST", f"/api/match/{mid}/join", {}, tk[3])
+    check("4명 모두 접속 → PLAYING", call("GET", "/api/match/current", token=tk[0])[1]["match"]["status"] == "PLAYING")
+    deltas = []
+    for place, t in enumerate(tk[:4], start=1):
+        st, r, _ = call("POST", f"/api/match/{mid}/result", {"result": "WIN" if place == 1 else "LOSE", "place": place}, t)
+        deltas.append(r["match"]["ratingDelta"])
+        if place == 3:
+            check("3명 보고 → 아직 PLAYING", r["match"]["status"] == "PLAYING")
+    check("4명 보고 → ENDED, 등수로 레이팅 (+16 · +5 · -5 · -16)", r["match"]["status"] == "ENDED" and deltas == [16, 5, -5, -16], str(deltas))
+
+    call("PUT", "/api/admin/configs/matchmaking.bot_timeout", {"value": "1"}, admin_tok)
+    for t in tk[:2]:
+        call("POST", "/api/matchmaking/queue", {"players": 3}, t)
+    time.sleep(1.2)
+    m0 = call("GET", "/api/matchmaking/status", token=tk[0])[1]
+    m1 = call("GET", "/api/matchmaking/status", token=tk[1])[1]
+    check("3인전에 2명뿐이면 시간 초과 뒤 빈자리 1개를 봇으로", m0["state"] == "matched" and m1["matchId"] == m0["matchId"]
+          and m0["maxPlayers"] == 3 and sum(1 for x in m0["opponents"] if x["bot"]) == 1 and m0["bot"] is False)
+    mid2 = m0["matchId"]
+    for t in tk[:2]:
+        call("POST", f"/api/match/{mid2}/join", {}, t)
+    r = call("POST", f"/api/match/{mid2}/leave", {}, tk[0])[1]["match"]
+    check("개인전 경기 중 한 명이 나가도 경기는 계속", r["status"] == "PLAYING")
+    r = call("POST", f"/api/match/{mid2}/result", {"result": "WIN", "place": 1}, tk[1])[1]["match"]
+    check("남은 사람이 보고하면 ENDED (3인전 1등 +16)", r["status"] == "ENDED" and r["ratingDelta"] == 16)
+
+    st, room, _ = call("POST", "/api/rooms", {"players": 4}, tk[0])
+    code = room["code"]
+    check("4인 친선전 방", st == 200 and room["maxPlayers"] == 4)
+    joined = [call("POST", f"/api/rooms/{code}/join", {}, t)[0] for t in tk[1:4]]
+    st, r, _ = call("POST", f"/api/rooms/{code}/join", {}, tk[4])
+    check("3명 입장 · 5번째 사람은 꽉 참", joined == [200, 200, 200] and st == 400)
+    st, r, _ = call("POST", f"/api/rooms/{code}/start", {}, tk[0])
+    check("준비 안 한 사람이 있으면 시작 못 함", st == 400)
+    for t in tk[1:4]:
+        call("POST", f"/api/rooms/{code}/ready", {"ready": True}, t)
+    info = call("GET", f"/api/rooms/{code}")[1]
+    check("방 자리 표 4명 (들어온 순서) · 첫 게스트 호환 칸", [m["seat"] for m in info["members"]] == [0, 1, 2, 3]
+          and info["members"][0]["host"] and info["guestNickname"] == ps[1]["nickname"])
+    st, r, _ = call("POST", f"/api/rooms/{code}/start", {}, tk[0])
+    check("4인 친선전 시작 → 게임 방", st == 200 and r["matchId"] > 0)
+    cur = call("GET", "/api/match/current", token=tk[3])[1]["match"]
+    check("게스트도 같은 친선전 게임 방", cur["matchId"] == r["matchId"] and cur["mode"] == "friendly" and len(cur["players"]) == 4)
+
+    st, room, _ = call("POST", "/api/rooms", {"players": 3}, tk[0])
+    code = room["code"]
+    call("POST", f"/api/rooms/{code}/join", {}, tk[1])
+    st, r, _ = call("POST", f"/api/rooms/{code}/bot", {}, tk[0])
+    check("방장이 빈자리에 봇", st == 200)
+    st, r, _ = call("POST", f"/api/rooms/{code}/bot", {}, tk[1])
+    check("게스트는 봇 못 채움", st == 403)
+    st, r, _ = call("POST", f"/api/rooms/{code}/join", {}, tk[2])
+    members = call("GET", f"/api/rooms/{code}")[1]["members"]
+    check("꽉 찬 방에 사람이 오면 봇 자리를 내줌", st == 200 and len(members) == 3 and not any(m["bot"] for m in members))
+    call("POST", f"/api/rooms/{code}/kick", {"playerId": ps[2]["playerId"]}, tk[0])
+    check("사람 내보내기 (playerId)", len(call("GET", f"/api/rooms/{code}")[1]["members"]) == 2)
+    call("POST", f"/api/rooms/{code}/ready", {"ready": True}, tk[1])
+    st, r, _ = call("POST", f"/api/rooms/{code}/start", {}, tk[0])
+    cur = call("GET", "/api/match/current", token=tk[0])[1]["match"]
+    check("빈자리는 시작할 때 봇으로", len(cur["players"]) == 3 and sum(1 for m in cur["players"] if m["bot"]) == 1)
+
+
+TINY_JPEG = ("/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAA0JCgsKCA0LCgsODg0PEyAVExISEyccHhcgLikxMC4pLSwzOko+MzZGNywtQFdBRkxOUlNSMj5aYVpQYEpRUk//"
+             "2wBDAQ4ODhMREyYVFSZPNS01T09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT0//wAARCAAwAEADASIAAhEBAxEB/8QAHwAA"
+             "AQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRol"
+             "JicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW"
+             "19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdh"
+             "cRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJma"
+             "oqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwDIooooAKKKKACiiigAooooAKKKKACiiigA"
+             "ooooAKKKKACiiigAooooAKKKKACiiigD/9k=")
+
+
+def ai_checks(tok):
+    print("[AI 전략 코치 (VLM · 규칙) · 서버 MediaPipe 손 추적]")
+    st, s, _ = call("GET", "/api/ai/status")
+    check("AI 상태: 키 없으면 규칙 AI", st == 200 and s["vlm"]["provider"] == "rules" and s["mediapipe"]["landmarks"]["available"])
+    obs = {"SelfHp": 820, "SelfColumn": 1, "MatchTimeSeconds": 75, "SelfSlotReadyMask": 0b1011, "OpponentTowerAlive": True,
+           "deck": ["S03", "S04", "S08", "H01"], "IncomingProjectileCount": 1, "NearestIncomingProjectileColumn": 1,
+           "NearestIncomingProjectileEta": 0.8,
+           "lanes": [{"allies": 1, "enemies": 4}, {"allies": 2, "enemies": 1}, {"allies": 0, "enemies": 0}]}
+    st, r, _ = call("POST", "/api/ai/strategy", {"state": obs})
+    check("전략은 로그인 필요", st == 401)
+    st, r, _ = call("POST", "/api/ai/strategy", {"state": obs}, tok)
+    check("Unity BotObservation 그대로 → 피하고 적이 몰린 왼쪽에 화살 세례", st == 200 and r["source"] == "rules"
+          and r["move"]["direction"] == -1 and r["cast"]["spellId"] == "S04" and r["cast"]["column"] == 0, str(r))
+    check("못 쓰는 슬롯(2번 쉴드)은 고르지 않음", 2 not in r["state"]["readySlots"] and r["cast"]["slot"] != 2)
+    ffa = dict(obs, players=4, opponents=[{"nickname": "Kael", "hp": 900, "column": 0}, {"nickname": "Nyx", "hp": 300, "column": 2, "towerAlive": False},
+                                          {"nickname": "Bot (990)", "hp": 600, "column": 1}])
+    req = urllib.request.Request(BASE + "/api/ai/strategy", data=json.dumps({"state": ffa, "botId": 7}).encode(),
+                                 headers={"Content-Type": "application/json", "X-Server-Key": "wow-server-secret-key-2026"}, method="POST")
+    with urllib.request.urlopen(req, timeout=10) as resp:
+        r = json.loads(resp.read())
+    check("Unity 서버 키로 봇 전략 · 4인 개인전은 타워가 무너진 상대를 노림", r["cast"]["slot"] >= 0 and r["focus"].startswith("Nyx"), r["focus"])
+    st, r, _ = call("POST", "/api/ai/strategy", {"state": obs, "image": "data:image/png;base64,@@@"}, tok)
+    check("잘못된 그림은 400", st == 400)
+
+    st, hs, _ = call("GET", "/api/mediapipe/status")
+    check("MediaPipe 상태 (랜드마크 입력은 항상)", st == 200 and hs["landmarks"]["available"] is True)
+    st, r, _ = call("POST", "/api/mediapipe/frame", {"hands": {}})
+    check("손 추적은 로그인 필요", st == 401)
+    st, r, _ = call("POST", "/api/mediapipe/frame", {}, tok)
+    check("image · hands 없으면 400", st == 400)
+    from test_hand_pipeline import make_hand
+    clock = [0.0]
+    events = []
+
+    def send(lm, n=1):
+        for _ in range(n):
+            body = {"hands": {"right": [list(p) for p in lm] if lm else None}, "t": clock[0], "session": "test",
+                    "candidates": ["S03", "S06", "S07"]}
+            st, out, _ = call("POST", "/api/mediapipe/frame", body, tok)
+            assert st == 200, (st, out)
+            events.extend(out["events"])
+            clock[0] += 33.3
+        return out
+
+    call("POST", "/api/mediapipe/reset", {"session": "test"}, tok)
+    send(make_hand("open"), 12)
+    bolt = wow_runes.fake_drawing("S06", random.Random(5))[0]          # 번개 룬 한 획을 손(핀치)으로 따라 그린다
+    cx, cy = sum(p[0] for p in bolt) / len(bolt), sum(p[1] for p in bolt) / len(bolt)
+    for x, y in bolt:
+        last = send(make_hand("pinch", (x - cx) * 0.25, -(y - cy) * 0.25))
+    check("그리는 중 커서 · drawing 표시", last["right"]["drawing"] is True and len(last["right"]["landmarks"]) == 63)
+    send(make_hand("open"), 10)
+    send(make_hand("fist"), 6)
+    send(make_hand("point", dx=0.30), 6)
+    names = [e["name"] for e in events]
+    end = next((e for e in events if e["name"] == "pinch_end"), {})
+    check("서버 손 추적: 핀치로 번개 룬 → S06", end.get("rune", {}).get("spellId") == "S06" and end["rune"]["recognized"], str(names))
+    check("주먹 → 가리키기 (오른쪽 열)", "fist" in names and next(e for e in events if e["name"] == "point")["column"] == 2)
+    st, r, _ = call("POST", "/api/mediapipe/frame", {"image": "data:image/jpeg;base64," + TINY_JPEG, "session": "img"}, tok)
+    if hs["image"]["available"]:
+        check("카메라 프레임 → MediaPipe (손 없음)", st == 200 and r["source"] == "image" and r["right"]["tracked"] is False, str(r))
+    else:
+        check("mediapipe 없는 파이썬이면 프레임은 503 + 안내", st == 503 and "run_server_ai.bat" in r["message"], str(r))
+
+
+def learn_checks(tok, admin_tok):
+    print("[AI 학습: 경험 모으기 · 결과 이름표 · 학습 · 데이터셋 · 학습한 VLM]")
+    st, L, _ = call("GET", "/api/ai/learning")
+    check("전략 요청도 경험으로 저장 (advice)", st == 200 and L["experiences"] >= 1 and L["policy"]["trained"] is False)
+    scene = {"deck": ["S03", "S04", "S06", "S08"], "ready": [True, True, True, True], "selfHp": 900, "selfColumn": 1, "time": 90,
+             "lanes": [{"allies": 1, "enemies": 4}, {"allies": 1, "enemies": 1}, {"allies": 0, "enemies": 0}]}
+    for g in range(12):                      # 번개(S06)를 쓴 판은 이기고, 화살 세례(S04)를 쓴 판은 진다
+        win = g % 2 == 0
+        game = f"learn{g}"
+        for k in range(2):
+            body = {"gameId": game, "source": "test", "state": scene,
+                    "action": {"spellId": "S06" if win else "S04", "slot": 2 if win else 1, "column": 0}}
+            if win and g == 0 and k == 0:
+                body["image"] = "data:image/jpeg;base64," + TINY_JPEG
+            st, r, _ = call("POST", "/api/ai/experience", body, tok)
+            assert st == 200 and r["recorded"] == 1, (st, r)
+        st, r, _ = call("POST", "/api/ai/experience", {"gameId": game, "outcome": "WIN" if win else "LOSE"}, tok)
+        assert r["labeled"] == 2, r
+    st, L, _ = call("GET", "/api/ai/learning")
+    check("경험 · 결과 이름표 · 화면 사진 저장", L["labeled"] >= 24 and L["frames"] >= 1 and L["games"] >= 12, str(L))
+    st, r, _ = call("POST", "/api/ai/train", {}, tok)
+    check("학습은 관리자만", st == 403)
+    st, r, _ = call("POST", "/api/ai/train", {}, admin_tok)
+    check("학습: 12판 · 이긴 스킬이 위로", st == 200 and r["trained"] and r["games"] >= 12 and r["topSpells"][0]["spellId"] == "S06", str(r))
+    st, r, _ = call("POST", "/api/ai/strategy", {"state": scene, "record": False}, tok)
+    check("규칙 AI 가 학습 결과로 수를 바꿈 (화살 세례 → 번개)", r["cast"]["spellId"] == "S06" and r["learned"]["confident"]
+          and "학습" in r["cast"]["reason"], str(r["cast"]))
+    st, r, _ = call("POST", "/api/ai/dataset", {}, admin_tok)
+    check("VLM 미세조정 데이터셋 (이긴 판만 · 그림 포함)", st == 200 and r["lines"] >= 12 and r["withImage"] >= 1, str(r))
+    with open(os.path.join(r["dir"], "wow_vlm_sft.jsonl"), encoding="utf-8") as f:
+        first = json.loads(f.readline())
+    with open(os.path.join(r["dir"], "dataset_info.json"), encoding="utf-8") as f:
+        info = json.load(f)
+    check("데이터셋 형식 (system · user · assistant JSON · <image> · dataset_info)",
+          [m["role"] for m in first["messages"]] == ["system", "user", "assistant"]
+          and json.loads(first["messages"][2]["content"])["cast"]["spellId"] == "S06"
+          and info["wow_vlm"]["formatting"] == "sharegpt" and (first.get("images") is None or first["messages"][1]["content"].startswith("<image>")))
+    call("POST", "/api/ai/experience", {"gameId": "legacy1", "state": scene, "action": {"spellId": "S03", "slot": 0, "column": 1}}, tok)
+    before = call("GET", "/api/ai/learning")[1]["labeled"]
+    call("POST", "/api/matches", {"mode": "bot", "result": "WIN", "opponent": "Bot", "gameId": "legacy1"}, tok)
+    check("봇 연습 결과(/api/matches + gameId)도 그 판 경험에 이름표", call("GET", "/api/ai/learning")[1]["labeled"] == before + 1)
+
+    # 이 게임으로 미세조정한 VLM 자리 (OpenAI 호환 서버) — 가짜 서버로 요청 · 응답 모양 확인
+    import threading
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+    seen = {}
+
+    class FakeVlm(BaseHTTPRequestHandler):
+        def log_message(self, *a):
+            pass
+
+        def do_POST(self):
+            seen["path"] = self.path
+            seen["body"] = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))))
+            answer = {"summary": "왼쪽 레인 정리", "threat": "medium", "plan": ["번개 왼쪽"], "focus": "", "observations": [],
+                      "cast": {"slot": 2, "spellId": "S06", "column": 0, "depth": 0.4, "reason": "학습한 모델"},
+                      "move": {"direction": 0, "reason": ""}}
+            data = json.dumps({"model": "wow-vlm", "choices": [{"message": {"role": "assistant",
+                                                                            "content": "```json\n" + json.dumps(answer, ensure_ascii=False) + "\n```"}}]}).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+
+    fake = ThreadingHTTPServer(("127.0.0.1", 0), FakeVlm)
+    threading.Thread(target=fake.serve_forever, daemon=True).start()
+    call("PUT", "/api/admin/configs/ai.local_url", {"value": f"http://127.0.0.1:{fake.server_port}/v1"}, admin_tok)
+    st, r, _ = call("POST", "/api/ai/strategy", {"state": scene, "provider": "local", "image": "data:image/jpeg;base64," + TINY_JPEG,
+                                                 "record": False}, tok)
+    user_content = seen.get("body", {}).get("messages", [{}, {}])[1].get("content", [])
+    check("학습한 VLM(local): /v1/chat/completions · 그림 · 학습 결과를 프롬프트에", seen.get("path") == "/v1/chat/completions"
+          and user_content[0]["type"] == "image_url" and "learned" in user_content[1]["text"], str(seen.get("path")))
+    check("학습한 VLM 답 사용", st == 200 and r["source"] == "local" and r["cast"]["spellId"] == "S06" and r["usedImage"], str(r.get("fallbackReason")))
+    fake.shutdown()
+
+
+def unity_link_checks():
+    """UnityClient/Assets/_Project/Backend/AiStrategyLink.cs 가 JsonUtility 로 만드는 모양 그대로 보낸다."""
+    print("[Unity AI 봇 연결 (AiStrategyLink 형식)]")
+    key = {"X-Server-Key": "wow-server-secret-key-2026"}
+
+    def post(path, body):
+        req = urllib.request.Request(BASE + path, data=json.dumps(body).encode(), method="POST",
+                                     headers=dict(key, **{"Content-Type": "application/json"}))
+        with urllib.request.urlopen(req, timeout=10) as r:
+            return json.loads(r.read())
+
+    state = {"deck": ["S03", "S04", "S06", "S08", "S11", "S13", "H01", "H02"], "ready": [True, True, False, True, True, True, False, True],
+             "selfHp": 640, "opponentHp": 900, "selfColumn": 1, "opponentColumn": 0, "time": 95.5,
+             "selfTowerAlive": True, "selfNexusAlive": True, "opponentTowerAlive": True, "opponentNexusAlive": True,
+             "incomingProjectileCount": 0, "nearestIncomingProjectileColumn": 1, "nearestIncomingProjectileEta": -1.0,
+             "lanes": [{"allies": 1, "enemies": 5, "enemyFront": 0.3, "clusterDepth": 0.35},
+                       {"allies": 2, "enemies": 1, "enemyFront": 0.6, "clusterDepth": 0.6},
+                       {"allies": 0, "enemies": 0, "enemyFront": 1.0, "clusterDepth": 0.5}], "players": 2, "mode": "bot"}
+    r = post("/api/ai/strategy", {"state": state, "botId": "a1b2c3d4-Home", "gameId": "bot-a1b2c3d4-1", "record": False})
+    check("봇 전략 요청 → cast(slot · spellId · column) · move 정수", isinstance(r["cast"]["slot"], int) and isinstance(r["move"]["direction"], int)
+          and (r["cast"]["slot"] < 0 or state["ready"][r["cast"]["slot"]]), str(r["cast"]))
+    steps = [{"state": state, "action": {"spellId": "S11", "slot": 4, "column": 0, "depth": 0.2, "move": 0, "followedAdvice": False}, "reward": 0},
+             {"state": state, "action": {"spellId": "", "slot": -1, "column": -1, "depth": 0, "move": -1, "followedAdvice": False}, "reward": 0}]
+    r = post("/api/ai/experience", {"gameId": "bot-a1b2c3d4-1", "botId": "a1b2c3d4-Home", "source": "unity-bot", "steps": steps})
+    check("봇 판단 묶음 기록 (시전 · 이동)", r["recorded"] == 2)
+    r = post("/api/ai/experience", {"gameId": "bot-a1b2c3d4-1", "botId": "a1b2c3d4-Home", "outcome": "WIN", "place": 1, "players": 2})
+    check("경기 결과 → 그 봇 판의 경험에 이름표", r["labeled"] == 2)
 
 
 if __name__ == "__main__":
