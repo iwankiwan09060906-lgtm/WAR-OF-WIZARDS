@@ -95,6 +95,40 @@ Unity 봇은 이제 랜덤이 아니라 **AI 전략 두뇌**로 두고, 서버�
 
 ---
 
+## 4-1. 하이브리드 봇 · 전장 지도 · 빠른 VLM (2026-10-29)
+
+- 봇 요청(`brief: true`)에는 Unity 두뇌 후보(`botPick`)와 유닛 점(`units`)이 같이 온다. 서버는 **전장 지도**(`wow_board.py`, 384×512 PNG —
+  위 상대 · 아래 나 · 세 레인 · 유닛 점 · 투사체 · 구조물 · 슬롯)를 그려 VLM 에 넣고, VLM 은 **작전(orders) + 한 수**만 짧게 답한다.
+  자세한 구조: [`Docs/Bot/AiStrategyBot.md`](../Bot/AiStrategyBot.md) "하이브리드 봇".
+- 데이터셋: 사진이 없는 장면(봇)은 저장한 상황으로 **같은 지도를 다시 그려** `frames/board_<id>.png` 로 넣는다 (`boards` 수). 정답에도 `orders` 가 있다.
+- 학습 결과로 한 수를 바꿀 때 **진 판의 스킬(가치 ≤ 0)로는 바꾸지 않는다** (예전에는 표본만 많으면 진 스킬로도 바꿨다).
+- **빠른 VLM (llama.cpp)**: LLaMA-Factory 4bit 서빙은 답 하나에 약 20초라 실시간 봇에는 느리다. llama.cpp `llama-server` 가 같은 OpenAI 호환 주소를 낸다
+  (RTX 4060 노트북: 답 하나 2~3.5초 · VRAM 약 4.2GB, 2026-10-29 측정).
+  - **켜기: `Backend/run_server_vlm.bat`** — llama-server(새 창, `--parallel 3` = 4인전 봇 3개 동시)를 먼저 켜고 게임 서버(8080)를 켠다.
+    `ai.vlm_provider = auto`(기본)면 로컬 VLM 이 켜져 있는지(`GET /v1/models`, 10초마다)를 보고 **자동으로 local** 을 쓴다. 꺼지면 규칙 AI.
+  - 파일 위치(기본): `%USERPROFILE%\models\llama.cpp-b11642\llama-server.exe`,
+    `%USERPROFILE%\models\Qwen2.5-VL-3B-Instruct-GGUF\` (`Qwen2.5-VL-3B-Instruct-Q4_K_M.gguf` + `mmproj-Qwen2.5-VL-3B-Instruct-f16.gguf`).
+    다른 PC: GitHub `ggml-org/llama.cpp` 릴리스 b11642 `llama-b11642-bin-win-cuda-12.4-x64.zip` + `cudart-llama-bin-win-cuda-12.4-x64.zip`,
+    Hugging Face `ggml-org/Qwen2.5-VL-3B-Instruct-GGUF` 의 위 두 파일. 다른 폴더면 `set WOW_LLAMA_DIR=…` · `set WOW_VLM_DIR=…` 후 실행.
+
+```text
+llama-server -m Qwen2.5-VL-3B-Instruct-Q4_K_M.gguf --mmproj mmproj-Qwen2.5-VL-3B-Instruct-f16.gguf ^
+             --host 127.0.0.1 --port 8790 -ngl 99 -c 12288 --parallel 3 --alias wow-vlm
+```
+
+  `ai.local_schema = true` 면 `response_format: json_schema` 로 답 모양을 문법으로 묶는다 (깨진 JSON 없음). 학습한 LoRA 를 쓰려면 GGUF 로 바꿔야 한다 (다음 할 일).
+
+## 4-2. 다른 서버에서 모은 판 가져오기 · 학습 비교 기준 (2026-10-29)
+
+- **가져오기**: BotLab 대전(`dotnet run -- vlm`)은 보통 시험용 서버 DB 에 쌓인다. 진짜 서버로 옮기고 다시 학습:
+  `python Backend/ai_import.py <가져올 DB> [<그 서버의 ai_data 폴더>]` — 같은 줄은 다시 넣지 않으니 여러 번 돌려도 된다.
+  켜져 있는 게임 서버는 `learned_policy.json` 이 바뀐 것을 보고 다음 요청부터 바로 쓴다.
+  (2026-10-29: VLM 봇끼리 12판 · 판단 1,503개를 진짜 서버로 가져옴 — S11 승률 71% · S12 58% · S03 27% · S09 16%)
+- **비교 기준 = 같은 상황 평균과의 차이(advantage)**: 밀리는 상황(예: 중반 · 적이 몰려옴)에서는 어떤 스킬을 써도 승률이 낮다.
+  그래서 승률(가치) 그대로 비교하면 모든 스킬을 "아껴라"가 된다. 이제 학습 결과로 한 수를 바꾸거나 작전을 만들 때
+  `advantage = 이 스킬 가치 - 같은 상황 평균` 을 쓴다: `prefer` = advantage > +0.2, `hold` = advantage < -0.3 이면서 전체 가치도 음수, 표본 5개 이상.
+- 검사(`test_web_ui_api.py`)는 진짜 서버 DB 를 복사해 쓰되 AI 경험 · `unity.spell_udp` 는 비우고 시작한다.
+
 ## 5. 설정 (관리자 콘솔 → 게임 설정)
 
 | 키 | 기본값 | 뜻 |
@@ -103,7 +137,10 @@ Unity 봇은 이제 랜덤이 아니라 **AI 전략 두뇌**로 두고, 서버�
 | `ai.max_frames` | 5000 | 저장할 화면 사진 최대 수 |
 | `ai.train_every` | 20 | 이름표 붙은 경험이 이만큼 늘면 자동 학습 (0 = 끔) |
 | `ai.learn_min_samples` | 5 | 학습 결과로 스킬을 바꾸려면 필요한 같은 상황 표본 수 |
-| `ai.vlm_provider` | auto | auto · claude · ollama · **local**(학습한 VLM) · rules |
+| `ai.vlm_provider` | auto | auto(Claude 키 → Claude, 로컬 VLM 이 켜져 있으면 local, 아니면 규칙) · claude · ollama · **local**(llama-server · 학습한 VLM) · rules |
 | `ai.local_url` · `ai.local_model` | http://127.0.0.1:8790/v1 · wow-vlm | 학습한 VLM 서버 |
+| `ai.board_image` | true | 사진이 없으면 전장 지도를 그려 VLM 에 넣는다 (데이터셋도 같은 그림) |
+| `ai.local_schema` | true | 학습한 VLM(local) 요청에 response_format json_schema (llama-server 는 문법으로 강제) |
+| `match.default_players` | 4 | 인원을 안 정한 매칭 · 방 요청의 인원 (4 = 4인 개인전, 2 = 1:1) |
 
 검사: `python Backend/test_web_ui_api.py` — 113개 (경험 · 이름표 · 학습 · 전략 반영 · 데이터셋 · 학습한 VLM 연결 · Unity 봇 연결 형식 포함).

@@ -46,10 +46,11 @@ namespace SpellboundVR.Network
         }
 
         /// <summary>시전 확정 → 쿨타임 시작 · 고위력 횟수 차감</summary>
-        public static void Consume(PlayerState player, int slot, float now, MatchRuleConfig rules, SpellTier tier, int scalingStage)
+        public static void Consume(PlayerState player, int slot, float now, MatchRuleConfig rules, SpellTier tier, int scalingStage,
+                                   float baseOverride = 0f)
         {
             ref SlotRuntime s = ref player.Slots[slot];
-            float cd = rules.GetCooldown(tier, scalingStage);
+            float cd = rules.GetCooldown(tier, scalingStage, baseOverride);
             s.CooldownDuration = cd;
             s.CooldownEndTime = now + cd;
             if (s.IsHighPower)

@@ -14,6 +14,12 @@ wow_server.py 의 POST /api/ai/strategy 가 부른다. 게임 화면 사진(선�
 
 학습: wow_learn.py 가 판 결과로 배운 것(이 상황에서 이긴 스킬 · 이긴 판 예시)을 규칙 AI 와 VLM 프롬프트에 함께 넣는다.
 
+하이브리드 봇 (Unity 두뇌 + VLM, Docs/Bot/AiStrategyBot.md):
+    Unity 두뇌 (빠른 반사, 0.25초) : 피하기 · 조준 깊이 · 시전 시점 · 위급할 때 스스로. 지금 고른 후보를 botPick 으로 보낸다
+    VLM        (전략, 몇 초에 한 번) : botPick + 전장 그림 → orders(작전: 집중 레인 · 자세 · 먼저 쓸 / 아낄 스킬 · 유지 시간) + 지금 한 수
+    Unity 두뇌는 그 작전을 0.25초마다 점수에 곱한다 → VLM 이 느려도 전략은 Unity 속도로 반응한다.
+    그림이 없으면 상황 · 유닛 점으로 전장 지도를 그려 넣는다 (wow_board.py — 미세조정 데이터셋도 같은 그림).
+
 열(column)은 0 = 왼쪽 · 1 = 가운데 · 2 = 오른쪽, 모두 "요청한 플레이어 자신의 시점" 기준이다
 (Unity BotObservation · SpellCastRequest.TargetColumn 과 같은 규칙). 응답 형식은 Docs/Backend/AiStrategy.md.
 """
@@ -27,6 +33,7 @@ import time
 import urllib.error
 import urllib.request
 
+import wow_board
 import wow_learn
 
 DEFAULT_MODEL = "claude-opus-5-5"
@@ -66,10 +73,28 @@ STRATEGY_SCHEMA = {
         },
         "focus": {"type": "string", "description": "3 · 4인 개인전에서 지금 노릴 상대와 이유 (1:1 이면 빈 문자열)"},
         "observations": {"type": "array", "items": {"type": "string"}, "description": "그림에서 본 것 (그림이 없으면 빈 배열)"},
+        "orders": {
+            "type": "object",
+            "description": "작전 — Unity 두뇌가 seconds 동안 0.25초마다 적용한다",
+            "properties": {
+                "lane": {"type": "integer", "description": "집중할 레인 0 왼쪽 · 1 가운데 · 2 오른쪽, 없으면 -1"},
+                "stance": {"type": "string", "enum": ["defend", "balanced", "push"]},
+                "prefer": {"type": "array", "items": {"type": "string"}, "description": "먼저 쓸 스킬 코드 0~3개"},
+                "hold": {"type": "array", "items": {"type": "string"}, "description": "아껴 둘 스킬 코드 0~3개"},
+                "seconds": {"type": "number", "description": "작전 유지 시간 3~15초"},
+            },
+            "required": ["lane", "stance", "prefer", "hold", "seconds"],
+            "additionalProperties": False,
+        },
     },
-    "required": ["summary", "threat", "plan", "cast", "move", "focus", "observations"],
+    "required": ["summary", "threat", "plan", "cast", "move", "focus", "observations", "orders"],
     "additionalProperties": False,
 }
+
+# 봇(brief)용 짧은 답 — 글이 짧을수록 빨리 온다. 나머지 칸은 힌트로 채운다
+BRIEF_SCHEMA = {"type": "object", "properties": {k: STRATEGY_SCHEMA["properties"][k] for k in ("threat", "orders", "cast", "move")},
+                "required": ["threat", "orders", "cast", "move"], "additionalProperties": False}
+STANCES = ("defend", "balanced", "push")
 
 RULES_TEXT = """\
 게임: War of Wizards — Quest 3 VR 마법 대전. 1:1 또는 3 · 4인 개인전 (팀 없음 — 나 빼고 모두 적).
@@ -81,14 +106,21 @@ RULES_TEXT = """\
   넥서스까지 무너지면 상대 유닛이 플레이어를 직접 공격한다(회피 불가).
 - 방어 계층은 상대마다 따로다: 그 상대의 타워가 살아 있으면 그 상대에게 20%, 무너졌으면 100%.
 - 상대 타워 파괴 시 내 모든 공격 +20%, 넥서스 파괴 시 +40% (영구). 5분마다 모두 강화.
-- 쿨타임: 일반 5초, 고위력 20초. 고위력 스킬은 경기당 스킬별 3회까지. 덱 8장(고위력 최대 2장).
+- 쿨타임: 일반 5초(소환 S11 · S12 는 8초), 고위력 20초. 고위력 스킬은 경기당 스킬별 3회까지. 덱 8장(고위력 최대 2장).
 - 투사체 · 레이저 · 장판은 다른 칸으로 피하면 맞지 않는다. 30초 동안 아무것도 안 하면 기권패.
 - 열 번호는 모두 이 플레이어 자신의 시점: 0 = 왼쪽, 1 = 가운데, 2 = 오른쪽."""
 
-SYSTEM_PROMPT = f"""너는 War of Wizards 의 전략 코치다. 게임 화면 사진(있으면)과 상황 JSON 을 보고,
-이 플레이어가 "지금 이 순간" 할 수 있는 가장 좋은 한 수를 고른다.
+SYSTEM_PROMPT = f"""너는 War of Wizards 의 전략 담당이다. 그림과 상황 JSON 을 보고 작전(orders)과 지금 할 한 수(cast · move)를 정한다.
 
 {RULES_TEXT}
+
+하이브리드: 봇은 Unity 두뇌와 너, 둘이 함께 둔다.
+- Unity 두뇌(빠른 반사): 0.25초마다 투사체 피하기 · 조준 깊이 · 시전 시점을 맡는다. botHint 는 Unity 두뇌가 지금 매긴 후보(점수 순)다.
+- 너(전략): orders 를 정한다 — lane 집중할 레인, stance(defend 지키기 · balanced · push 밀기), prefer 먼저 쓸 스킬, hold 아껴 둘 스킬, seconds 유지 시간.
+  Unity 두뇌가 그 작전을 seconds 동안 0.25초마다 점수에 반영하므로 한 수보다 "다음 몇 초의 방향"이 중요하다. 사람 코치 요청이면 orders 는 참고용이다.
+- 그림: 게임 화면 사진이거나 상황으로 그린 전장 지도다. 지도는 위 = 상대 진영(빨강) · 아래 = 내 진영(파랑) · 세로 세 줄 = 레인(내 시점 왼쪽 · 가운데 · 오른쪽),
+  파랑 점 = 우리 유닛 · 빨강 점 = 적 유닛(아래로 올수록 내 타워에 가깝다), 노란 마름모 = 내 칸으로 오는 투사체, 작은 네모 = 타워 · 큰 네모 = 넥서스(회색 X = 무너짐),
+  세모 = 플레이어, 맨 아래 8칸 = 덱 슬롯(초록 = 쓸 수 있음 · 금색 테두리 = 고위력), 맨 위 · 맨 아래 막대 = HP.
 
 판단 원칙:
 - 쓸 수 있는 스킬은 상황 JSON 의 slots 중 ready 가 true 인 것뿐이다. cast.slot 은 그 슬롯 번호, cast.spellId 는 그 슬롯의 코드.
@@ -98,8 +130,9 @@ SYSTEM_PROMPT = f"""너는 War of Wizards 의 전략 코치다. 게임 화면 �
 - 3 · 4인 개인전이면 opponents 의 HP · 타워 상태를 보고 노릴 상대를 고른다 (타워가 무너진 상대 → HP 가 낮은 상대).
   다른 상대끼리 싸우게 두고 힘을 아끼는 것도 전략이다. 고른 상대와 이유를 focus 에 적는다 (1:1 이면 빈 문자열).
 - 그림에서 확실히 보이지 않는 것은 지어내지 않는다. 상황 JSON 과 그림이 다르면 그림을 믿되 observations 에 적는다.
-- rulesHint 는 규칙 AI 의 제안이다. 그림을 보고 더 나은 수가 있으면 바꿔도 된다.
+- hint 는 Unity 두뇌(botHint 1순위) · 규칙 AI · 학습 결과로 만든 제안(orders 포함)이다. 그림을 보고 더 나은 수가 있으면 바꿔도 된다.
 - learned 는 이 게임의 실제 판 결과로 배운 것이다 (같은 상황에서 이긴 스킬 순위 · 이긴 판 예시). 표본(n)이 많을수록 믿는다.
+  advantage 는 같은 상황 평균보다 얼마나 나은지다 (+ 좋음 · - 나쁨). 밀리는 상황이면 모든 스킬의 승률이 낮으니 승률보다 advantage 로 비교한다.
 - 모든 문장은 한국어로 짧게 (게임 중에 한눈에 읽힌다)."""
 
 
@@ -180,8 +213,39 @@ def normalize_state(raw, skills):
     lanes = []
     for i, ln in enumerate((st.get("lanes") or [])[:3]):
         ln = _lower_keys(ln) if isinstance(ln, dict) else {}
-        lanes.append({"column": i, "allies": int(_num(ln.get("allies"))), "enemies": int(_num(ln.get("enemies"))),
-                      "enemyFront": round(_num(ln.get("enemyFront"), 0.5), 2)})
+        front = round(_num(ln.get("enemyFront"), 0.5), 2)
+        lane = {"column": i, "allies": int(_num(ln.get("allies"))), "enemies": int(_num(ln.get("enemies"))), "enemyFront": front}
+        if ln.get("clusterDepth") is not None:
+            lane["clusterDepth"] = round(_num(ln.get("clusterDepth"), front), 2)
+        if ln.get("allyFront") is not None:
+            lane["allyFront"] = round(_num(ln.get("allyFront")), 2)
+        if ln.get("nearBase") is not None:
+            lane["nearBase"] = int(_num(ln.get("nearBase")))
+        lanes.append(lane)
+
+    # Unity 봇이 보낸 유닛 점 [열, 깊이, 적?] (전장 지도용, 프롬프트 글에는 안 넣는다)
+    units = []
+    for u in (st.get("units") or [])[:120]:
+        if isinstance(u, dict):
+            u = _lower_keys(u)
+            c, d, e = u.get("c", u.get("column")), u.get("d", u.get("depth")), u.get("e", u.get("enemy"))
+        elif isinstance(u, (list, tuple)) and len(u) >= 3:
+            c, d, e = u[0], u[1], u[2]
+        else:
+            continue
+        col = _col(c)
+        if col is not None:
+            units.append([col, round(max(0.0, min(1.0, _num(d, 0.5))), 3), bool(e)])
+
+    # Unity 두뇌가 매긴 후보 (점수 순) — 준비된 슬롯 · 덱과 맞는 것만
+    picks = []
+    for p in (st.get("botPick") or [])[:4]:
+        p = _lower_keys(p) if isinstance(p, dict) else {}
+        slot = int(_num(p.get("slot"), -1))
+        if 0 <= slot < len(slots) and slots[slot]["ready"] and _code(p.get("spellId", slots[slot]["spellId"])) == slots[slot]["spellId"]:
+            picks.append({"slot": slot, "spellId": slots[slot]["spellId"], "column": _col(p.get("column"), -1),
+                          "depth": round(max(0.0, min(1.0, _num(p.get("depth"), 0.5))), 2),
+                          "score": round(_num(p.get("score")), 2), "why": str(p.get("why") or "")[:60]})
 
     def people(key):
         out = []
@@ -208,7 +272,7 @@ def normalize_state(raw, skills):
         "incoming": {"count": incoming,
                      "column": _col(st.get("nearestIncomingProjectileColumn", st.get("incomingColumn"))) if incoming else None,
                      "eta": round(_num(st.get("nearestIncomingProjectileEta", st.get("incomingEta")), 9), 2) if incoming else None},
-        "slots": slots, "lanes": lanes, "opponents": opponents,
+        "slots": slots, "lanes": lanes, "opponents": opponents, "units": units, "botPick": picks,
     }
 
 
@@ -230,7 +294,8 @@ def apply_learning(hint, st, adv, margin=0.25):
         return hint
     top = adv["ranked"][0]
     cur = next((x for x in adv["ranked"] if x["slot"] == hint["cast"]["slot"]), None)
-    if hint["cast"]["slot"] == top["slot"] or (cur and cur["value"] + margin > top["value"]):
+    # 같은 상황 평균보다 나은 스킬(advantage > 0)로만, 지금 수보다 확실히 나을 때만 바꾼다
+    if top["advantage"] <= 0 or hint["cast"]["slot"] == top["slot"] or (cur and cur["advantage"] + margin > top["advantage"]):
         hint["plan"] = (hint["plan"] + [wow_learn.describe(adv)])[:4]
         return hint
     s = next(x for x in st["slots"] if x["slot"] == top["slot"])
@@ -357,6 +422,83 @@ def rules_strategy(st):
             "focus": focus_text, "observations": []}
 
 
+def bot_hint(st, base):
+    """Unity 두뇌의 1순위 후보(botPick)가 있으면 규칙 AI 의 시전 대신 그것을 힌트로 (피하기 · 노릴 상대는 규칙 AI 그대로)"""
+    if not st.get("botPick"):
+        return base
+    p = st["botPick"][0]
+    s = next(x for x in st["slots"] if x["slot"] == p["slot"])
+    col = (p["column"] if p["column"] >= 0 else st["selfColumn"]) if s["kind"] in NEEDS_AIM else -1
+    old = base["cast"].get("spellId")
+    hint = dict(base)
+    hint["cast"] = {"slot": s["slot"], "spellId": s["spellId"], "column": col, "depth": p["depth"],
+                    "reason": f"Unity 두뇌 1순위 — {p['why'] or s['name']} (점수 {p['score']:g})"}
+    plan = [x for x in base["plan"] if not (old and x.startswith(old + " "))]
+    plan.insert(1 if base["move"]["direction"] else 0,
+                f"{s['spellId']} {s['name']}" + (f" → {COLUMN_KO[col]} 열" if col >= 0 else "") + " (Unity 두뇌)")
+    hint["plan"] = plan[:4]
+    return hint
+
+
+def rules_orders(st, hint, adv=None, min_n=5):
+    """VLM 없이 정하는 작전 — 레인 상황 · 힌트의 한 수 · 학습 결과(이긴 스킬은 먼저, 진 스킬은 아끼기)"""
+    lanes = st["lanes"]
+    hp = st["selfHp"] / st["selfMaxHp"]
+    enemies = [ln["enemies"] for ln in lanes]
+    allies = [ln["allies"] for ln in lanes]
+    near = any(ln["enemies"] and (ln.get("nearBase", 0) > 0 or ln["enemyFront"] < 0.25) for ln in lanes)
+    exposed = not st["opponentTowerAlive"] or any(not o["towerAlive"] for o in st["opponents"])
+    if hp < 0.35 or not st["selfTowerAlive"] or near:
+        stance = "defend"
+    elif exposed or (lanes and sum(allies) - sum(enemies) >= 3):
+        stance = "push"
+    else:
+        stance = "balanced"
+    lane = -1
+    if lanes and (stance == "defend" or max(enemies) >= 3):
+        lane = max(range(len(lanes)), key=lambda i: (enemies[i], -lanes[i]["enemyFront"]))
+    elif lanes and stance == "push":
+        lane = max(range(len(lanes)), key=lambda i: allies[i] - enemies[i])
+    # 학습: 같은 상황 평균보다 확실히 나은 스킬은 먼저, 이 상황에서도 전체에서도 못한 스킬은 아낀다 (표본 min_n 이상)
+    learned = [x for x in (adv or {}).get("all") or [] if x["n"] >= min_n]
+    bad = {x["spellId"] for x in learned if x["advantage"] < -0.3 and x["overall"] < 0}
+    cast = hint["cast"].get("spellId")
+    prefer = [cast] if cast and cast not in bad else []
+    hold = sorted(bad, key=lambda s: next(x["advantage"] for x in learned if x["spellId"] == s))
+    for x in learned:
+        if x["advantage"] > 0.2 and x["spellId"] not in prefer:
+            prefer.append(x["spellId"])
+    return {"lane": lane, "stance": stance, "prefer": prefer[:3], "hold": [h for h in hold if h not in prefer][:3], "seconds": 8}
+
+
+def make_hint(st, adv=None, min_n=5):
+    """VLM 에 주는 제안이자 VLM 이 없을 때의 답: 규칙 AI → Unity 두뇌 1순위 → 학습 결과 + 작전"""
+    hint = apply_learning(bot_hint(st, rules_strategy(st)), st, adv)
+    hint["orders"] = rules_orders(st, hint, adv, min_n)
+    return hint
+
+
+def clean_orders(o, st, fallback):
+    """VLM 작전을 게임 규칙에 맞게: 덱에 없는 스킬 · 잘못된 레인 · 시간은 고치고, 없으면 힌트 작전"""
+    if not isinstance(o, dict):
+        return dict(fallback)
+    deck = [s["spellId"] for s in st["slots"]]
+
+    def codes(v):
+        out = []
+        for x in v if isinstance(v, list) else []:
+            c = _code(x)
+            if c in deck and c not in out:
+                out.append(c)
+        return out[:3]
+    lane = int(_num(o.get("lane"), -1))
+    prefer = codes(o.get("prefer"))
+    return {"lane": lane if 0 <= lane <= 2 else -1,
+            "stance": o.get("stance") if o.get("stance") in STANCES else fallback["stance"],
+            "prefer": prefer, "hold": [h for h in codes(o.get("hold")) if h not in prefer],
+            "seconds": round(max(3.0, min(15.0, _num(o.get("seconds"), fallback["seconds"]))), 1)}
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # VLM 호출
 # ─────────────────────────────────────────────────────────────────────────────
@@ -385,16 +527,25 @@ def parse_image(image):
     return media, data
 
 
-def _prompt_text(st, hint, adv=None):
-    view = {k: v for k, v in st.items()}
+def _prompt_text(st, hint, adv=None, brief=False):
+    view = {k: v for k, v in st.items() if k not in ("units", "botPick")}      # 유닛 점은 그림으로 본다
     view["selfColumnName"] = COLUMN_KO[st["selfColumn"]]
     text = ("상황 JSON (열 0 왼쪽 · 1 가운데 · 2 오른쪽, 내 시점):\n"
-            + json.dumps(view, ensure_ascii=False)
-            + "\n\nrulesHint (규칙 AI 제안):\n" + json.dumps(hint, ensure_ascii=False))
+            + json.dumps(view, ensure_ascii=False))
+    if st.get("botPick"):
+        text += "\n\nbotHint (Unity 두뇌 후보, 점수 순):\n" + json.dumps(st["botPick"], ensure_ascii=False)
+    text += "\n\nhint (Unity 두뇌 · 규칙 AI · 학습 제안):\n" + json.dumps(hint, ensure_ascii=False)
     if adv:
         text += "\n\nlearned (이 게임 판 결과로 배운 것):\n" + json.dumps(
             {"situation": adv["situation"], "games": adv["games"], "ranked": adv["ranked"], "examples": adv["examples"]}, ensure_ascii=False)
-    return text + "\n\n지금 할 최선의 한 수를 스키마대로 답하라."
+    if brief:
+        return text + "\n\n봇 요청이다: threat · orders · cast · move 만 짧게 (reason 은 15자 이내) 스키마대로 답하라."
+    return text + "\n\n지금 할 최선의 한 수와 작전을 스키마대로 답하라."
+
+
+def training_prompt(st):
+    """미세조정 데이터셋의 user 글 — 실제 요청과 같은 모양 (같은 힌트 · 작전)"""
+    return _prompt_text(st, make_hint(st))
 
 
 def claude_available():
@@ -420,19 +571,19 @@ def _claude_client():
         return _CLIENT
 
 
-def claude_strategy(st, hint, media, data, model, effort, adv=None):
+def claude_strategy(st, hint, media, data, model, effort, adv=None, brief=False):
     import anthropic
     content = []
     if data:
         content.append({"type": "image", "source": {"type": "base64", "media_type": media, "data": data}})
-    content.append({"type": "text", "text": _prompt_text(st, hint, adv)})
+    content.append({"type": "text", "text": _prompt_text(st, hint, adv, brief)})
     try:
         resp = _claude_client().beta.messages.create(
             model=model,
             max_tokens=16000,
             system=SYSTEM_PROMPT,
             messages=[{"role": "user", "content": content}],
-            output_config={"effort": effort, "format": {"type": "json_schema", "schema": STRATEGY_SCHEMA}},
+            output_config={"effort": effort, "format": {"type": "json_schema", "schema": BRIEF_SCHEMA if brief else STRATEGY_SCHEMA}},
             betas=["server-side-fallback-2026-07-01"],
             fallbacks="default",          # 안전 분류기가 거절하면 Anthropic 추천 모델로 서버가 다시 시도
         )
@@ -452,11 +603,12 @@ def claude_strategy(st, hint, media, data, model, effort, adv=None):
     return json.loads(text), resp.model
 
 
-def ollama_strategy(st, hint, data, url, model, adv=None):
-    msg = {"role": "user", "content": _prompt_text(st, hint, adv)}
+def ollama_strategy(st, hint, data, url, model, adv=None, brief=False):
+    msg = {"role": "user", "content": _prompt_text(st, hint, adv, brief)}
     if data:
         msg["images"] = [data]
-    body = json.dumps({"model": model, "stream": False, "format": STRATEGY_SCHEMA, "options": {"temperature": 0.2},
+    body = json.dumps({"model": model, "stream": False, "format": BRIEF_SCHEMA if brief else STRATEGY_SCHEMA, "keep_alive": "30m",
+                       "options": {"temperature": 0.2, "num_predict": 400 if brief else 1200},       # 모델을 올려 둔 채로 (다시 올리는 시간 없이)
                        "messages": [{"role": "system", "content": SYSTEM_PROMPT}, msg]}).encode("utf-8")
     req = urllib.request.Request(url.rstrip("/") + "/api/chat", data=body, headers={"Content-Type": "application/json"})
     try:
@@ -469,13 +621,18 @@ def ollama_strategy(st, hint, data, url, model, adv=None):
     return json.loads(out["message"]["content"]), model
 
 
-def local_strategy(st, hint, media, data, url, model, adv=None):
-    """이 게임으로 미세조정한 VLM — OpenAI 호환 /chat/completions (llamafactory-cli api · vLLM 등)"""
-    content = [{"type": "text", "text": _prompt_text(st, hint, adv)}]
+def local_strategy(st, hint, media, data, url, model, adv=None, brief=False, schema=True):
+    """이 게임으로 미세조정한 VLM — OpenAI 호환 /chat/completions (llama.cpp llama-server · llamafactory-cli api · vLLM 등)
+    schema: response_format json_schema 로 답 모양을 묶는다 (llama-server 는 문법으로 강제 → 깨진 JSON 없음 · 빠름)"""
+    content = [{"type": "text", "text": _prompt_text(st, hint, adv, brief)}]
     if data:
         content.insert(0, {"type": "image_url", "image_url": {"url": f"data:{media};base64,{data}"}})
-    body = json.dumps({"model": model, "temperature": 0.2, "max_tokens": 1024,
-                       "messages": [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": content}]}).encode("utf-8")
+    req_body = {"model": model, "temperature": 0.2, "max_tokens": 400 if brief else 1024,
+                "messages": [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": content}]}
+    if schema:
+        req_body["response_format"] = {"type": "json_schema", "json_schema": {"name": "wow_strategy", "strict": True,
+                                                                              "schema": BRIEF_SCHEMA if brief else STRATEGY_SCHEMA}}
+    body = json.dumps(req_body).encode("utf-8")
     req = urllib.request.Request(url.rstrip("/") + "/chat/completions", data=body, headers={"Content-Type": "application/json"})
     try:
         with urllib.request.urlopen(req, timeout=90) as r:
@@ -519,6 +676,7 @@ def clean_strategy(out, st, hint):
     if not 0 <= st["selfColumn"] + d <= 2:
         d = 0
     res["move"] = {"direction": d, "reason": str(mv.get("reason") or "")[:160]}
+    res["orders"] = clean_orders(out.get("orders"), st, hint["orders"])
     if notes:
         res["notes"] = notes
     return res
@@ -531,11 +689,36 @@ _LAST_CALL = {}
 _LAST_LOCK = threading.Lock()
 
 
+_LOCAL_SEEN = {}          # 로컬 VLM 주소 → (확인한 때, 켜져 있나)
+_LOCAL_TTL = 10.0
+
+
+def local_url(config):
+    return (config.get("ai.local_url") or "http://127.0.0.1:8790/v1").rstrip("/")
+
+
+def local_available(config):
+    """로컬 VLM 서버(llama-server · llamafactory-cli api)가 켜져 있나 — GET /v1/models 가 200 이면. 10초 동안 기억한다."""
+    url = local_url(config)
+    now = time.time()
+    seen = _LOCAL_SEEN.get(url)
+    if seen and now - seen[0] < _LOCAL_TTL:
+        return seen[1]
+    try:
+        with urllib.request.urlopen(url + "/models", timeout=0.5) as r:
+            ok = r.status == 200
+    except (urllib.error.URLError, OSError, ValueError):
+        ok = False
+    _LOCAL_SEEN[url] = (now, ok)
+    return ok
+
+
 def choose_provider(config, override=None):
+    """auto: Claude 키가 있으면 Claude → 로컬 VLM 서버가 켜져 있으면 local (run_server_vlm.bat) → 아니면 규칙"""
     want = (override or config.get("ai.vlm_provider") or "auto").strip().lower()
     if want == "auto":
         ok, _ = claude_available()
-        return "claude" if ok else "rules"
+        return "claude" if ok else "local" if local_available(config) else "rules"
     return want if want in ("claude", "ollama", "local", "rules") else "rules"
 
 
@@ -547,18 +730,26 @@ def status(config):
             (config.get("ai.ollama_model") or "") if provider == "ollama" else
             (config.get("ai.local_model") or "wow-vlm") if provider == "local" else "rules",
             "claude": {"available": ok, "reason": why}, "ollama": {"url": config.get("ai.ollama_url") or ""},
-            "local": {"url": config.get("ai.local_url") or ""}, "learning": wow_learn.summary(wow_learn.load_policy())}
+            "local": {"url": local_url(config), "available": local_available(config)},
+            "learning": wow_learn.summary(wow_learn.load_policy())}
 
 
-def strategy(raw_state, skills, config=None, image=None, caller=None, provider=None):
-    """상황(+그림) → 전략. VLM 이 실패하면 규칙 AI 답에 fallbackReason 을 붙여 돌려준다 (예외를 던지지 않음).
-    그림이 잘못된 경우만 ValueError."""
+def board_enabled(config):
+    return str((config or {}).get("ai.board_image", "true")).lower() != "false"
+
+
+def strategy(raw_state, skills, config=None, image=None, caller=None, provider=None, brief=False):
+    """상황(+그림) → 전략 + 작전(orders). VLM 이 실패하면 힌트(Unity 두뇌 · 규칙 AI · 학습) 답에 fallbackReason 을 붙여 돌려준다
+    (예외를 던지지 않음). 그림이 잘못된 경우만 ValueError. 그림이 없으면 전장 지도를 그려 VLM 에 넣는다.
+    brief: 봇 요청 — VLM 은 작전 · 한 수만 짧게 (빨리) 답하고 나머지는 힌트로 채운다."""
     config = config or {}
     t0 = time.time()
     st = normalize_state(raw_state, skills)
-    adv = wow_learn.advise(st, min_n=int(_num(config.get("ai.learn_min_samples"), 5)))
-    hint = apply_learning(rules_strategy(st), st, adv)
+    min_n = int(_num(config.get("ai.learn_min_samples"), 5))
+    adv = wow_learn.advise(st, min_n=min_n)
+    hint = make_hint(st, adv, min_n)
     media, data = parse_image(image)
+    image_kind = "screen" if data else ""
     chosen = choose_provider(config, provider)
 
     # 유료 API 를 너무 자주 부르지 않게 (같은 플레이어) — 그 사이는 규칙 AI
@@ -578,16 +769,19 @@ def strategy(raw_state, skills, config=None, image=None, caller=None, provider=N
     if wait:
         why = f"VLM 은 {min_gap:g}초에 한 번 — {wait:.1f}초 뒤 다시"
     elif chosen in ("claude", "ollama", "local"):
+        if not data and board_enabled(config):
+            media, data, image_kind = "image/png", base64.b64encode(wow_board.render(st)).decode("ascii"), "board"
         try:
             if chosen == "claude":
                 out, model = claude_strategy(st, hint, media, data, config.get("ai.vlm_model") or DEFAULT_MODEL,
-                                             (config.get("ai.vlm_effort") or "low").lower(), adv)
+                                             (config.get("ai.vlm_effort") or "low").lower(), adv, brief)
             elif chosen == "local":
                 out, model = local_strategy(st, hint, media, data, config.get("ai.local_url") or "http://127.0.0.1:8790/v1",
-                                            config.get("ai.local_model") or "wow-vlm", adv)
+                                            config.get("ai.local_model") or "wow-vlm", adv, brief,
+                                            str(config.get("ai.local_schema", "true")).lower() != "false")
             else:
                 out, model = ollama_strategy(st, hint, data, config.get("ai.ollama_url") or "http://127.0.0.1:11434",
-                                             config.get("ai.ollama_model") or "qwen2.5vl:7b", adv)
+                                             config.get("ai.ollama_model") or "qwen2.5vl:7b", adv, brief)
             result = clean_strategy(out, st, hint)
         except (RuntimeError, ValueError, KeyError, json.JSONDecodeError) as e:
             chosen, model, why = "rules", "rules", str(e)
@@ -598,6 +792,7 @@ def strategy(raw_state, skills, config=None, image=None, caller=None, provider=N
         chosen = "rules"
     result = dict(result)
     result.update({"source": chosen, "model": model, "usedImage": bool(data) and chosen != "rules",
+                   "imageKind": image_kind if chosen != "rules" else "", "botHinted": bool(st["botPick"]),
                    "latencyMs": int((time.time() - t0) * 1000), "rulesHint": hint if chosen != "rules" else None,
                    "learned": {"note": wow_learn.describe(adv), "situation": adv["situation"], "games": adv["games"],
                                "ranked": adv["ranked"][:3], "confident": adv["confident"]} if adv else None,

@@ -175,18 +175,25 @@ def advise(st, policy=None, min_n=5):
         return None
     key, feat = situation(st)
     table = policy["buckets"].get(key) or {}
+
+    def mean(t):
+        n = sum(v["n"] for v in t.values())
+        return sum(v["value"] * v["n"] for v in t.values()) / n if n else 0.0
+    # 가치는 "이 상황 자체가 이기는 / 지는 상황인가"를 함께 담는다 (밀리는 상황이면 모든 스킬이 낮다).
+    # 그래서 같은 상황 평균과의 차이(advantage)로 스킬을 비교한다 — 평균보다 나으면 +, 못하면 -.
+    base = {"situation": mean(table), "overall": mean(policy["spells"])}
     ranked = []
     for s in st.get("slots") or []:
         if not s.get("ready"):
             continue
         b = table.get(s["spellId"])
         g = policy["spells"].get(s["spellId"])
-        if b:
-            ranked.append({"slot": s["slot"], "spellId": s["spellId"], "value": b["value"], "n": b["n"], "winRate": b["winRate"], "scope": "situation"})
-        elif g:
-            ranked.append({"slot": s["slot"], "spellId": s["spellId"], "value": g["value"], "n": g["n"], "winRate": g["winRate"], "scope": "overall"})
-    ranked.sort(key=lambda x: (-(x["n"] >= min_n), -x["value"]))
-    return {"situation": key, "features": feat, "ranked": ranked[:5], "examples": (policy.get("examples") or {}).get(key, [])[:3],
+        pick, scope = (b, "situation") if b else (g, "overall")
+        if pick:
+            ranked.append({"slot": s["slot"], "spellId": s["spellId"], "value": pick["value"], "n": pick["n"], "winRate": pick["winRate"],
+                           "scope": scope, "advantage": round(pick["value"] - base[scope], 3), "overall": g["value"] if g else 0.0})
+    ranked.sort(key=lambda x: (-(x["n"] >= min_n), -x["advantage"]))
+    return {"situation": key, "features": feat, "ranked": ranked[:5], "all": ranked, "examples": (policy.get("examples") or {}).get(key, [])[:3],
             "samples": policy["samples"], "games": policy["games"], "confident": bool(ranked and ranked[0]["n"] >= min_n)}
 
 
@@ -196,7 +203,8 @@ def describe(adv):
         return ""
     b = adv["ranked"][0]
     where = "이 상황" if b["scope"] == "situation" else "전체"
-    return f"학습({adv['games']}판): {where}에서 {b['spellId']} 승률 {round(b['winRate'] * 100)}% · {b['n']}번"
+    return (f"학습({adv['games']}판): {where}에서 {b['spellId']} 승률 {round(b['winRate'] * 100)}% · {b['n']}번"
+            f" (평균보다 {b.get('advantage', 0):+.2f})")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -218,15 +226,19 @@ def _target(st, act, row):
             "cast": {"slot": slot, "spellId": act.get("spellId", ""), "column": col, "depth": act.get("depth", 0.5),
                      "reason": f"이 상황에서 이긴 판의 수 ({row['outcome']}{place})"},
             "move": {"direction": move, "reason": "피하기" if move else ""},
-            "focus": act.get("focus", "") if (st.get("players") or 2) > 2 else "", "observations": []}
+            "focus": act.get("focus", "") if (st.get("players") or 2) > 2 else "", "observations": [],
+            "orders": {"lane": col if 0 <= col <= 2 else -1,
+                       "stance": "defend" if feat["hp"] == "hpLow" else "push" if feat["enemyTower"] == "down" else "balanced",
+                       "prefer": [act.get("spellId", "")], "hold": [], "seconds": 8}}
 
 
-def export_dataset(conn, system_prompt, prompt_text, out_dir=None, min_value=0.01):
-    """이긴 판(가치 > 0)의 장면 → out_dir/wow_vlm_sft.jsonl + dataset_info.json (+ 그림 복사). 줄 수를 돌려준다."""
+def export_dataset(conn, system_prompt, prompt_text, out_dir=None, min_value=0.01, board_fn=None):
+    """이긴 판(가치 > 0)의 장면 → out_dir/wow_vlm_sft.jsonl + dataset_info.json (+ 그림 복사). 줄 수를 돌려준다.
+    board_fn: 사진이 없는 장면(Unity 봇 · BotLab)은 저장한 상황으로 전장 지도를 다시 그린다 (실제 요청 때와 같은 그림)."""
     out_dir = out_dir or os.path.join(DATA_DIR, "dataset")
     os.makedirs(os.path.join(out_dir, "frames"), exist_ok=True)
     rows = conn.execute("""SELECT * FROM ai_experiences WHERE outcome != '' AND kind IN ('action', 'step') ORDER BY id""").fetchall()
-    n = with_image = 0
+    n = with_image = boards = 0
     with open(os.path.join(out_dir, "wow_vlm_sft.jsonl"), "w", encoding="utf-8") as f:
         for r in rows:
             if value_of(r) < min_value:
@@ -249,6 +261,14 @@ def export_dataset(conn, system_prompt, prompt_text, out_dir=None, min_value=0.0
                 line["messages"][1]["content"] = "<image>" + user
                 line["images"] = [f"frames/{name}"]
                 with_image += 1
+            elif board_fn:
+                name = f"board_{r['id']}.png"
+                with open(os.path.join(out_dir, "frames", name), "wb") as img:
+                    img.write(board_fn(st))
+                line["messages"][1]["content"] = "<image>" + user
+                line["images"] = [f"frames/{name}"]
+                with_image += 1
+                boards += 1
             f.write(json.dumps(line, ensure_ascii=False) + "\n")
             n += 1
     info = {"wow_vlm": {"file_name": "wow_vlm_sft.jsonl", "formatting": "sharegpt",
@@ -258,7 +278,7 @@ def export_dataset(conn, system_prompt, prompt_text, out_dir=None, min_value=0.0
     with open(os.path.join(out_dir, "dataset_info.json"), "w", encoding="utf-8") as f:
         json.dump(info, f, ensure_ascii=False, indent=2)
     write_finetune_configs(out_dir)
-    return {"lines": n, "withImage": with_image, "dir": out_dir}
+    return {"lines": n, "withImage": with_image, "boards": boards, "dir": out_dir}
 
 
 def write_finetune_configs(out_dir, run_name="wow-vlm-lora"):

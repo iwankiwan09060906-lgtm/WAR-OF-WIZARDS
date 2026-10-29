@@ -18,18 +18,22 @@
 | --- | --- |
 | `Backend/run_server.bat` | 서버 전부 (외부 패키지 없음). AI 코치는 **규칙 AI**, 손 추적은 **랜드마크 입력만** |
 | `Backend/run_server_ai.bat` | 위 + 서버 MediaPipe(카메라 프레임) + Claude VLM. 첫 실행 때 `GestureTools/MediaPipe/.venv` 에 `mediapipe` · `anthropic` 설치 |
+| `Backend/run_server_vlm.bat` | 게임 서버 + **로컬 VLM**(llama.cpp Qwen2.5-VL-3B, 하이브리드 봇의 작전 · 웹 AI 코치). 자세히: [`AiLearning.md`](AiLearning.md) 4-1 |
 
 Claude VLM 을 쓰려면 실행 전에 `set ANTHROPIC_API_KEY=키` (없으면 규칙 AI 로 답한다 — 게임은 멈추지 않음).
 
 ---
 
-## 2. 개인전 2~4명
+## 2. 개인전 2~4명 (기본 4명)
+
+> 2026-10-29: 인원을 안 정한 요청(Unity 큐 · 방 만들기, 웹 기본값)은 **4인 개인전**이 된다. 1:1 로 되돌리려면 관리자 콘솔 → 게임 설정 → `match.default_players = 2`.
+> Unity 전투(MatchSimulation)는 아직 진영 2개(Home · Away)라 Unity 쪽 4인 전투는 Unity 담당이 진영 · 관찰(BotObservation 상대 목록)을 늘려야 한다.
 
 ### 2.1 매칭 큐
 
 | 요청 | 설명 |
 | --- | --- |
-| `POST /api/matchmaking/queue` `{ "players": 4 }` | 2 · 3 · 4 (없으면 2 = 1:1). `{"format":"ffa4"}` · `{"maxPlayers":4}` 도 된다 |
+| `POST /api/matchmaking/queue` `{ "players": 4 }` | 2 · 3 · 4. **없으면 설정 `match.default_players`(기본 4 = 4명까지 모으는 4인 개인전, 빈자리는 봇)** — 1:1 은 `{"players": 2}`. `{"format":"ffa4"}` · `{"maxPlayers":4}` 도 된다. 방 만들기(`POST /api/rooms`)도 같다 |
 | `GET /api/matchmaking/status` | 같은 인원을 고른 사람끼리 레이팅 범위가 맞으면 모아서 매칭. `matchmaking.bot_timeout`(기본 15초)이 지나면 모인 사람만으로 시작하고 빈자리는 봇 |
 
 탐색 중: `{"state":"searching","maxPlayers":4,"playersFound":2,"playersNeeded":4, ...예전 칸}`

@@ -17,6 +17,7 @@ MonoBehaviour:
   VfxName: Mage
   ThemeColor: {r: 0.95, g: 0.3, b: 0.2, a: 1}
   Tier: 0
+  CooldownOverride: 8
   Targeting: 3
   Executor: 3
   Behavior: 12

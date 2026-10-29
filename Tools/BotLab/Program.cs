@@ -21,6 +21,9 @@ internal static class Program
         Console.OutputEncoding = System.Text.Encoding.UTF8;
         if (args.Length > 0 && args[0] == "diag") return Diag(args.Length > 1 ? int.Parse(args[1]) : 200, args.Length > 2 ? float.Parse(args[2]) : 6f);
         if (args.Length > 0 && args[0] == "tune") return Tune(args.Length > 1 ? int.Parse(args[1]) : 400, args.Length > 2 ? int.Parse(args[2]) : 3);
+        if (args.Length > 0 && args[0] == "vlm")
+            return Vlm(args.Length > 1 ? int.Parse(args[1]) : 10, args.Length > 2 ? args[2] : "http://127.0.0.1:8080",
+                       args.Length > 3 ? args[3] : "wow-server-secret-key-2026");
         int games = args.Length > 0 ? int.Parse(args[0]) : 100;
         float cap = args.Length > 1 ? float.Parse(args[1]) : 900f;
 
@@ -252,6 +255,70 @@ internal static class Program
         // 훈련에 안 쓴 시드로 확인 (과적합 확인)
         double heldOld = WinRate(new AiBrainWeights(), 50001, 600, pace), heldNew = WinRate(w, 50001, 600, pace);
         Console.WriteLine($"[검증 · 새 시드 600판, 같은 시전 속도] 조정 전 {heldOld:P1} → 조정 후 {heldNew:P1}");
+        return 0;
+    }
+
+    // ── 하이브리드 봇(Unity 두뇌 + VLM) 끼리 — 진짜 AI 서버에 연결 ─────────────
+
+    /// <summary>
+    /// 양쪽 모두 하이브리드 봇: 두뇌는 여기서(실제 전투 코드), 작전 · 한 수는 서버(/api/ai/strategy → VLM).
+    /// VLM 답에 걸린 실제 시간만큼 경기 시간이 흐른 뒤에 그 답을 쓴다 (RemoteAdvisor). 판이 끝나면 양쪽 판단을 서버 학습 데이터로 보낸다.
+    ///   dotnet run -c Release -- vlm [판 수 10] [서버 http://127.0.0.1:8080] [서버 키]
+    /// </summary>
+    private static int Vlm(int games, string url, string key)
+    {
+        var rules = MatchRuleConfig.CreateDefault();
+        var catalog = SpellCatalog.CreateDefault();
+        var arena = ArenaGeometry.CreateDefault();
+        var advisor = new RemoteAdvisor(url, key);
+        Console.WriteLine($"[VLM] 하이브리드 봇 vs 하이브리드 봇 {games}판 · 서버 {url} · 최대 900초");
+        int aWins = 0, bWins = 0, draws = 0, homeWins = 0, awayWins = 0;
+        double simTime = 0;
+        var total = Stopwatch.StartNew();
+        for (int g = 0; g < games; g++)
+        {
+            uint seed = (uint)(7919 * (300001 + g));
+            bool aHome = g % 2 == 0;
+            Team aTeam = aHome ? Team.Home : Team.Away, bTeam = TeamUtil.Opponent(aTeam);
+            var cfg = BotConfig.CreateDefault();
+            cfg.UseServerStrategy = true;
+            cfg.ReportExperience = true;
+            var sim = new MatchSimulation(rules, catalog, arena, cfg, null, null, null, seed) { LogCasts = false };
+            sim.JoinBot(aTeam, new AiStrategyBrain(aTeam, sim.GetDeck(aTeam), catalog, cfg, seed + 11, advisor));
+            sim.JoinBot(bTeam, new AiStrategyBrain(bTeam, sim.GetDeck(bTeam), catalog, cfg, seed + 23, advisor));
+            int calls0 = advisor.Calls;
+            double lat0 = advisor.LatencySum;
+            var sw = Stopwatch.StartNew();
+            while (sim.Phase != MatchPhase.Ended && sim.MatchTime < 900f) sim.Tick(rules.LocalTickInterval);
+            var (aCasts, aAdv, aOrd) = advisor.Stats(aTeam);
+            var (bCasts, bAdv, bOrd) = advisor.Stats(bTeam);
+            advisor.FinishGame(sim);
+            simTime += sim.MatchTime;
+            string who;
+            var w = sim.Phase == MatchPhase.Ended ? sim.Outcome.Winner : MatchWinner.None;
+            if (w == MatchWinner.Home || w == MatchWinner.Away)
+            {
+                bool aWon = (w == MatchWinner.Home) == aHome;
+                if (aWon) aWins++; else bWins++;
+                if (w == MatchWinner.Home) homeWins++; else awayWins++;
+                who = $"{(aWon ? "A" : "B")} 승 ({w})";
+            }
+            else
+            {
+                draws++;
+                who = sim.Phase == MatchPhase.Ended ? "무승부" : "시간 초과 (900초)";
+            }
+            int calls = advisor.Calls - calls0;
+            Console.WriteLine($"  판 {g + 1,2}: {who,-14} 경기 {sim.MatchTime,4:0}초 · 걸린 시간 {sw.Elapsed.TotalSeconds,5:0}초 · VLM 요청 {calls} (평균 {(calls > 0 ? (advisor.LatencySum - lat0) / calls : 0):0.0}초)" +
+                              $" · A 시전 {aCasts} (한 수 {aAdv} · 작전 {aOrd}) · B 시전 {bCasts} (한 수 {bAdv} · 작전 {bOrd})");
+        }
+        int decided = aWins + bWins;
+        Console.WriteLine($"\n■ 하이브리드 vs 하이브리드 {games}판 (A 는 판마다 Home / Away 번갈아)");
+        Console.WriteLine($"  A 승 {aWins} · B 승 {bWins} · 무 · 시간 초과 {draws} → A 승률 {(decided > 0 ? 100.0 * aWins / decided : 0):0.0}% (승부 난 판 기준)");
+        Console.WriteLine($"  진영별: Home 승 {homeWins} · Away 승 {awayWins} · 평균 경기 {simTime / Math.Max(1, games):0}초 · 전체 {total.Elapsed.TotalMinutes:0.0}분");
+        Console.WriteLine($"  서버 답 {advisor.Calls}번 (평균 {(advisor.Calls > 0 ? advisor.LatencySum / advisor.Calls : 0):0.00}초 · 최대 {advisor.LatencyMax:0.0}초) · 답한 쪽: " +
+                          string.Join(" ", System.Linq.Enumerable.Select(advisor.Sources, kv => $"{kv.Key}:{kv.Value}")) + $" · 실패 {advisor.Failures}");
+        foreach (var e in advisor.Errors) Console.WriteLine($"  [오류] {e}");
         return 0;
     }
 

@@ -22,7 +22,7 @@ export default {
           <figure>${skHTML(s.id, 104)}<figcaption>발동하는 마법진</figcaption></figure>
         </div>
         <p class="hint">오른손 핀치를 누른 채 허공에 그립니다. 인식되면 주먹으로 준비하고, 검지로 조준합니다.</p>
-        <div class="facts"><div><b class="num">${s.high ? RULES.cooldown.high : RULES.cooldown.normal}초</b><span>쿨타임</span></div><div><b>${k.aim}</b><span>조준</span></div><div><b>${s.high ? `게임당 ${RULES.highUses}회` : "없음"}</b><span>제한</span></div></div>
+        <div class="facts"><div><b class="num">${s.cooldown}초</b><span>쿨타임</span></div><div><b>${k.aim}</b><span>조준</span></div><div><b>${s.high ? `게임당 ${RULES.highUses}회` : "없음"}</b><span>제한</span></div></div>
       </div>`;
     };
     const deckBox = () => `<div class="deck-box">
@@ -49,7 +49,7 @@ export default {
               const slot = draft.indexOf(s.id);
               const blocked = slot < 0 && (full || (s.high && highs() >= RULES.highLimit));
               return `<button class="skill ${slot >= 0 ? "in" : ""} ${blocked ? "blocked" : ""} ${s.id === focus ? "focus" : ""}" data-toggle="${s.id}" aria-pressed="${slot >= 0}">
-                ${skHTML(s.id, 46)}<span><span class="nm">${s.name}</span><br><span class="mt">${s.id} · ${KINDS[s.kind].label} · ${s.high ? RULES.cooldown.high : RULES.cooldown.normal}s</span></span>
+                ${skHTML(s.id, 46)}<span><span class="nm">${s.name}</span><br><span class="mt">${s.id} · ${KINDS[s.kind].label} · ${s.cooldown}s</span></span>
                 <span class="slotno">${slot + 1}</span></button>`;
             }).join("")}</div>
           </section>

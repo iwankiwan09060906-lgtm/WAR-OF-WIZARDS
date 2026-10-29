@@ -37,7 +37,7 @@ export default {
       unity: false, ended: false, timers: [], feed: [], autoAim: null, unityState: null,
     };
     const later = (fn, ms) => g.timers.push(setTimeout(fn, ms));
-    const cdMax = (i) => (SKILL[deck[i]].high ? RULES.cooldown.high : RULES.cooldown.normal);
+    const cdMax = (i) => SKILL[deck[i]].cooldown ?? (SKILL[deck[i]].high ? RULES.cooldown.high : RULES.cooldown.normal);
 
     root.innerHTML = `<div class="battle">
       <header class="bhud">
@@ -343,7 +343,7 @@ export default {
     };
     const drawCoach = (r) => {
       const [tk, tone] = THREAT_KO[r.threat] || ["-", ""];
-      $("#coach-src").textContent = (r.source === "claude" ? "Claude VLM" : r.source === "ollama" ? "로컬 VLM" : "규칙 AI") + (r.usedImage ? " · 화면" : "");
+      $("#coach-src").textContent = (r.source === "claude" ? "Claude VLM" : r.source === "ollama" ? "로컬 VLM" : r.source === "local" ? "학습한 VLM" : "규칙 AI") + (r.usedImage ? " · 화면" : "");
       const c = r.cast;
       const sk = c.slot >= 0 ? SKILL[deck[c.slot]] : null;
       $("#coach-body").innerHTML = `<b class="coach-sum">${esc(r.summary)}</b><span class="chip ${tone}">위험 ${tk}</span>

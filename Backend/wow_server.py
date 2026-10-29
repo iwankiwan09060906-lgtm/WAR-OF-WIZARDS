@@ -103,6 +103,7 @@ except Exception:  # 폴더가 없어도 서버는 뜬다 (룬 인식 API 만 50
 
 # AI: VLM 전략 코치(wow_ai.py, 외부 패키지 없이도 규칙 AI 로 동작) · 서버 MediaPipe 손 추적(wow_hands.py)
 import wow_ai  # noqa: E402
+import wow_board  # noqa: E402
 import wow_learn  # noqa: E402
 try:
     import wow_hands
@@ -135,8 +136,8 @@ SKILLS = [
     (8, "S08", "방어 쉴드", "Shield", "Normal", "Self", "buff", 5.0, 0, 0, "#22d3ee", "피해 흡수 쉴드 생성 (피격 없을 시 HP 회복)"),
     (9, "S09", "타워 버프", "TowerBuff", "Normal", "Self", "buff", 5.0, 0, 0, "#c4b5fd", "본인 타워 방어력/공격력 일시 강화 (타워 파괴 시 비활성화)"),
     (10, "S10", "집중", "Focus", "Normal", "Self", "buff", 5.0, 0, 0, "#facc15", "다음 공격 1회의 명중률 및 공격력 대폭 증가"),
-    (11, "S11", "도끼 전사", "AxeWarrior", "Normal", "Summon", "summon", 5.0, 0, 0, "#dc2626", "근접 공격형 소환수 소환"),
-    (12, "S12", "드래곤", "Dragon", "Normal", "Summon", "summon", 5.0, 0, 0, "#818cf8", "공중 비행 원거리 화염 소환수 소환"),
+    (11, "S11", "도끼 전사", "AxeWarrior", "Normal", "Summon", "summon", 8.0, 0, 0, "#dc2626", "근접 공격형 소환수 소환"),
+    (12, "S12", "드래곤", "Dragon", "Normal", "Summon", "summon", 8.0, 0, 0, "#818cf8", "공중 비행 원거리 화염 소환수 소환"),
     (13, "S13", "터렛", "Turret", "Normal", "Structure", "install", 5.0, 0, 0, "#71717a", "적 유닛 요격용 고정 포탑 설치 (진영당 1기)"),
     (101, "H01", "프리즈", "Freeze", "HighPower", "Global", "global", 20.0, 0, 0, "#38bdf8", "적 전체 미니언 · 소환수 · 설치물 · 타워 7초간 정지 + 피해"),
     (102, "H02", "레이저 빔", "LaserBeam", "HighPower", "Beam", "beam", 20.0, 30, 0, "#e879f9", "0.5초 예고선 후 4초간 유지되는 빔으로 열 전체 관통 타격 (유닛 및 끝의 플레이어)"),
@@ -277,7 +278,7 @@ def record_experience(conn, caller, kind, body, state, action=None, advice=None,
     """경기 경험 한 줄 (+ 화면 사진). 상황은 wow_ai.normalize_state 로 정리해서 저장한다. id 를 돌려준다."""
     st = wow_ai.normalize_state(state if isinstance(state, dict) else {}, SKILLS)
     act = action if isinstance(action, dict) else {}
-    act = {k: act[k] for k in ("spellId", "slot", "column", "depth", "move", "followedAdvice", "focus") if k in act}
+    act = {k: act[k] for k in ("spellId", "slot", "column", "depth", "move", "followedAdvice", "byOrders", "focus") if k in act}
     if "spellId" in act:
         act["spellId"] = str(act["spellId"]).upper()[:3]
     adv = ""
@@ -673,6 +674,7 @@ def init_db():
         # 게임 기본 설정 시딩
         default_configs = [
             ("matchmaking.bot_timeout", "15", "랭킹전 대기 이 시간(초)이 지나면 봇과 매칭"),
+            ("match.default_players", "4", "인원을 안 정한 요청(Unity 큐 · 방 만들기 등)의 경기 인원 2~4 — 4 = 4인 개인전(4명까지 모으고 빈자리는 봇), 2 = 1:1"),
             ("rating.ranked_win", "16", "랭킹전 승리 시 레이팅 +"),
             ("rating.ranked_lose", "16", "랭킹전 패배 시 레이팅 -"),
             ("auth.google_client_id", "", "Google 로그인 OAuth 클라이언트 ID (웹 애플리케이션)"),
@@ -687,7 +689,7 @@ def init_db():
             ("game.event_exp_multiplier", "1.0", "경험치/랭킹 이벤트 배율"),
             ("game.highpower_limit", "2", "덱 내 고위력 스킬 최대 장착 수"),
             ("game.highpower_casts", "3", "경기당 고위력 스킬 사용 제한 횟수"),
-            ("ai.vlm_provider", "auto", "전략 AI: auto(Claude 키가 있으면 Claude, 없으면 규칙) · claude · ollama · rules"),
+            ("ai.vlm_provider", "auto", "전략 AI: auto(Claude 키 → Claude, 로컬 VLM 서버(run_server_vlm.bat)가 켜져 있으면 local, 아니면 규칙) · claude · ollama · local · rules"),
             ("ai.vlm_model", "claude-opus-5-5", "전략 AI 가 쓰는 Claude 모델 ID"),
             ("ai.vlm_effort", "low", "Claude 생각 깊이 (low · medium · high) — 낮을수록 빨리 답한다"),
             ("ai.ollama_url", "http://127.0.0.1:11434", "로컬 VLM(Ollama) 주소 — ai.vlm_provider = ollama 일 때"),
@@ -699,7 +701,9 @@ def init_db():
             ("ai.save_frames", "true", "AI 학습용으로 게임 화면 사진을 Backend/ai_data/frames 에 저장 (VLM 미세조정 데이터)"),
             ("ai.max_frames", "5000", "저장할 게임 화면 사진 최대 수"),
             ("ai.train_every", "20", "결과 이름표가 붙은 경험이 이만큼 늘 때마다 자동으로 다시 학습 (0 = 자동 학습 끔)"),
-            ("ai.learn_min_samples", "5", "학습 결과를 믿고 스킬을 바꾸려면 같은 상황 표본이 이만큼 필요")
+            ("ai.learn_min_samples", "5", "학습 결과를 믿고 스킬을 바꾸려면 같은 상황 표본이 이만큼 필요"),
+            ("ai.board_image", "true", "게임 화면 사진이 없으면 상황 · 유닛 점으로 전장 지도를 그려 VLM 에 넣는다 (미세조정 데이터셋도 같은 그림)"),
+            ("ai.local_schema", "true", "학습한 VLM(local) 요청에 response_format json_schema 를 넣는다 (llama-server 는 답 모양을 문법으로 강제)")
         ]
         for cf in default_configs:
             c.execute("""
@@ -1639,7 +1643,7 @@ class WowHttpHandler(BaseHTTPRequestHandler):
             state = body.get("state") if isinstance(body.get("state"), dict) else {k: v for k, v in body.items() if k not in ("image", "provider")}
             try:
                 res = wow_ai.strategy(state, SKILLS, ai_config(), image=body.get("image"), caller=caller,
-                                      provider=str(body.get("provider") or "") or None)
+                                      provider=str(body.get("provider") or "") or None, brief=body.get("brief") is True)
             except ValueError as e:
                 return self.send_error_json(400, str(e))
             if body.get("record", True) is not False:       # 학습 데이터: 상황 + (화면) + AI 추천
@@ -1688,8 +1692,8 @@ class WowHttpHandler(BaseHTTPRequestHandler):
                 if path.endswith("/train"):
                     res = wow_learn.train(conn)
                 else:
-                    res = wow_learn.export_dataset(conn, wow_ai.SYSTEM_PROMPT,
-                                                   lambda st: wow_ai._prompt_text(st, wow_ai.rules_strategy(st)))
+                    res = wow_learn.export_dataset(conn, wow_ai.SYSTEM_PROMPT, wow_ai.training_prompt,
+                                                   board_fn=wow_board.render if wow_ai.board_enabled(ai_config()) else None)
             return self.send_json(200, res)
 
         # 3-2-2. 서버 MediaPipe 손 추적 (/api/mediapipe/frame · reset)
@@ -1799,7 +1803,7 @@ class WowHttpHandler(BaseHTTPRequestHandler):
                 conn.commit()
             return self.send_json(200, saved)
 
-        # 5. 매칭 큐 참가 (/api/matchmaking/queue) — {players: 2 | 3 | 4} (개인전 인원), 없으면 1:1
+        # 5. 매칭 큐 참가 (/api/matchmaking/queue) — {players: 2 | 3 | 4} (개인전 인원), 없으면 match.default_players (기본 4인)
         if path == "/api/matchmaking/queue":
             user = self.get_auth_user()
             if not user:
@@ -2390,16 +2394,29 @@ def mailbox_items(conn, pid):
     return items
 
 
+def default_players():
+    """인원을 안 정한 요청의 경기 인원 (설정 match.default_players, 기본 4 = 4인 개인전)"""
+    try:
+        with get_db() as conn:
+            n = int(get_config_float(conn, "match.default_players", MAX_PLAYERS))
+    except Exception:
+        n = MAX_PLAYERS
+    return max(2, min(MAX_PLAYERS, n))
+
+
 def players_of(body):
-    """요청의 경기 인원 2~4 (개인전): {players: 4} · {maxPlayers: 3} · {format: "ffa4" | "4p" | "1v1"}, 없으면 2 (1:1)"""
+    """요청의 경기 인원 2~4 (개인전): {players: 4} · {maxPlayers: 3} · {format: "ffa4" | "4p" | "1v1"},
+    없으면 설정 match.default_players (기본 4 — 4명까지 모으고 빈자리는 봇)"""
     body = body or {}
-    raw = body.get("players") or body.get("maxPlayers") or body.get("format") or 2
+    raw = body.get("players") or body.get("maxPlayers") or body.get("format")
+    if not raw:
+        return default_players()
     s = str(raw).lower()
     if "v" in s and "ffa" not in s:          # "1v1" = 2명, "1v1v1v1" = 4명
         n = s.count("v") + 1
     else:
         digits = re.findall(r"\d+", s)
-        n = int(digits[-1]) if digits else 2
+        n = int(digits[-1]) if digits else default_players()
     return max(2, min(MAX_PLAYERS, n))
 
 
@@ -2821,8 +2838,10 @@ def main():
     print(f"    - Google 기기 로그인 (Unity · Quest): {google_device_client_id() or '꺼짐'}")
     print(f"    - 룬 인식기: {'GestureTools/MediaPipe/wow_runes.py' if wow_runes else '없음 (룬 인식 API 503)'}")
     vlm = wow_ai.status(ai_config())
-    print(f"    - AI 전략 코치 (/api/ai/strategy): {vlm['provider']} ({vlm['model']})"
-          + ("" if vlm["claude"]["available"] else f" — Claude 끔: {vlm['claude']['reason']}"))
+    print(f"    - AI 전략 코치 · 하이브리드 봇 (/api/ai/strategy): {vlm['provider']} ({vlm['model']})"
+          + (" — 로컬 VLM 켜짐 " + vlm["local"]["url"] if vlm["local"]["available"]
+             else " — 로컬 VLM 꺼짐 (켜려면 run_server_vlm.bat, 켜지면 10초 안에 자동으로 씀)")
+          + ("" if vlm["claude"]["available"] else f" · Claude 끔: {vlm['claude']['reason']}"))
     hands = wow_hands.status() if wow_hands else None
     print("    - 서버 MediaPipe 손 추적 (/api/mediapipe/frame): "
           + ("없음" if hands is None else "카메라 프레임 + 랜드마크" if hands["image"]["available"]

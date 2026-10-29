@@ -93,6 +93,8 @@ namespace SpellboundVR.Spells
 
         [Header("분류 (§14.3)")]
         public SpellTier Tier = SpellTier.Normal;
+        [Tooltip("이 스킬만의 기본 쿨타임(초). 0 이면 등급 기본값(MatchRuleConfig 일반 5초 · 고위력 20초). 5분 강화 감소는 똑같이 적용")]
+        public float CooldownOverride = 0f;
         public SpellTargeting Targeting = SpellTargeting.Column;
         public SpellExecutorType Executor = SpellExecutorType.Projectile;
         public SpellBehaviorType Behavior = SpellBehaviorType.None;
@@ -379,9 +381,13 @@ namespace SpellboundVR.Spells
             return d;
         }
 
+        /// <summary>소환(S11 · S12) 쿨타임 — 봇 판 결과 학습에서 소환이 가장 강해(S11 승률 71% · S12 58%) 일반 5초 → 8초 (2026-10-29)</summary>
+        public const float SummonCooldown = 8f;
+
         public static SpellDefinition CreateAxeWarriorDefault()
         {
             var d = Create(SpellIds.S11_AxeWarrior, "Axe Warrior", "AxeWarrior", new Color(0.5f, 0.85f, 0.35f));
+            d.CooldownOverride = SummonCooldown;
             d.Targeting = SpellTargeting.Summon;
             d.Executor = SpellExecutorType.Summon;
             d.Behavior = SpellBehaviorType.SummonUnit;
@@ -393,6 +399,7 @@ namespace SpellboundVR.Spells
         public static SpellDefinition CreateDragonDefault()
         {
             var d = Create(SpellIds.S12_Mage, "Dragon", "Mage", new Color(0.95f, 0.3f, 0.2f));
+            d.CooldownOverride = SummonCooldown;
             d.Targeting = SpellTargeting.Summon;
             d.Executor = SpellExecutorType.Summon;
             d.Behavior = SpellBehaviorType.SummonUnit;

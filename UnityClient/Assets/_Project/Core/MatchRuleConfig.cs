@@ -100,9 +100,10 @@ namespace SpellboundVR.Core
             return tier == Contracts.SpellTier.HighPower ? HighPowerCooldown : NormalCooldown;
         }
 
-        public float GetCooldown(Contracts.SpellTier tier, int scalingStage)
+        /// <summary>baseOverride: 스킬만의 기본 쿨타임 (SpellDefinition.CooldownOverride, 0 이면 등급 기본값)</summary>
+        public float GetCooldown(Contracts.SpellTier tier, int scalingStage, float baseOverride = 0f)
         {
-            float baseCd = GetBaseCooldown(tier);
+            float baseCd = baseOverride > 0f ? baseOverride : GetBaseCooldown(tier);
             float ratio = 1f - ScalingCooldownReductionPerStage * Mathf.Max(0, scalingStage);
             return baseCd * Mathf.Max(MinCooldownRatio, ratio);
         }

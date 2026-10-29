@@ -1,8 +1,10 @@
 // AI 전략 봇(AiStrategyBrain) ↔ 백엔드 AI 서버 연결 — Bot/IStrategyAdvisor 구현.
 //
-//   · 전략   : 봇이 몇 초마다 지금 상황(BotObservation + 레인 유닛)을 POST /api/ai/strategy 로 보낸다.
-//              서버는 판 결과로 배운 것(학습) · VLM(Claude · 이 게임으로 미세조정한 모델)으로 답하고,
-//              봇은 그 수가 아직 유효하면(4초 안, 슬롯 준비됨) 그 수를 쓴다. 서버가 없으면 봇 혼자 판단한다.
+//   · 전략   : 봇이 몇 초마다 지금 상황(BotObservation + 레인 유닛 + 유닛 점 + 두뇌 후보 botPick)을 POST /api/ai/strategy 로 보낸다
+//              (brief — 짧은 답이 빨리 온다). 서버는 전장 지도를 그려 VLM(Claude · 로컬 · 미세조정한 모델)에 묻고,
+//              판 결과로 배운 것과 함께 작전(orders) + 한 수를 돌려준다.
+//              작전은 유지 시간 동안 두뇌가 0.25초마다 적용하고(하이브리드), 한 수는 요청한 지 5초 안 · 슬롯 준비됨이면 쓴다.
+//              VLM 이 정한 작전이 살아 있는 동안 규칙으로 만든 작전(VLM 이 바쁠 때의 답)은 덮어쓰지 않는다. 서버가 없으면 봇 혼자 판단한다.
 //   · 학습   : 봇의 판단(상황 + 행동)을 모아 POST /api/ai/experience 로 보내고, 경기가 끝나면 결과(WIN · LOSE · DRAW)를
 //              붙인다 → 서버가 자동으로 다시 학습한다 (Docs/Backend/AiLearning.md).
 //   · 인증   : X-Server-Key (서버 설정 WOW_SERVER_KEY). 명령줄 -wowServerKey 키 로 바꿀 수 있다. 로그인 토큰이 있으면 같이 보낸다.
@@ -31,7 +33,9 @@ namespace SpellboundVR.Backend
         private const int MaxStepsPerPost = 50;
         private const float FlushInterval = 3f;
 
-        [Serializable] private class LaneDto { public int allies; public int enemies; public float enemyFront; public float clusterDepth; }
+        [Serializable] private class LaneDto { public int allies; public int enemies; public float enemyFront; public float clusterDepth; public float allyFront; public int nearBase; }
+        [Serializable] private class UnitDto { public int c; public float d; public int e; }
+        [Serializable] private class PickDto { public int slot; public string spellId; public int column; public float depth; public float score; public string why; }
 
         [Serializable]
         private class StateDto
@@ -51,16 +55,19 @@ namespace SpellboundVR.Backend
             public int nearestIncomingProjectileColumn;
             public float nearestIncomingProjectileEta;
             public LaneDto[] lanes;
+            public UnitDto[] units;
+            public PickDto[] botPick;
             public int players = 2;
             public string mode = "bot";
         }
 
-        [Serializable] private class StrategyRequestDto { public StateDto state; public string botId; public string gameId; public bool record; }
+        [Serializable] private class StrategyRequestDto { public StateDto state; public string botId; public string gameId; public bool record; public bool brief = true; }
+        [Serializable] private class OrdersDto { public int lane = -1; public string stance; public string[] prefer; public string[] hold; public float seconds; }
         [Serializable] private class CastDto { public int slot = -1; public string spellId; public int column = -1; public float depth = 0.5f; }
         [Serializable] private class MoveDto { public int direction; }
-        [Serializable] private class StrategyResponseDto { public CastDto cast; public MoveDto move; public string source; public string summary; }
+        [Serializable] private class StrategyResponseDto { public CastDto cast; public MoveDto move; public OrdersDto orders; public string source; public string summary; }
 
-        [Serializable] private class ActionDto { public string spellId = ""; public int slot = -1; public int column = -1; public float depth; public int move; public bool followedAdvice; }
+        [Serializable] private class ActionDto { public string spellId = ""; public int slot = -1; public int column = -1; public float depth; public int move; public bool followedAdvice; public bool byOrders; }
         [Serializable] private class StepDto { public StateDto state; public ActionDto action; public float reward; }
         [Serializable] private class ExperienceDto { public string gameId; public string botId; public string source = "unity-bot"; public StepDto[] steps; }
         [Serializable] private class OutcomeDto { public string gameId; public string botId; public string outcome; public int place; public int players = 2; }
@@ -72,6 +79,8 @@ namespace SpellboundVR.Backend
             public string GameId;
             public bool HasAdvice;
             public StrategyAdvice Advice;
+            public bool HasOrders;
+            public StrategyOrders Orders;
             public bool RequestInFlight;
             public bool OutcomeSent;
             public readonly List<StepDto> Steps = new List<StepDto>();
@@ -115,16 +124,18 @@ namespace SpellboundVR.Backend
             ts.MatchSerial = sim.MatchSerial;
             ts.GameId = $"bot-{_session}-{sim.MatchSerial}";
             ts.HasAdvice = false;
+            ts.HasOrders = false;
             ts.OutcomeSent = false;
         }
 
-        public void RequestAdvice(Team team, in BotObservation obs, LaneInfo[] lanes, int[] deck)
+        public void RequestAdvice(Team team, in BotObservation obs, BotView view, int[] deck)
         {
             var ts = _teams[(int)team];
             if (ts.RequestInFlight || !Online || ts.Sim == null) return;
-            var body = new StrategyRequestDto { state = BuildState(ts.Sim, obs, lanes, deck), botId = BotId(team), gameId = ts.GameId, record = false };
+            var body = new StrategyRequestDto { state = BuildState(ts.Sim, obs, view, deck, true), botId = BotId(team), gameId = ts.GameId, record = false };
             ts.RequestInFlight = true;
             int serial = ts.MatchSerial;
+            float requestedAt = ts.Sim.MatchTime;
             StartCoroutine(Post("/api/ai/strategy", JsonUtility.ToJson(body), text =>
             {
                 ts.RequestInFlight = false;
@@ -132,7 +143,9 @@ namespace SpellboundVR.Backend
                 StrategyResponseDto res;
                 try { res = JsonUtility.FromJson<StrategyResponseDto>(text); }
                 catch (Exception) { return; }
-                if (res?.cast == null || res.cast.slot < 0) { ts.HasAdvice = false; return; }
+                if (res == null) return;
+                if (res.orders != null) SetOrders(ts, res.orders, res.source, requestedAt);
+                if (res.cast == null || res.cast.slot < 0) { ts.HasAdvice = false; return; }
                 ts.Advice = new StrategyAdvice
                 {
                     Slot = res.cast.slot,
@@ -140,6 +153,7 @@ namespace SpellboundVR.Backend
                     Column = (Column)Mathf.Clamp(res.cast.column < 0 ? 1 : res.cast.column, 0, 2),
                     Depth = res.cast.depth,
                     Move = (sbyte)Mathf.Clamp(res.move != null ? res.move.direction : 0, -1, 1),
+                    RequestedAt = requestedAt,
                     ReceivedAt = ts.Sim.MatchTime,
                 };
                 ts.HasAdvice = true;
@@ -155,14 +169,38 @@ namespace SpellboundVR.Backend
             return true;
         }
 
-        public void ReportDecision(Team team, in BotObservation obs, LaneInfo[] lanes, int[] deck, in SpellCastRequest cast, bool hasCast,
-                                   sbyte move, bool followedAdvice)
+        public bool TryGetOrders(Team team, float now, out StrategyOrders orders)
+        {
+            var ts = _teams[(int)team];
+            orders = ts.Orders;
+            return ts.HasOrders && now < ts.Orders.Until;
+        }
+
+        /// <summary>VLM 이 정한 작전이 살아 있으면 규칙 작전(VLM 이 바쁘거나 실패했을 때의 답)으로 덮어쓰지 않는다</summary>
+        private static void SetOrders(TeamState ts, OrdersDto o, string source, float requestedAt)
+        {
+            bool fromModel = !string.IsNullOrEmpty(source) && source != "rules";
+            if (!fromModel && ts.HasOrders && ts.Orders.FromModel && ts.Sim.MatchTime < ts.Orders.Until) return;
+            ts.Orders = new StrategyOrders
+            {
+                Lane = o.lane >= 0 && o.lane <= 2 ? o.lane : -1,
+                Stance = o.stance == "defend" ? -1 : o.stance == "push" ? 1 : 0,
+                Prefer = SpellIdsOf(o.prefer),
+                Hold = SpellIdsOf(o.hold),
+                Until = requestedAt + Mathf.Clamp(o.seconds > 0f ? o.seconds : 8f, 3f, 15f),
+                FromModel = fromModel,
+            };
+            ts.HasOrders = true;
+        }
+
+        public void ReportDecision(Team team, in BotObservation obs, BotView view, int[] deck, in SpellCastRequest cast, bool hasCast,
+                                   sbyte move, bool followedAdvice, bool byOrders)
         {
             var ts = _teams[(int)team];
             if (ts.Sim == null || !Online) return;
             ts.Steps.Add(new StepDto
             {
-                state = BuildState(ts.Sim, obs, lanes, deck),
+                state = BuildState(ts.Sim, obs, view, deck, false),
                 action = new ActionDto
                 {
                     spellId = hasCast ? SpellIds.Code(cast.SpellId) : "",
@@ -171,6 +209,7 @@ namespace SpellboundVR.Backend
                     depth = hasCast ? cast.TargetDepth : 0f,
                     move = move,
                     followedAdvice = followedAdvice,
+                    byOrders = byOrders,
                 },
             });
             if (ts.Steps.Count >= MaxStepsPerPost) FlushSteps(team);
@@ -254,8 +293,10 @@ namespace SpellboundVR.Backend
 
         // ── 도우미 ───────────────────────────────────────────
 
-        private static StateDto BuildState(MatchSimulation sim, in BotObservation obs, LaneInfo[] lanes, int[] deck)
+        /// <summary>withPicks: 전략 요청에는 두뇌 후보(botPick)를, 학습 기록에는 유닛 점까지만 (데이터셋은 저장한 상황으로 지도를 다시 그린다)</summary>
+        private static StateDto BuildState(MatchSimulation sim, in BotObservation obs, BotView view, int[] deck, bool withPicks)
         {
+            var lanes = view.Lanes;
             var s = new StateDto
             {
                 deck = new string[deck.Length],
@@ -280,8 +321,29 @@ namespace SpellboundVR.Backend
                 s.ready[i] = (obs.SelfSlotReadyMask & (1 << i)) != 0;
             }
             for (int c = 0; c < lanes.Length; c++)
-                s.lanes[c] = new LaneDto { allies = lanes[c].Allies, enemies = lanes[c].Enemies, enemyFront = lanes[c].EnemyFront, clusterDepth = lanes[c].ClusterDepth };
+                s.lanes[c] = new LaneDto
+                {
+                    allies = lanes[c].Allies, enemies = lanes[c].Enemies, enemyFront = lanes[c].EnemyFront, clusterDepth = lanes[c].ClusterDepth,
+                    allyFront = lanes[c].AllyFront, nearBase = lanes[c].EnemiesNearMyBase,
+                };
+            s.units = new UnitDto[view.UnitCount];
+            for (int i = 0; i < view.UnitCount; i++)
+                s.units[i] = new UnitDto { c = view.Units[i].Column, d = Mathf.Round(view.Units[i].Depth * 1000f) / 1000f, e = view.Units[i].Enemy ? 1 : 0 };
+            s.botPick = new PickDto[withPicks ? view.CandidateCount : 0];
+            for (int i = 0; i < s.botPick.Length; i++)
+            {
+                var c = view.Candidates[i];
+                s.botPick[i] = new PickDto { slot = c.Slot, spellId = SpellIds.Code(c.SpellId), column = (int)c.Column, depth = c.Depth, score = c.Score, why = c.Why };
+            }
             return s;
+        }
+
+        private static int[] SpellIdsOf(string[] codes)
+        {
+            if (codes == null) return Array.Empty<int>();
+            var ids = new int[codes.Length];
+            for (int i = 0; i < codes.Length; i++) ids[i] = SpellIdOf(codes[i]);
+            return ids;
         }
 
         private static int SpellIdOf(string code)

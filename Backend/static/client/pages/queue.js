@@ -12,7 +12,7 @@ export default {
     let polling = false;
     let lastPoll = 0;
     const rating = state.profile.rating;
-    const need = [3, 4].includes(state.settings.players) ? state.settings.players : 2;
+    const need = [2, 3].includes(state.settings.players) ? state.settings.players : 4;
     const searching = (s) => need > 2
       ? `${need}인 개인전 · 마법사 ${s?.playersFound ?? 1}/${need}명 · 레이팅 ${rating} ± ${s?.ratingWindow ?? 50} · ${RULES.botTimeout}초 지나면 빈자리는 봇`
       : `레이팅 ${rating} ± ${s?.ratingWindow ?? 50} 범위 탐색 중 · 대기 ${s?.queueSize ?? 1}명 · ${RULES.botTimeout}초 초과 시 봇 매칭`;

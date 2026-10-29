@@ -10,7 +10,7 @@ export default {
       const p = state.profile;
       const problem = deckProblem(state.deck);
       const n = unread();
-      const size = [3, 4].includes(state.settings.players) ? state.settings.players : 2;
+      const size = [2, 3].includes(state.settings.players) ? state.settings.players : 4;
       root.innerHTML = `
         ${headerHTML("메인 로비", { back: false, right: `
           <div style="text-align:right;line-height:1.3"><b style="font-size:1.05rem">${esc(p.nickname)}</b><br><span class="tech cyan" style="font-size:.85rem">${tierOf(p.rating)} · ${p.rating}</span></div>

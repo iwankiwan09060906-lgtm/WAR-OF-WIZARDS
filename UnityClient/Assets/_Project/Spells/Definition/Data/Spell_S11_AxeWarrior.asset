@@ -17,6 +17,7 @@ MonoBehaviour:
   VfxName: AxeWarrior
   ThemeColor: {r: 0.5, g: 0.85, b: 0.35, a: 1}
   Tier: 0
+  CooldownOverride: 8
   Targeting: 3
   Executor: 3
   Behavior: 12

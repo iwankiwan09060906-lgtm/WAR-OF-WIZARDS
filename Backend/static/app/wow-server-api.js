@@ -210,8 +210,8 @@
       await request('POST', '/api/mails/invite', { friendId: friendId, roomCode: roomCode });
     },
 
-    // ── 랭킹전 매칭 (서버 대기열 · 15초 넘으면 봇) — players 2 = 1:1, 3 · 4 = 개인전 (빈자리는 봇) ──
-    async joinQueue(players) { return request('POST', '/api/matchmaking/queue', { players: players || 2 }); },
+    // ── 랭킹전 매칭 (서버 대기열 · 15초 넘으면 봇) — players 2 = 1:1, 3 · 4 = 개인전 (빈자리는 봇), 없으면 서버 기본(4인) ──
+    async joinQueue(players) { return request('POST', '/api/matchmaking/queue', { players: players || undefined }); },
     async queueStatus() { return request('GET', '/api/matchmaking/status'); },
     async leaveQueue() { return request('DELETE', '/api/matchmaking/queue'); },
 
@@ -247,7 +247,7 @@
     async matchLeave(id) { var r = await request('POST', '/api/match/' + id + '/leave', {}); return r.match; },
 
     // ── 친선전 룸 ───────────────────────────────────────────────────────
-    async createRoom(players) { return request('POST', '/api/rooms', { players: players || 2 }); },
+    async createRoom(players) { return request('POST', '/api/rooms', { players: players || undefined }); },
     async roomBot(code) { return request('POST', '/api/rooms/' + encodeURIComponent(code) + '/bot', {}); },
     async kickMember(code, memberId) { return request('POST', '/api/rooms/' + encodeURIComponent(code) + '/kick', { memberId: memberId }); },
     async getRoom(code) { return request('GET', '/api/rooms/' + encodeURIComponent(code)); },

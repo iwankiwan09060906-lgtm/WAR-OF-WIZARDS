@@ -408,7 +408,7 @@ namespace SpellboundVR.Combat
             // 시전 확정 → 쿨타임 시작 (§13.4), 활동 기록 (§10)
             if (!testCast)
             {
-                SlotCooldownService.Consume(caster, request.SlotIndex, _matchTime, Rules, def.Tier, _scaling.Stage);
+                SlotCooldownService.Consume(caster, request.SlotIndex, _matchTime, Rules, def.Tier, _scaling.Stage, def.CooldownOverride);
                 _sink.OnCastAccepted(team, request.SlotIndex, request.SpellId);
             }
             caster.LastActivityTime = _matchTime;

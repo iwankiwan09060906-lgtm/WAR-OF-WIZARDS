@@ -10,6 +10,7 @@ import os
 import random
 import shutil
 import socket
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -89,6 +90,12 @@ def main():
     src = os.path.join(HERE, "wow_database.sqlite")
     if os.path.exists(src):
         shutil.copy(src, db)
+        with sqlite3.connect(db) as c:           # 진짜 서버 DB 에서 가져오지 않을 것: AI 학습 데이터(ai_import 로 모은 판) · Unity UDP 주소(검사용 주소를 쓴다)
+            for sql in ("DELETE FROM ai_experiences", "DELETE FROM game_configs WHERE config_key = 'unity.spell_udp'"):
+                try:
+                    c.execute(sql)
+                except sqlite3.OperationalError:
+                    pass
     env = dict(os.environ, WOW_DB_FILE=db, WOW_UNITY_SPELL_UDP=f"127.0.0.1:{UNITY_PORT}", PYTHONIOENCODING="utf-8")
     env.pop("GOOGLE_CLIENT_ID", None)
     env["WOW_AI_DATA"] = os.path.join(tmp, "ai_data")       # 학습 데이터 · 화면 사진은 임시 폴더에
@@ -227,7 +234,7 @@ def run_checks(unity):
     check("친구 아니면 초대 거부", st == 400)
     st, r, _ = call("POST", "/api/friends/respond", {"playerId": a["playerId"], "accept": True}, tb)
     check("친구 수락", st == 200)
-    st, room, _ = call("POST", "/api/rooms", {}, ta)
+    st, room, _ = call("POST", "/api/rooms", {"players": 2}, ta)
     code = room["code"]
     check("룸 생성 (6자리 코드)", st == 200 and len(code) == 6)
     st, r, _ = call("POST", "/api/mails/invite", {"friendId": b["playerId"], "roomCode": code}, ta)
@@ -245,7 +252,7 @@ def run_checks(unity):
     st, r, _ = call("POST", f"/api/rooms/{code}/start", {}, ta)
     st, info, _ = call("GET", f"/api/rooms/{code}")
     check("호스트 시작 → PLAYING", st == 200 and info["status"] == "PLAYING")
-    st, room2, _ = call("POST", "/api/rooms", {}, ta)
+    st, room2, _ = call("POST", "/api/rooms", {"players": 2}, ta)
     call("POST", f"/api/rooms/{room2['code']}/join", {}, tb)
     call("POST", f"/api/rooms/{room2['code']}/kick", {}, ta)
     check("내보내기", call("GET", f"/api/rooms/{room2['code']}")[1]["guest_player_id"] is None)
@@ -258,13 +265,16 @@ def run_checks(unity):
     check("이미 있는 코드면 서버가 새 코드", st == 200 and room4["code"] != wanted and len(room4["code"]) == 6)
     call("POST", f"/api/rooms/{room3['code']}/leave", {}, ta)
     call("POST", f"/api/rooms/{room4['code']}/leave", {}, tb)
+    st, room5, _ = call("POST", "/api/rooms", {}, ta)
+    check("인원을 안 정하면 4인 개인전 방 (match.default_players)", st == 200 and room5["maxPlayers"] == 4 and room5["format"] == "ffa4", str(room5))
+    call("POST", f"/api/rooms/{room5['code']}/leave", {}, ta)
     st, r, _ = call("DELETE", f"/api/friends/player/{b['playerId']}", token=ta)
     st, fr, _ = call("GET", "/api/friends?all=1", token=ta)
     check("친구 삭제", all(f["nickname"] != b["nickname"] for f in fr))
 
     print("[랭킹전 매칭: 사람끼리 · 봇]")
-    call("POST", "/api/matchmaking/queue", {}, ta)
-    call("POST", "/api/matchmaking/queue", {}, tb)
+    call("POST", "/api/matchmaking/queue", {"players": 2}, ta)
+    call("POST", "/api/matchmaking/queue", {"players": 2}, tb)
     st, ma, _ = call("GET", "/api/matchmaking/status", token=ta)
     st, mb, _ = call("GET", "/api/matchmaking/status", token=tb)
     check("두 사람 서로 매칭", ma["state"] == "matched" and mb["state"] == "matched"
@@ -274,7 +284,7 @@ def run_checks(unity):
     check("JSON 공백 없음 (Unity 문자열 검사 호환)", b'"state":"' in raw)
     admin = login("admin@wow.dev", "admin1234")
     call("PUT", "/api/admin/configs/matchmaking.bot_timeout", {"value": "1"}, admin["accessToken"])
-    call("POST", "/api/matchmaking/queue", {}, ta)
+    call("POST", "/api/matchmaking/queue", {"players": 2}, ta)
     time.sleep(1.2)
     st, ma, _ = call("GET", "/api/matchmaking/status", token=ta)
     check("혼자면 봇 매칭 (Bot (레이팅))", ma["state"] == "matched" and ma["bot"] is True and ma["opponentNickname"].startswith("Bot ("))
@@ -282,6 +292,8 @@ def run_checks(unity):
     check("관리자 기록은 토큰 없이 못 봄", st == 403)
 
     ffa_checks(admin["accessToken"])
+    # auto 는 로컬 VLM 서버(8790)가 켜져 있으면 그걸 쓴다 → 검사는 이 PC 의 llama-server 와 상관없게 닿지 않는 주소로
+    call("PUT", "/api/admin/configs/ai.local_url", {"value": "http://127.0.0.1:9/v1"}, admin["accessToken"])
     ai_checks(tok)
     learn_checks(tok, admin["accessToken"])
     unity_link_checks()
@@ -315,7 +327,7 @@ def ffa_checks(admin_tok):
     check("4인 개인전 큐 등록", st == 200 and r["maxPlayers"] == 4 and r["playersNeeded"] == 4 and r["format"] == "ffa4")
     st, s0, _ = call("GET", "/api/matchmaking/status", token=tk[0])
     check("혼자면 4인전 탐색 중 (1/4명)", s0["state"] == "searching" and s0["playersFound"] == 1 and s0["playersNeeded"] == 4)
-    call("POST", "/api/matchmaking/queue", {}, tk[4])                       # 1:1 큐 사람은 4인전에 섞이지 않는다
+    call("POST", "/api/matchmaking/queue", {"players": 2}, tk[4])                       # 1:1 큐 사람은 4인전에 섞이지 않는다
     for t in tk[1:4]:
         call("POST", "/api/matchmaking/queue", {"players": 4}, t)
     ms = [call("GET", "/api/matchmaking/status", token=t)[1] for t in tk[:4]]
@@ -505,7 +517,8 @@ def learn_checks(tok, admin_tok):
     check("데이터셋 형식 (system · user · assistant JSON · <image> · dataset_info)",
           [m["role"] for m in first["messages"]] == ["system", "user", "assistant"]
           and json.loads(first["messages"][2]["content"])["cast"]["spellId"] == "S06"
-          and info["wow_vlm"]["formatting"] == "sharegpt" and (first.get("images") is None or first["messages"][1]["content"].startswith("<image>")))
+          and info["wow_vlm"]["formatting"] == "sharegpt" and (first.get("images") is None or first["messages"][1]["content"].startswith("<image>")),
+          first["messages"][2]["content"][:200] + " | " + str(first.get("images")) + " | " + first["messages"][1]["content"][:60])
     call("POST", "/api/ai/experience", {"gameId": "legacy1", "state": scene, "action": {"spellId": "S03", "slot": 0, "column": 1}}, tok)
     before = call("GET", "/api/ai/learning")[1]["labeled"]
     call("POST", "/api/matches", {"mode": "bot", "result": "WIN", "opponent": "Bot", "gameId": "legacy1"}, tok)
@@ -543,6 +556,19 @@ def learn_checks(tok, admin_tok):
     check("학습한 VLM(local): /v1/chat/completions · 그림 · 학습 결과를 프롬프트에", seen.get("path") == "/v1/chat/completions"
           and user_content[0]["type"] == "image_url" and "learned" in user_content[1]["text"], str(seen.get("path")))
     check("학습한 VLM 답 사용", st == 200 and r["source"] == "local" and r["cast"]["spellId"] == "S06" and r["usedImage"], str(r.get("fallbackReason")))
+    # 하이브리드 봇: 사진 없이 → 전장 지도를 그려 VLM 에 · 짧은 답(brief) 스키마 · 답에 작전(orders)이 없으면 힌트 작전
+    bot_scene = dict(scene, units=[{"c": 0, "d": 0.3, "e": 1}, {"c": 0, "d": 0.35, "e": 1}, {"c": 1, "d": 0.4, "e": 0}],
+                     botPick=[{"slot": 2, "spellId": "S06", "column": 0, "depth": 0.3, "score": 3.2, "why": "S06 왼쪽 레인"}])
+    call("PUT", "/api/admin/configs/ai.vlm_min_interval", {"value": "0"}, admin_tok)      # 바로 앞 요청과 3초 간격 제한 끄기
+    st, r, _ = call("POST", "/api/ai/strategy", {"state": bot_scene, "provider": "local", "brief": True, "record": False}, tok)
+    body = seen.get("body", {})
+    img = body.get("messages", [{}, {}])[1].get("content", [{}])[0]
+    fmt = body.get("response_format", {}).get("json_schema", {}).get("schema", {})
+    check("봇 요청: 전장 지도(PNG) · brief 스키마(작전 포함) · botHint 를 프롬프트에",
+          img.get("type") == "image_url" and img["image_url"]["url"].startswith("data:image/png;base64,") and r.get("imageKind") == "board"
+          and set(fmt.get("required", [])) == {"threat", "orders", "cast", "move"} and "botHint" in body["messages"][1]["content"][1]["text"], str(fmt))
+    check("작전(orders) 응답 — VLM 이 안 주면 힌트 작전", st == 200 and r["orders"]["stance"] in ("defend", "balanced", "push")
+          and isinstance(r["orders"]["prefer"], list) and 3 <= r["orders"]["seconds"] <= 15, str(r.get("orders")))
     fake.shutdown()
 
 
@@ -567,6 +593,12 @@ def unity_link_checks():
     r = post("/api/ai/strategy", {"state": state, "botId": "a1b2c3d4-Home", "gameId": "bot-a1b2c3d4-1", "record": False})
     check("봇 전략 요청 → cast(slot · spellId · column) · move 정수", isinstance(r["cast"]["slot"], int) and isinstance(r["move"]["direction"], int)
           and (r["cast"]["slot"] < 0 or state["ready"][r["cast"]["slot"]]), str(r["cast"]))
+    hybrid = dict(state, units=[{"c": 0, "d": 0.3, "e": 1}] * 5 + [{"c": 1, "d": 0.5, "e": 0}],
+                  botPick=[{"slot": 4, "spellId": "S11", "column": 0, "depth": 0.2, "score": 3.8, "why": "S11 왼쪽 레인 보강"},
+                           {"slot": 2, "spellId": "S06", "column": 0, "depth": 0.3, "score": 2.0, "why": "쿨타임 중"}])
+    r = post("/api/ai/strategy", {"state": hybrid, "botId": "a1b2c3d4-Home", "gameId": "bot-a1b2c3d4-1", "record": False, "brief": True})
+    check("하이브리드: VLM 없으면 Unity 두뇌 1순위가 한 수 · 작전에 먼저 쓸 스킬로", r["cast"]["spellId"] == "S11" and r["botHinted"]
+          and r["orders"]["prefer"][:1] == ["S11"] and r["orders"]["lane"] == 0, str(r["cast"]) + str(r["orders"]))
     steps = [{"state": state, "action": {"spellId": "S11", "slot": 4, "column": 0, "depth": 0.2, "move": 0, "followedAdvice": False}, "reward": 0},
              {"state": state, "action": {"spellId": "", "slot": -1, "column": -1, "depth": 0, "move": -1, "followedAdvice": False}, "reward": 0}]
     r = post("/api/ai/experience", {"gameId": "bot-a1b2c3d4-1", "botId": "a1b2c3d4-Home", "source": "unity-bot", "steps": steps})

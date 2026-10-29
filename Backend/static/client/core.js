@@ -33,8 +33,9 @@ const RAW = [
   ["H06", "소환탑", "install", "주기적으로 소형 근접 소환수를 생성하는 탑 설치", "집"],
 ];
 const ASSETS = new URL("assets/skills/", document.baseURI).href;
+const COOLDOWN = { S11: 8, S12: 8 };    // 스킬만의 쿨타임 (Unity SpellDefinition.CooldownOverride 와 같게), 나머지는 등급 기본값
 export const SKILLS = RAW.map(([id, name, kind, effect, rune]) => ({
-  id, name, kind, effect, rune, high: id[0] === "H",
+  id, name, kind, effect, rune, high: id[0] === "H", cooldown: COOLDOWN[id] ?? (id[0] === "H" ? 20 : 5),
   circle: `${ASSETS}circle/${id}.png`, runeImg: `${ASSETS}rune/${id}.png`, runeLine: `${ASSETS}rune_line/${id}.png`,
 }));
 export const SKILL = Object.fromEntries(SKILLS.map((s) => [s.id, s]));
@@ -62,7 +63,7 @@ const SETTINGS_KEY = "wow.settings.v1";
 export const DEFAULT_SETTINGS = {
   camSensitivity: 65, comfortVignette: true, snapTurning: false, sfx: 80, bgm: 45, spatialAudio: true,
   gestureSensitivity: 70, holdFrames: 15, haptics: true, subtitles: false, uiLarge: false, colorblind: false,
-  players: 2,    // 대전 인원: 2 = 1:1, 3 · 4 = 개인전 (팀 없이 나 빼고 모두 적)
+  players: 4,    // 대전 인원: 4 = 4인 개인전(기본, 빈자리는 봇) · 3 · 2 = 1:1 (팀 없이 나 빼고 모두 적)
 };
 function loadSettings() {
   try { return { ...DEFAULT_SETTINGS, ...JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}") }; } catch { return { ...DEFAULT_SETTINGS }; }

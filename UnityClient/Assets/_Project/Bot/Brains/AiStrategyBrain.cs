@@ -8,8 +8,12 @@
 //                 · 쉴드(S08) · 반사(H04) → HP 가 낮거나 내 타워가 없어 피해를 그대로 맞을 때
 //                 · 소환(S11 · S12) · 소환탑(H06) → 밀리는 레인 보강 / 밀고 있는 레인 가속, 터렛(S13) → 내 쪽으로 오는 적이 많은 레인
 //                 · 분노(H05) → 우리 유닛이 3기 이상 모인 레인의 앞줄
-//   3) 서버 전략 : 서버(/api/ai/strategy — 판 결과로 배운 것 · VLM)가 최근에 준 수가 있고 그 슬롯이 준비됐으면 그 수를 쓴다
-//                 (IStrategyAdvisor — Unity 에서는 Backend/AiStrategyLink, 연결이 없으면 위의 판단만으로 둔다)
+//   3) 하이브리드 (Unity 두뇌 = 빠른 반사 · VLM = 전략, IStrategyAdvisor — Unity 에서는 Backend/AiStrategyLink)
+//      · 몇 초마다 지금 후보(botPick) · 유닛 점(전장 지도용)을 서버(/api/ai/strategy)로 보낸다
+//      · 서버(VLM · 판 결과로 배운 것)는 작전(orders: 집중 레인 · 자세 · 먼저 쓸 / 아낄 스킬 · 유지 시간)과 한 수를 돌려준다
+//      · 작전은 유지 시간 동안 0.25초마다 위 2)의 점수에 곱한다 → VLM 이 느려도 전략은 이 두뇌 속도로 반응한다
+//      · 한 수는 요청한 지 AdviceMaxAge 안이고 그 슬롯이 준비됐으면 쓴다. 단 두뇌 점수가 EmergencyScore 이상이면(위급) 두뇌가 먼저
+//      · 서버가 없으면 이 두뇌 혼자 둔다
 //
 // 사람처럼 룬을 그리고 조준하는 시간이 있으므로 시전 사이에 BotConfig.AiCastGapSeconds 만큼 쉰다.
 // 승률 측정: 저장소의 Tools/BotLab (Unity 없이 실제 MatchSimulation 으로 봇끼리 수백 판)
@@ -46,7 +50,7 @@ namespace SpellboundVR.Bot
         public int EnemiesNearMyBase;
     }
 
-    /// <summary>서버가 준 수 (슬롯 · 열은 봇 자신의 시점)</summary>
+    /// <summary>서버가 준 한 수 (슬롯 · 열은 봇 자신의 시점)</summary>
     public struct StrategyAdvice
     {
         public int Slot;
@@ -54,7 +58,64 @@ namespace SpellboundVR.Bot
         public Column Column;
         public float Depth;
         public sbyte Move;
+        /// <summary>요청한 경기 시간 (나이는 여기서부터 잰다 — 답이 늦을수록 덜 믿는다)</summary>
+        public float RequestedAt;
         public float ReceivedAt;
+    }
+
+    /// <summary>서버(VLM · 학습)가 준 작전 — Until 까지 0.25초마다 두뇌 점수에 곱한다</summary>
+    public struct StrategyOrders
+    {
+        /// <summary>집중할 열 (봇 시점), 없으면 -1</summary>
+        public int Lane;
+        /// <summary>-1 지키기 · 0 보통 · 1 밀기</summary>
+        public int Stance;
+        public int[] Prefer;
+        public int[] Hold;
+        public float Until;
+        /// <summary>VLM 이 정한 작전인지 (아니면 규칙 · 학습으로 만든 작전)</summary>
+        public bool FromModel;
+
+        public bool Prefers(int spellId) => Contains(Prefer, spellId);
+        public bool Holds(int spellId) => Contains(Hold, spellId);
+
+        private static bool Contains(int[] a, int id)
+        {
+            if (a == null) return false;
+            for (int i = 0; i < a.Length; i++) if (a[i] == id) return true;
+            return false;
+        }
+    }
+
+    /// <summary>전장 지도용 유닛 점 (봇 시점)</summary>
+    public struct BotUnitDot
+    {
+        public byte Column;
+        public float Depth;
+        public bool Enemy;
+    }
+
+    /// <summary>두뇌가 매긴 후보 (작전을 곱하기 전 점수)</summary>
+    public struct BotCandidate
+    {
+        public int Slot;
+        public int SpellId;
+        public Column Column;
+        public float Depth;
+        public float Score;
+        public string Why;
+    }
+
+    /// <summary>두뇌가 본 전장 — 서버 요청 · 학습 기록에 같이 보낸다 (두뇌가 매 틱 다시 채우므로 받은 쪽은 바로 복사할 것)</summary>
+    public sealed class BotView
+    {
+        public const int MaxUnits = 96;
+        public const int MaxCandidates = 3;
+        public LaneInfo[] Lanes;
+        public readonly BotUnitDot[] Units = new BotUnitDot[MaxUnits];
+        public int UnitCount;
+        public readonly BotCandidate[] Candidates = new BotCandidate[MaxCandidates];
+        public int CandidateCount;
     }
 
     /// <summary>서버 AI 전략 · 학습 데이터 연결 (Unity: Backend/AiStrategyLink). 모든 호출은 막히지 않아야 한다.</summary>
@@ -62,9 +123,13 @@ namespace SpellboundVR.Bot
     {
         /// <summary>봇마다 하나 — 경기 · 진영 정보를 알려 준다 (경기가 바뀌면 다시 불린다)</summary>
         void Track(MatchSimulation sim, Team team);
-        void RequestAdvice(Team team, in BotObservation obs, LaneInfo[] lanes, int[] deck);
+        void RequestAdvice(Team team, in BotObservation obs, BotView view, int[] deck);
+        /// <summary>한 수 (한 번 쓰면 사라진다)</summary>
         bool TryGetAdvice(Team team, out StrategyAdvice advice);
-        void ReportDecision(Team team, in BotObservation obs, LaneInfo[] lanes, int[] deck, in SpellCastRequest cast, bool hasCast, sbyte move, bool followedAdvice);
+        /// <summary>지금(now) 유효한 작전</summary>
+        bool TryGetOrders(Team team, float now, out StrategyOrders orders);
+        void ReportDecision(Team team, in BotObservation obs, BotView view, int[] deck, in SpellCastRequest cast, bool hasCast, sbyte move,
+                            bool followedAdvice, bool byOrders);
     }
 
     /// <summary>봇이 쓸 서버 연결 (없으면 null — 두뇌 혼자 판단). Unity 에서는 AiStrategyLink 가 실행 시 채운다.</summary>
@@ -102,6 +167,28 @@ namespace SpellboundVR.Bot
             return w;
         }
 
+        /// <summary>작전 자세(-1 지키기 · 1 밀기)를 반영한 가중치</summary>
+        public AiBrainWeights WithStance(int stance)
+        {
+            var w = Clone();
+            if (stance < 0)
+            {
+                w.DefenseBias = Mathf.Max(1f, DefenseBias * 2f);
+                w.SummonPush = 0f;
+                w.Scale[(int)SpellBehaviorType.ShieldRegen] *= 1.3f;
+                w.Scale[(int)SpellBehaviorType.TowerBuff] *= 1.3f;
+                w.Scale[(int)SpellBehaviorType.PlaceStructure] *= 1.2f;
+            }
+            else if (stance > 0)
+            {
+                w.DefenseBias = DefenseBias * 0.5f;
+                w.SummonPush = 1f;
+                w.Scale[(int)SpellBehaviorType.RageField] *= 1.3f;
+                w.Scale[(int)SpellBehaviorType.SummonUnit] *= 1.2f;
+            }
+            return w;
+        }
+
         private static AiBrainWeights _default;
         public static AiBrainWeights Default => _default ?? (_default = CreateTuned());
 
@@ -130,7 +217,10 @@ namespace SpellboundVR.Bot
         private const float ThinkInterval = 0.25f;
         private const float DodgeEta = 1.4f;
         private const float ClusterRadius = 0.12f;
-        private const float AdviceMaxAge = 4f;
+        /// <summary>서버의 한 수는 요청한 지 이 시간 안일 때만 쓴다 (답이 늦으면 전장이 바뀌었다)</summary>
+        private const float AdviceMaxAge = 5f;
+        private const float PreferBoost = 1.6f;
+        private const float LaneBoost = 1.3f;
 
         private readonly Team _team;
         private readonly int[] _deck;
@@ -139,7 +229,13 @@ namespace SpellboundVR.Bot
         private readonly DeterministicRandom _rng;
         private readonly IStrategyAdvisor _advisor;
         private readonly AiBrainWeights _w;
+        /// <summary>자세별 가중치 (-1 지키기 · 0 그대로 · 1 밀기) — 작전이 있으면 이번 틱에 _cw 로 쓴다</summary>
+        private readonly AiBrainWeights[] _stanceW;
+        private AiBrainWeights _cw;
+        private StrategyOrders _orders;
+        private bool _hasOrders;
         private readonly LaneInfo[] _lanes = new LaneInfo[TeamUtil.ColumnCount];
+        private readonly BotView _view = new BotView();
 
         private MatchSimulation _sim;
         private float _lastTime = -1f;
@@ -155,6 +251,9 @@ namespace SpellboundVR.Bot
                                AiBrainWeights weights = null)
         {
             _w = weights ?? AiBrainWeights.Default;
+            _cw = _w;
+            _stanceW = new[] { _w.WithStance(-1), _w, _w.WithStance(1) };
+            _view.Lanes = _lanes;
             _team = team;
             _deck = deck;
             _catalog = catalog;
@@ -180,6 +279,7 @@ namespace SpellboundVR.Bot
             float field = arena.FieldLength;
             _myTowerAliveDepth = (arena.TowerDepth + sim.Rules.TowerRange) / field;
             _totalEnemies = 0;
+            _view.UnitCount = 0;
             for (int c = 0; c < _lanes.Length; c++) _lanes[c] = new LaneInfo { EnemyFront = 1f };
 
             // 적 유닛 깊이를 열마다 모아 두었다가 가장 많이 겹치는 깊이를 찾는다
@@ -193,6 +293,8 @@ namespace SpellboundVR.Bot
                 if (!u.Active || u.Dead) continue;
                 int local = (int)TeamUtil.ToLocalColumn(team, arena.NearestWorldColumn(u.Position.x));
                 float depth = Mathf.Clamp01(arena.VToDepth(team, u.Position.y));
+                if (_view.UnitCount < BotView.MaxUnits)
+                    _view.Units[_view.UnitCount++] = new BotUnitDot { Column = (byte)local, Depth = depth, Enemy = u.Team != team };
                 ref LaneInfo lane = ref _lanes[local];
                 if (u.Team == team)
                 {
@@ -269,23 +371,38 @@ namespace SpellboundVR.Bot
                 LastReason = "투사체 피하기";
             }
 
-            // 서버 전략은 몇 초에 한 번 요청 (응답은 비동기로 들어온다)
-            if (_advisor != null && _config.UseServerStrategy && t >= _nextAdviceRequest)
+            // 작전 (VLM · 학습) — 유효한 동안 이번 틱 점수에 곱한다
+            bool useServer = _advisor != null && _config.UseServerStrategy;
+            _hasOrders = useServer && _advisor.TryGetOrders(_team, t, out _orders);
+            _cw = _hasOrders ? _stanceW[Mathf.Clamp(_orders.Stance, -1, 1) + 1] : _w;
+
+            // 2) 후보 매기기 (빠른 반사 — 매 판단마다)
+            bool own = PickBestCast(obs, out SpellCastRequest ownCast, out float ownScore, out bool byOrders);
+
+            // 서버 전략은 몇 초에 한 번 요청 (응답은 비동기로 들어온다) — 지금 후보 · 유닛 점을 같이 보낸다
+            if (useServer && t >= _nextAdviceRequest)
             {
                 _nextAdviceRequest = t + Mathf.Max(1f, _config.ServerAdviceInterval);
-                _advisor.RequestAdvice(_team, obs, _lanes, _deck);
+                _advisor.RequestAdvice(_team, obs, _view, _deck);
             }
 
-            // 2) 시전 (사람처럼 시전 사이에 쉰다)
+            // 3) 시전 (사람처럼 시전 사이에 쉰다): 위급하면 두뇌 → 서버의 한 수(신선할 때) → 두뇌(작전 반영)
             if (t < _nextCastAllowed)
             {
-                if (move != 0) Report(obs, default, false, move, false);
+                if (move != 0) Report(obs, default, false, move, false, false);
                 return;
             }
             bool followed = false;
-            bool found = TryAdvice(obs, t, out SpellCastRequest request);
-            if (found) followed = true;
-            else found = PickBestCast(obs, out request);
+            SpellCastRequest request = ownCast;
+            bool found = own;
+            bool emergency = own && ownScore >= Mathf.Max(1f, _config.EmergencyScore);
+            if (!emergency && TryAdvice(obs, t, out SpellCastRequest advised))
+            {
+                request = advised;
+                found = followed = true;
+                byOrders = false;
+            }
+            else if (own) LastReason = (emergency ? "위급 · " : byOrders ? "작전 · " : "") + LastReason;
 
             if (found)
             {
@@ -293,13 +410,13 @@ namespace SpellboundVR.Bot
                 cmd.CastRequest = request;
                 _nextCastAllowed = t + Mathf.Max(0.5f, _config.AiCastGapSeconds) * _rng.Range(0.9f, 1.2f);
             }
-            if (found || move != 0) Report(obs, request, found, move, followed);
+            if (found || move != 0) Report(obs, request, found, move, followed, found && byOrders);
         }
 
-        private void Report(in BotObservation obs, in SpellCastRequest request, bool hasCast, sbyte move, bool followed)
+        private void Report(in BotObservation obs, in SpellCastRequest request, bool hasCast, sbyte move, bool followed, bool byOrders)
         {
             if (_advisor != null && _config.ReportExperience)
-                _advisor.ReportDecision(_team, obs, _lanes, _deck, request, hasCast, move, followed);
+                _advisor.ReportDecision(_team, obs, _view, _deck, request, hasCast, move, followed, byOrders);
         }
 
         public void ResetTimers()
@@ -316,7 +433,7 @@ namespace SpellboundVR.Bot
         {
             request = default;
             if (_advisor == null || !_config.UseServerStrategy || !_advisor.TryGetAdvice(_team, out StrategyAdvice a)) return false;
-            if (t - a.ReceivedAt > AdviceMaxAge || a.Slot < 0 || a.Slot >= _deck.Length) return false;
+            if (t - a.RequestedAt > AdviceMaxAge || a.Slot < 0 || a.Slot >= _deck.Length) return false;
             if ((obs.SelfSlotReadyMask & (1 << a.Slot)) == 0 || _deck[a.Slot] != a.SpellId) return false;
             var def = _catalog.Get(a.SpellId);
             if (def == null) return false;
@@ -333,26 +450,53 @@ namespace SpellboundVR.Bot
 
         // ── 스스로 판단 ───────────────────────────────────────
 
-        private bool PickBestCast(in BotObservation obs, out SpellCastRequest best)
+        /// <summary>
+        /// 쓸 수 있는 슬롯마다 점수를 매겨 가장 높은 것 (작전이 있으면 곱한 점수로). 작전을 곱하기 전 점수 상위 3개는
+        /// _view.Candidates 에 남겨 서버(VLM)에 botPick 으로 보낸다.
+        /// </summary>
+        private bool PickBestCast(in BotObservation obs, out SpellCastRequest best, out float bestScore, out bool byOrders)
         {
             best = default;
-            float bestScore = 0f;
+            bestScore = 0f;
+            byOrders = false;
             string bestWhy = "";
+            _view.CandidateCount = 0;
             for (int slot = 0; slot < _deck.Length; slot++)
             {
                 if ((obs.SelfSlotReadyMask & (1 << slot)) == 0) continue;
                 int id = _deck[slot];
                 var def = id > 0 ? _catalog.Get(id) : null;
                 if (def == null) continue;
-                float score = Score(def, obs, out Column col, out float depth, out string why) * _w.Scale[(int)def.Behavior % AiBrainWeights.BehaviorCount];
+                float raw = Score(def, obs, out Column col, out float depth, out string why);
+                float scale = _cw.Scale[(int)def.Behavior % AiBrainWeights.BehaviorCount];
+                float score = raw * scale;
+                if (score > 0f) AddCandidate(slot, id, col, Mathf.Clamp(depth, 0.05f, def.MaxDepth), score, why);
+
+                // 작전: 아낄 스킬은 쓰지 않고, 먼저 쓸 스킬 · 집중 레인은 점수를 올린다 (조정으로 0 이 된 스킬도 VLM 이 고르면 다시 쓴다)
+                bool boosted = false;
+                if (_hasOrders)
+                {
+                    if (_orders.Holds(id)) continue;
+                    if (_orders.Prefers(id))
+                    {
+                        score = raw * Mathf.Max(scale, 0.75f) * PreferBoost;
+                        boosted = true;
+                    }
+                    if (_orders.Lane >= 0 && (int)col == _orders.Lane && def.Targeting != SpellTargeting.Self && def.Targeting != SpellTargeting.Global)
+                    {
+                        score *= LaneBoost;
+                        boosted = true;
+                    }
+                }
                 // 고위력은 경기당 3회 — 확실히 큰 순간에만
-                float need = def.Tier == SpellTier.HighPower ? _w.HighPowerNeed : _w.NormalNeed;
+                float need = def.Tier == SpellTier.HighPower ? _cw.HighPowerNeed : _cw.NormalNeed;
                 if (score < need) continue;
                 if (def.Tier == SpellTier.HighPower) score *= 0.85f;
                 if (score > bestScore)
                 {
                     bestScore = score;
                     bestWhy = why;
+                    byOrders = boosted;
                     best = new SpellCastRequest
                     {
                         SpellId = id,
@@ -365,6 +509,18 @@ namespace SpellboundVR.Bot
             if (bestScore <= 0f) return false;
             LastReason = bestWhy;
             return true;
+        }
+
+        private void AddCandidate(int slot, int id, Column col, float depth, float score, string why)
+        {
+            var c = _view.Candidates;
+            int n = _view.CandidateCount;
+            int at = n;
+            while (at > 0 && c[at - 1].Score < score) at--;
+            if (at >= BotView.MaxCandidates) return;
+            for (int i = Mathf.Min(n, BotView.MaxCandidates - 1); i > at; i--) c[i] = c[i - 1];
+            c[at] = new BotCandidate { Slot = slot, SpellId = id, Column = col, Depth = depth, Score = score, Why = why };
+            if (n < BotView.MaxCandidates) _view.CandidateCount = n + 1;
         }
 
         private float Score(SpellDefinition def, in BotObservation obs, out Column col, out float depth, out string why)
@@ -535,7 +691,7 @@ namespace SpellboundVR.Bot
 
         /// <summary>내 쪽으로 가까이 온 적일수록 급하다 (DefenseBias 만큼)</summary>
         private float Urgency(in LaneInfo l) =>
-            l.Enemies == 0 ? 0f : 1f + ((1f - l.EnemyFront) + l.EnemiesNearMyBase * 0.2f) * _w.DefenseBias;
+            l.Enemies == 0 ? 0f : 1f + ((1f - l.EnemyFront) + l.EnemiesNearMyBase * 0.2f) * _cw.DefenseBias;
 
         /// <summary>소환할 레인: 밀리는 레인 보강 ↔ 밀고 있는 레인 가속 (SummonPush 로 섞는다)</summary>
         private int SummonLane()
@@ -547,7 +703,7 @@ namespace SpellboundVR.Bot
                 var l = _lanes[c];
                 float weak = (l.Enemies - l.Allies) * 2f + l.EnemiesNearMyBase * 2f - l.Allies * 0.1f;
                 float push = (l.Allies - l.Enemies) * 2f + l.AllyFront * 3f;
-                float s = (1f - _w.SummonPush) * weak + _w.SummonPush * push;
+                float s = (1f - _cw.SummonPush) * weak + _cw.SummonPush * push;
                 if (s > score) { score = s; best = c; }
             }
             return best;
@@ -559,7 +715,7 @@ namespace SpellboundVR.Bot
             float score = -1f;
             for (int c = 0; c < _lanes.Length; c++)
             {
-                float s = _lanes[c].ClusterCount * (1f + (1f - _lanes[c].EnemyFront) * 0.5f * _w.DefenseBias);
+                float s = _lanes[c].ClusterCount * (1f + (1f - _lanes[c].EnemyFront) * 0.5f * _cw.DefenseBias);
                 if (s > score) { score = s; best = c; }
             }
             return best;
