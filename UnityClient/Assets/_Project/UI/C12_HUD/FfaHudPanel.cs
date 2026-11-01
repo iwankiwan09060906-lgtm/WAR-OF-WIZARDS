@@ -1,8 +1,9 @@
 // 4인 개인전 HUD (C12 안) — BattleHudView 가 개인전이면 "상대" 카드 대신 만든다.
 //   · 세 상대 카드: 내 왼쪽 · 맞은편 · 오른쪽 순서 (= 왼쪽 · 가운데 · 오른쪽 레인으로 조준하면 맞는 상대).
-//     번호 · 이름(AI 는 AI) · HP 막대 · 타워/넥서스 · 탈락 순위
-//   · 전장 지도: 마름모 네 발판 · 레인 6개 · 유닛 점. 내 발판이 항상 아래, 내가 보는 쪽이 위
+//     번호 · 이름(AI 는 AI) · HP 막대 · 그 상대의 내 쪽 타워 / 넥서스 · 탈락 순위 · 레인별 피해 100% 표시
+//   · 전장 지도: 마름모 네 발판 · 레인 6개 · 타워 · 유닛 점. 내 발판이 항상 아래, 내가 보는 쪽이 위
 // 스냅샷만 읽어 그린다 (표시 전용, Rule 12). 초당 몇 번만 갱신한다.
+// 관전 중에는 보고 있는 사람 기준으로 그린다 (Tick 의 me).
 
 using SpellboundVR.Arena;
 using SpellboundVR.Contracts;
@@ -37,6 +38,7 @@ namespace SpellboundVR.UI
         private readonly Image[] _nodes = new Image[TeamUtil.TeamCount];
         private readonly Text[] _nodeLabels = new Text[TeamUtil.TeamCount];
         private readonly Image[] _edges = new Image[6];
+        private readonly Image[] _towers = new Image[TeamUtil.TeamCount * TeamUtil.ColumnCount];
         private readonly Image[] _dots = new Image[MaxDots];
         private RectTransform _map;
         private float _nextRefresh;
@@ -110,6 +112,11 @@ namespace SpellboundVR.UI
                 Place(_dots[i].rectTransform, Vector2.zero, new Vector2(6f, 6f));
                 _dots[i].gameObject.SetActive(false);
             }
+            for (int i = 0; i < _towers.Length; i++)
+            {
+                _towers[i] = UiKit.Panel(_map, Color.white, null, "Tower" + i);
+                Place(_towers[i].rectTransform, Vector2.zero, new Vector2(9f, 9f));
+            }
             for (int t = 0; t < _nodes.Length; t++)
             {
                 _nodes[t] = UiKit.Panel(_map, FallbackVisuals.TeamColor((Team)t), null, "Seat" + t);
@@ -159,7 +166,11 @@ namespace SpellboundVR.UI
                 rt.localRotation = Quaternion.Euler(0f, 0f, Mathf.Atan2(b.y - a.y, b.x - a.x) * Mathf.Rad2Deg);
             }
             for (int t = 0; t < _nodes.Length; t++)
+            {
                 _nodes[t].rectTransform.anchoredPosition = MapPoint(arena.BasePosition((Team)t), me);
+                for (int c = 0; c < TeamUtil.ColumnCount; c++)
+                    _towers[t * TeamUtil.ColumnCount + c].rectTransform.anchoredPosition = MapPoint(arena.TowerPosition((Team)t, (Column)c), me);
+            }
         }
 
         public void Tick(MatchSnapshot s, Team me)
@@ -171,7 +182,7 @@ namespace SpellboundVR.UI
                 _builtFor = me;
                 LayoutMap(me);
             }
-            for (int c = 0; c < _cards.Length; c++) PaintCard(ref _cards[c], s, _session.Arena.ColumnTarget(me, (Column)c), c);
+            for (int c = 0; c < _cards.Length; c++) PaintCard(ref _cards[c], s, _session.Arena.ColumnTarget(me, (Column)c), c, me);
 
             for (int t = 0; t < _nodes.Length; t++)
             {
@@ -179,6 +190,8 @@ namespace SpellboundVR.UI
                 Color c = FallbackVisuals.TeamColor((Team)t);
                 _nodes[t].color = out_ ? UiTheme.Alpha(c, 0.3f) : c;
                 _nodes[t].rectTransform.localScale = Vector3.one * ((Team)t == me ? 1.25f : 1f);
+                for (int k = 0; k < TeamUtil.ColumnCount; k++)
+                    _towers[t * TeamUtil.ColumnCount + k].color = s.Tower((Team)t, (Column)k).Alive != 0 ? c : UiTheme.Alpha(Color.white, 0.12f);
             }
 
             int shown = 0;
@@ -194,7 +207,7 @@ namespace SpellboundVR.UI
                 if (_dots[i].gameObject.activeSelf) _dots[i].gameObject.SetActive(false);
         }
 
-        private static void PaintCard(ref EnemyCard card, MatchSnapshot s, Team enemy, int column)
+        private static void PaintCard(ref EnemyCard card, MatchSnapshot s, Team enemy, int column, Team me)
         {
             ref var p = ref s.Players[(int)enemy];
             string name = !string.IsNullOrEmpty(s.Names[(int)enemy]) ? s.Names[(int)enemy] : p.Present != 0 && p.IsBot != 0 ? "AI" : "빈자리";
@@ -204,13 +217,17 @@ namespace SpellboundVR.UI
             card.Hp.text = p.Hp + " / " + p.MaxHp;
             card.Bar.anchorMax = new Vector2(p.MaxHp > 0 ? Mathf.Clamp01((float)p.Hp / p.MaxHp) : 0f, 1f);
             card.Bar.offsetMax = Vector2.zero;
-            bool tower = s.Structure(enemy, false).Alive != 0;
+            // 레인 양 끝의 타워: 상대 쪽이 무너지면 내 공격이, 내 쪽이 무너지면 그 상대의 공격이 100% 들어간다
+            bool tower = s.TowerFacing(enemy, me).Alive != 0;
+            bool myTower = s.TowerFacing(me, enemy).Alive != 0;
             bool nexus = s.Structure(enemy, true).Alive != 0;
             card.Tower.color = tower ? UiTheme.Cyan : UiTheme.Enemy;
             card.Nexus.color = nexus ? UiTheme.Cyan : UiTheme.Enemy;
             bool gone = p.Place != 0;
             card.Back.color = gone ? new Color(1f, 1f, 1f, 0.35f) : Color.white;
-            card.Status.text = gone ? "탈락 · " + p.Place + "위" : !tower ? "<color=" + UiKit.Hex(UiTheme.Amber) + ">피해 100%</color>" : "";
+            string dealt = tower ? "" : "<color=" + UiKit.Hex(UiTheme.Amber) + ">주는 100%</color>";
+            string taken = myTower ? "" : "<color=" + UiKit.Hex(UiTheme.Enemy) + ">받는 100%</color>";
+            card.Status.text = gone ? "탈락 · " + p.Place + "위" : dealt + (dealt.Length > 0 && taken.Length > 0 ? " · " : "") + taken;
         }
     }
 }

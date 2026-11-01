@@ -49,10 +49,16 @@ namespace SpellboundVR.Network
             return _defense.IsBreached(targetTeam);
         }
 
-        /// <summary>§11.4 · §19 Nexus Lock — 자기 타워가 살아있는 동안 무적</summary>
+        /// <summary>§11.4 · §19 Nexus Lock — 자기 타워가 하나라도 살아있는 동안 무적 (주인 없는 전장 피해용)</summary>
         public bool IsNexusLocked(Team nexusTeam)
         {
             return _defense.TowerAlive(nexusTeam);
+        }
+
+        /// <summary>attacker 에게 잠겨 있는가 — attacker 쪽 레인의 타워가 살아있는 동안 무적</summary>
+        public bool IsNexusLocked(Team nexusTeam, Team attacker)
+        {
+            return _defense.TowerAlive(nexusTeam, attacker);
         }
     }
 }

@@ -133,6 +133,8 @@ namespace SpellboundVR.Presentation
         }
 
         private readonly List<AvatarView> _avatars = new List<AvatarView>(4);
+        /// <summary>관전 중 카메라가 들어가 있는 사람의 아바타는 끈다 (-1 = 없음)</summary>
+        private int _hiddenAvatar = -1;
         private GameObject _selfShield, _selfReflect, _selfFocus;
         private Transform _selfShieldRing;
         private MaterialPropertyBlock _block;
@@ -348,6 +350,13 @@ namespace SpellboundVR.Presentation
         /// <summary>진영 배정 전(오프라인 · 서버 화면)에는 Home 시점</summary>
         private Team LocalTeam => _session.Events.HasLocalTeam ? _session.Events.LocalTeam : Team.Home;
 
+        /// <summary>관전 시점을 옮긴다 — 그 사람 아바타를 끄고 아군 · 적군 색도 그 사람 기준으로 (null = 내 시점)</summary>
+        public void SetViewpoint(Team? team)
+        {
+            _hiddenAvatar = team.HasValue ? (int)team.Value : -1;
+            TeamArt.ApplyAll(team ?? LocalTeam);
+        }
+
         /// <summary>타워 총알: 카탈로그 VFX(마법 불꽃)가 있으면 쓰고, 없으면 작은 발광 구체 + 짧은 꼬리 (진영 색을 연하게)</summary>
         private GameObject CreateTowerShotVisual(bool ally)
         {
@@ -410,62 +419,68 @@ namespace SpellboundVR.Presentation
 
         private void BuildStructures()
         {
-            var layout = _session.Layout;
             for (int t = 0; t < _arena.TeamCount; t++)
             {
                 var team = (Team)t;
-                for (int n = 0; n < 2; n++)
-                {
-                    bool isNexus = n == 1;
-                    Transform visual = layout != null ? layout.GetStructureVisual(team, isNexus) : null;
-                    Vector3 pos = _arena.ToWorld(_arena.StructurePosition(team, isNexus));
-                    if (!_arena.IsDuel && layout != null) visual = PlaceFfaStructure(layout, team, isNexus, visual, pos);
-                    if (visual == null)
-                    {
-                        string modelName = isNexus ? "MDL_Structure_Nexus" : "MDL_Structure_Tower";
-                        GameObject go;
-                        if (_catalog != null && _catalog.TryGet(modelName, out var prefab)) go = Instantiate(prefab);
-                        else
-                        {
-                            go = new GameObject(modelName + "_" + team);
-                            var body = FallbackVisuals.Primitive(isNexus ? PrimitiveType.Cylinder : PrimitiveType.Cube, "Body",
-                                                                 FallbackVisuals.Opaque(FallbackVisuals.TeamColor(team) * (isNexus ? 0.8f : 0.6f)));
-                            body.transform.SetParent(go.transform, false);
-                            body.transform.localScale = isNexus ? new Vector3(2f, 1.2f, 2f) : new Vector3(1.4f, 3f, 1.4f);
-                            body.transform.localPosition = new Vector3(0f, isNexus ? 1.2f : 1.5f, 0f);
-                        }
-                        go.transform.SetParent(transform, false);
-                        go.transform.SetPositionAndRotation(pos, _arena.FacingRotation(team));
-                        visual = go.transform;
-                    }
-                    // HP바는 비주얼의 스케일을 상속하지 않도록 별도 홀더에 붙인다
-                    var holder = new GameObject("StructureHp_" + team + (isNexus ? "_Nexus" : "_Tower")).transform;
-                    holder.SetParent(transform, false);
-                    holder.position = new Vector3(visual.position.x, pos.y, visual.position.z);
-                    var size = VisualSize(visual);
-                    var view = new StructureView
-                    {
-                        Root = visual,
-                        HpFill = AttachHpBar(holder, isNexus ? 3.2f : 5.4f, 1.6f), // 아트 높이: 넥서스 2.4m · 타워 4.8m
-                        Team = team,
-                        MuzzleHeight = size.y * 0.8f,
-                        Size = size,
-                        Rubble = CreateRubble(holder, size),
-                    };
-                    if (!isNexus)
-                    {
-                        // S09 타워 버프 상자 · H01 빙결 — 타워 크기에 맞춤 (프리팹은 1m 상자 · 반경 1m 기준)
-                        view.BuffFx = CreateStatusFx("VFX_S09_TowerBuff_Loop", holder);
-                        if (view.BuffFx != null) view.BuffFx.transform.localScale = new Vector3(Mathf.Max(2f, size.x * 1.25f), size.y * 1.08f, Mathf.Max(2f, size.z * 1.25f));
-                        view.FreezeFx = CreateStatusFx("VFX_H01_Freeze_Loop", holder);
-                        if (view.FreezeFx != null) view.FreezeFx.transform.localScale = Vector3.one * Mathf.Max(1.5f, Mathf.Max(size.x, size.z) * 0.8f);
-                    }
-                    _structures[MatchSnapshot.StructureIndex(team, isNexus)] = view;
-                }
+                BuildStructure(team, false, Column.Center);
+                BuildStructure(team, true, Column.Center);
+                if (_arena.IsDuel) continue;
+                BuildStructure(team, false, Column.Left);
+                BuildStructure(team, false, Column.Right);
             }
         }
 
-        /// <summary>개인전: 씬의 1 · 3번 구조물은 개인전 깊이로 옮기고, 2 · 4번은 1번 구조물을 복제해 세운다</summary>
+        /// <summary>타워는 레인마다 하나 (1:1 은 가운데만)</summary>
+        private void BuildStructure(Team team, bool isNexus, Column column)
+        {
+            var layout = _session.Layout;
+            Transform visual = layout != null && column == Column.Center ? layout.GetStructureVisual(team, isNexus) : null;
+            Vector3 pos = _arena.ToWorld(isNexus ? _arena.StructurePosition(team, true) : _arena.TowerPosition(team, column));
+            if (!_arena.IsDuel && layout != null) visual = PlaceFfaStructure(layout, team, isNexus, visual, pos);
+            if (visual == null)
+            {
+                string modelName = isNexus ? "MDL_Structure_Nexus" : "MDL_Structure_Tower";
+                GameObject go;
+                if (_catalog != null && _catalog.TryGet(modelName, out var prefab)) go = Instantiate(prefab);
+                else
+                {
+                    go = new GameObject(modelName + "_" + team);
+                    var body = FallbackVisuals.Primitive(isNexus ? PrimitiveType.Cylinder : PrimitiveType.Cube, "Body",
+                                                         FallbackVisuals.Opaque(FallbackVisuals.TeamColor(team) * (isNexus ? 0.8f : 0.6f)));
+                    body.transform.SetParent(go.transform, false);
+                    body.transform.localScale = isNexus ? new Vector3(2f, 1.2f, 2f) : new Vector3(1.4f, 3f, 1.4f);
+                    body.transform.localPosition = new Vector3(0f, isNexus ? 1.2f : 1.5f, 0f);
+                }
+                go.transform.SetParent(transform, false);
+                go.transform.SetPositionAndRotation(pos, _arena.FacingRotation(team));
+                visual = go.transform;
+            }
+            // HP바는 비주얼의 스케일을 상속하지 않도록 별도 홀더에 붙인다
+            var holder = new GameObject("StructureHp_" + team + (isNexus ? "_Nexus" : "_Tower_" + column)).transform;
+            holder.SetParent(transform, false);
+            holder.position = new Vector3(visual.position.x, pos.y, visual.position.z);
+            var size = VisualSize(visual);
+            var view = new StructureView
+            {
+                Root = visual,
+                HpFill = AttachHpBar(holder, isNexus ? 3.2f : 5.4f, 1.6f), // 아트 높이: 넥서스 2.4m · 타워 4.8m
+                Team = team,
+                MuzzleHeight = size.y * 0.8f,
+                Size = size,
+                Rubble = CreateRubble(holder, size),
+            };
+            if (!isNexus)
+            {
+                // S09 타워 버프 상자 · H01 빙결 — 타워 크기에 맞춤 (프리팹은 1m 상자 · 반경 1m 기준)
+                view.BuffFx = CreateStatusFx("VFX_S09_TowerBuff_Loop", holder);
+                if (view.BuffFx != null) view.BuffFx.transform.localScale = new Vector3(Mathf.Max(2f, size.x * 1.25f), size.y * 1.08f, Mathf.Max(2f, size.z * 1.25f));
+                view.FreezeFx = CreateStatusFx("VFX_H01_Freeze_Loop", holder);
+                if (view.FreezeFx != null) view.FreezeFx.transform.localScale = Vector3.one * Mathf.Max(1.5f, Mathf.Max(size.x, size.z) * 0.8f);
+            }
+            _structures[isNexus ? MatchSnapshot.StructureIndex(team, true) : MatchSnapshot.TowerIndex(team, column)] = view;
+        }
+
+        /// <summary>개인전: 씬의 1 · 3번 구조물은 개인전 깊이로 옮기고, 그 밖의 구조물(2 · 4번 · 옆 레인 타워)은 1번 구조물을 복제해 세운다</summary>
         private Transform PlaceFfaStructure(ArenaLayout layout, Team team, bool isNexus, Transform visual, Vector3 pos)
         {
             if (visual == null)
@@ -770,9 +785,7 @@ namespace SpellboundVR.Presentation
             }
             if (TeamUtil.IsStructureId(targetId))
             {
-                var team = TeamUtil.TeamOfStructureId(targetId);
-                bool nexus = (targetId - 10) % 2 == 1;
-                var sv = _structures[MatchSnapshot.StructureIndex(team, nexus)];
+                var sv = _structures[targetId - TeamUtil.FirstStructureId];
                 if (sv == null || sv.Root == null) return false;
                 position = sv.Root.position;
                 return true;
@@ -959,7 +972,7 @@ namespace SpellboundVR.Presentation
             {
                 var a = _avatars[i];
                 ref var o = ref s.Players[(int)a.Team];
-                bool show = o.Present != 0 && a.Team != local;
+                bool show = o.Present != 0 && a.Team != local && (int)a.Team != _hiddenAvatar;
                 if (a.Root.gameObject.activeSelf != show) a.Root.gameObject.SetActive(show);
                 if (!show) continue;
                 Vector3 target = _arena.ToWorld(_arena.PlayerPosition(a.Team, o.WorldColumn), PlatformHeight);

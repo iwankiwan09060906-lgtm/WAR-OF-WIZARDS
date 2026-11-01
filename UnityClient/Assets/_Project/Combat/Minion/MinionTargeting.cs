@@ -2,7 +2,8 @@
 // 우선순위: (Brute) 구조물 → 가까운 적 유닛 → 구조물 → (돌파 후) 상대 플레이어
 // §11 규칙: 넥서스는 자기 타워가 살아있는 동안 대상 아님(Nexus Lock), 플레이어는 상대 넥서스 파괴 후에만.
 // 4인 개인전: 구조물 · 플레이어는 내 레인 끝의 상대만 노리고, 지나가다 만난 유닛은 누구든 적이다.
-//             옆 레인의 끝은 상대 타워에서 비껴 있으므로, 레인 끝에 가까워지면 탐지 범위 밖이어도 상대 구조물로 간다.
+//             타워는 내 레인 위의 것만 노리고, 그 타워가 무너지면 넥서스로 간다.
+//             옆 레인의 끝은 상대 넥서스에서 비껴 있으므로, 레인 끝에 가까워지면 탐지 범위 밖이어도 상대 구조물로 간다.
 
 using SpellboundVR.Contracts;
 using SpellboundVR.Core;
@@ -28,7 +29,7 @@ namespace SpellboundVR.Combat
 
             // 구조물 후보
             int structureId = 0;
-            StructureState tower = sim.Defense.Tower(enemy);
+            StructureState tower = sim.Defense.TowerFacing(enemy, unit.Team);
             StructureState nexus = sim.Defense.Nexus(enemy);
             if (tower.Alive && Vector2.Distance(unit.Position, tower.Position) - tower.Radius <= detect)
                 structureId = tower.Id;

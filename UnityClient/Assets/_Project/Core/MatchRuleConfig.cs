@@ -92,11 +92,11 @@ namespace SpellboundVR.Core
         public float PlacementOffset = 3f;
 
         [Header("4인 개인전 — 세 상대에게 힘이 나뉘므로 1:1 보다 빠르게 (BotLab ffa 로 맞춘 값)")]
-        [Tooltip("타워 · 넥서스 최대 HP 배율")]
+        [Tooltip("타워 · 넥서스 최대 HP 배율 (타워는 레인마다 하나씩이고 하나하나가 이 HP)")]
         public float FfaStructureHpScale = 0.5f;
         [Tooltip("강화 단계 간격 (초) — 1:1 의 ScalingInterval 대신")]
         public float FfaScalingInterval = 120f;
-        [Tooltip("타워가 살아 있어도 상대 스킬 피해가 이만큼 들어온다 (1:1 은 0.2) — 플레이어끼리 직접 때리는 재미")]
+        [Tooltip("그 상대 쪽 레인의 타워가 살아 있어도 스킬 피해가 이만큼 들어온다 (1:1 은 0.2) — 플레이어끼리 직접 때리는 재미")]
         public float FfaTowerAliveSkillDamageRatio = 0.4f;
 
         [Header("마나 폭풍 (4인 개인전 후반) — 웨이브끼리 상쇄돼도 경기가 끝나도록 구조물 · 플레이어를 깎는다")]

@@ -64,9 +64,16 @@ namespace SpellboundVR.UI
         private readonly int[] _maxHp = new int[TeamUtil.TeamCount];
         private readonly bool[] _tower = { true, true, true, true };
         private readonly bool[] _nexus = { true, true, true, true };
+        /// <summary>개인전 레인 타워 — 무너진 것만 알리려고 지난 상태를 둔다 (진영 × 열)</summary>
+        private readonly bool[] _laneTower = { true, true, true, true, true, true, true, true, true, true, true, true };
         private readonly float[] _mult = { 1f, 1f, 1f, 1f };
         private Text _myHp, _enemyHp, _time, _stageText, _upText, _wave, _status, _message, _center, _afk, _coach, _coachTitle;
+        private Text _myTitle;
         private FfaHudPanel _ffa;
+        /// <summary>관전 중 보고 있는 사람 (null = 내 시점)</summary>
+        private Team? _spectated;
+        /// <summary>관전 안내 한 줄 — 다른 알림이 사라지면 다시 나온다</summary>
+        private string _spectateText;
         private GameObject _coachPanel;
         private RectTransform _myBar, _enemyBar;
         private GameObject _centerBack;
@@ -158,8 +165,8 @@ namespace SpellboundVR.UI
                    UiTheme.Cut(new Color(6 / 255f, 4 / 255f, 20 / 255f, 0.86f), UiTheme.Alpha(UiTheme.Purple, 0.45f), 16, 2));
 
             // 위: HP 카드 · 시간 판
-            _myHp = HpCard(rt, -335f, "You", UiTheme.PurpleLight, UiTheme.Purple, out _myBar);
-            if (!Ffa) _enemyHp = HpCard(rt, 335f, "Enemy", UiTheme.Hex(0xf87171), UiTheme.Enemy, out _enemyBar);
+            _myHp = HpCard(rt, -335f, "You", UiTheme.PurpleLight, UiTheme.Purple, out _myBar, out _myTitle);
+            if (!Ffa) _enemyHp = HpCard(rt, 335f, "Enemy", UiTheme.Hex(0xf87171), UiTheme.Enemy, out _enemyBar, out _);
             BuildTimer(rt);
 
             // 둘째 줄: 방어 계층
@@ -216,12 +223,13 @@ namespace SpellboundVR.UI
         }
 
         /// <summary>HP 카드 (프로토타입 YOU / ENEMY 카드 + EnergyBar)</summary>
-        private static Text HpCard(RectTransform rt, float x, string who, Color text, Color bar, out RectTransform fill)
+        private static Text HpCard(RectTransform rt, float x, string who, Color text, Color bar, out RectTransform fill, out Text title)
         {
             var card = Sliced(rt, who + "Card", new Vector2(x, 262f), new Vector2(300f, 70f),
                               UiTheme.Cut(new Color(0f, 0f, 0f, 0.45f), UiTheme.Alpha(bar, 0.45f), 0, 2));
             var crt = card.rectTransform;
             var k = UiKit.Kicker(crt, who, text, TextAnchor.MiddleLeft, 15);
+            title = k;
             Place(k.rectTransform, new Vector2(-55f, 14f), new Vector2(170f, 26f));
             var hp = Label(crt, "Hp", new Vector2(60f, 14f), new Vector2(160f, 30f), 22, TextAnchor.MiddleRight, UiTheme.Text, true);
             hp.font = UiTheme.Display;
@@ -426,6 +434,9 @@ namespace SpellboundVR.UI
 
         private Team Local => _session.Events.HasLocalTeam ? _session.Events.LocalTeam : Team.Home;
 
+        /// <summary>HUD 가 보여 주는 사람 — 평소엔 나, 관전 중엔 보고 있는 사람</summary>
+        private Team Viewed => _spectated ?? Local;
+
         private void HandleHp(Team team, int current, int max)
         {
             _hp[(int)team] = current;
@@ -435,7 +446,7 @@ namespace SpellboundVR.UI
 
         private void RefreshHp()
         {
-            int me = (int)Local;
+            int me = (int)Viewed;
             _myHp.text = _hp[me] + " / " + _maxHp[me];
             SetBar(_myBar, _maxHp[me] > 0 ? (float)_hp[me] / _maxHp[me] : 0f);
             if (_enemyHp == null) return;
@@ -452,7 +463,15 @@ namespace SpellboundVR.UI
 
         private void HandlePosition(Team team, Column column)
         {
-            if (team == Local) PaintPosition(column == Column.Left ? 0 : column == Column.Center ? 1 : 2);
+            if (_spectated.HasValue) RefreshSpectatedPosition();
+            else if (team == Local) PaintPosition(column == Column.Left ? 0 : column == Column.Center ? 1 : 2);
+        }
+
+        /// <summary>OnPositionChanged 의 열은 내 시점이라, 관전 중에는 보고 있는 사람 시점으로 다시 구한다</summary>
+        private void RefreshSpectatedPosition()
+        {
+            var s = _session.Events.Latest;
+            if (s != null) PaintPosition((int)TeamUtil.ToLocalColumn(Viewed, s.Players[(int)Viewed].WorldColumn));
         }
 
         private void PaintPosition(int index)
@@ -553,9 +572,31 @@ namespace SpellboundVR.UI
             _tower[t] = towerAlive;
             _nexus[t] = nexusAlive;
             string who = Ffa ? TeamUtil.SeatNumber(team) + "번 " : "상대 ";
-            if (wasTower && !towerAlive) ShowMessage(team == Local ? "내 타워가 무너졌습니다!" : who + "타워 파괴!", UiTheme.Amber);
-            if (wasNexus && !nexusAlive) ShowMessage(team == Local ? "내 넥서스가 무너졌습니다!" : who + "넥서스 파괴!", UiTheme.Orange);
+            if (Ffa) AnnounceLaneTowers(team);
+            else if (wasTower && !towerAlive) ShowMessage(team == Local ? "내 타워가 무너졌습니다!" : who + "타워 파괴!", UiTheme.Amber);
+            var s = _session.Events.Latest;
+            bool eliminated = s != null && s.Players[t].Place != 0; // 탈락 알림을 덮지 않는다
+            if (wasNexus && !nexusAlive && !eliminated) ShowMessage(team == Local ? "내 넥서스가 무너졌습니다!" : who + "넥서스 파괴!", UiTheme.Orange);
             RefreshDefense();
+        }
+
+        /// <summary>개인전: 무너진 레인 타워 알림 — 어느 상대와의 레인이 뚫렸는지까지 말한다</summary>
+        private void AnnounceLaneTowers(Team team)
+        {
+            var s = _session.Events.Latest;
+            if (s == null) return;
+            for (int c = 0; c < TeamUtil.ColumnCount; c++)
+            {
+                int index = (int)team * TeamUtil.ColumnCount + c;
+                bool alive = s.Tower(team, (Column)c).Alive != 0;
+                bool was = _laneTower[index];
+                _laneTower[index] = alive;
+                if (!was || alive || s.Players[(int)team].Place != 0) continue;
+                Team toward = _session.Arena.ColumnTarget(team, (Column)c);
+                if (team == Local) ShowMessage("내 타워 파괴 — " + TeamUtil.SeatNumber(toward) + "번 공격이 100% 들어옵니다!", UiTheme.Enemy);
+                else if (toward == Local) ShowMessage(TeamUtil.SeatNumber(team) + "번 타워 파괴! 내 공격이 100% 들어갑니다", UiTheme.Amber);
+                else ShowMessage(TeamUtil.SeatNumber(team) + "번 타워 파괴!", UiTheme.Amber);
+            }
         }
 
         private void HandleMultiplier(Team team, float value)
@@ -566,9 +607,23 @@ namespace SpellboundVR.UI
 
         private void RefreshDefense()
         {
-            int me = (int)Local;
+            int me = (int)Viewed;
             PaintDefense(_myDefense, me);
             if (!Ffa) PaintDefense(_enemyDefense, (int)TeamUtil.Opponent(Local));
+        }
+
+        /// <summary>개인전 받는 스킬 피해 — 왼쪽 · 맞은편 · 오른쪽 상대별 (그 레인 타워가 무너지면 100%)</summary>
+        private string LaneDamageText(MatchSnapshot s, Team team, int ratio)
+        {
+            var sb = new System.Text.StringBuilder(64);
+            for (int c = 0; c < TeamUtil.ColumnCount; c++)
+            {
+                bool tower = s.Tower(team, (Column)c).Alive != 0;
+                sb.Append(c == 0 ? "◀" : c == 1 ? " ▲" : " ▶");
+                if (tower) sb.Append(ratio);
+                else sb.Append("<color=").Append(UiKit.Hex(UiTheme.Enemy)).Append(">100</color>");
+            }
+            return sb.Append('%').ToString();
         }
 
         private void PaintDefense(DefenseView v, int t)
@@ -578,8 +633,16 @@ namespace SpellboundVR.UI
             v.Tower.color = _tower[t] ? UiTheme.Hex(0xcffafe) : UiTheme.Hex(0xfecaca);
             v.NexusPill.color = _nexus[t] ? UiTheme.Cyan : UiTheme.Enemy;
             v.Nexus.color = _nexus[t] ? UiTheme.Hex(0xcffafe) : UiTheme.Hex(0xfecaca);
-            // 타워가 서 있으면 본체는 피해 20%만, 넥서스가 서 있으면 HP 회복
-            v.Detail.text = "피해 " + (_tower[t] ? "20%" : "<color=" + UiKit.Hex(UiTheme.Enemy) + ">100%</color>") +
+            // 타워가 서 있으면 본체는 줄어든 피해만, 넥서스가 서 있으면 HP 회복
+            int ratio = Mathf.RoundToInt(_session.Rules.TowerAliveSkillDamageRatio * 100f);
+            var s = _session.Events.Latest;
+            if (Ffa && s != null)
+            {
+                v.Tower.text = "타워 " + s.TowersAlive((Team)t) + "/3";
+                v.Detail.text = LaneDamageText(s, (Team)t, ratio) + " · " + (_nexus[t] ? "회복" : "회복 없음");
+                return;
+            }
+            v.Detail.text = "피해 " + (_tower[t] ? ratio + "%" : "<color=" + UiKit.Hex(UiTheme.Enemy) + ">100%</color>") +
                             " · " + (_nexus[t] ? "회복" : "회복 없음") + " · 공격 x" + _mult[t].ToString("0.00");
         }
 
@@ -618,6 +681,27 @@ namespace SpellboundVR.UI
         }
 
         private bool _stormAnnounced;
+
+        /// <summary>관전 중 안내 — 큰 "N위 탈락" 글자는 잠깐만 두고, 아래에 누구를 보고 있는지 계속 보여 준다.
+        /// target: HUD 가 보여 줄 사람 (null 이면 지금 사람 유지 — 경기가 끝났을 때)</summary>
+        public void SetSpectating(Team? target, string text)
+        {
+            if (_message == null) return;
+            if (_centerUntil == float.MaxValue) _centerUntil = Time.time + 2.5f;
+            ShowCoach("");
+            if (target.HasValue)
+            {
+                _spectated = target;
+                _myTitle.text = TeamUtil.SeatNumber(target.Value) + "번";
+                RefreshHp();
+                RefreshDefense();
+                RefreshSpectatedPosition();
+            }
+            _spectateText = text;
+            _message.text = text;
+            _message.color = UiTheme.CyanLight;
+            _messageUntil = float.MaxValue;
+        }
 
         private void HandleEliminated(Team team, int place)
         {
@@ -722,7 +806,7 @@ namespace SpellboundVR.UI
         {
             if (_session == null) return;
             float now = Time.time;
-            if (_ffa != null) _ffa.Tick(_session.Events.Latest, Local);
+            if (_ffa != null) _ffa.Tick(_session.Events.Latest, Viewed);
 
             for (int i = 0; i < _slots.Length; i++)
             {
@@ -750,7 +834,12 @@ namespace SpellboundVR.UI
                 _status.text = status;
             }
 
-            if (_message.text.Length > 0 && now > _messageUntil) _message.text = "";
+            if (_message.text.Length > 0 && now > _messageUntil)
+            {
+                _message.text = _spectateText ?? "";
+                _message.color = UiTheme.CyanLight;
+                _messageUntil = float.MaxValue;
+            }
             if (_center.text.Length > 0 && now > _centerUntil)
             {
                 _center.text = "";

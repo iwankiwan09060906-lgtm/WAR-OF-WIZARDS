@@ -59,6 +59,13 @@ namespace SpellboundVR.Core
         /// <summary>전장 그림의 발판 번호 1 ~ 4</summary>
         public static int SeatNumber(Team team) => ClockIndex(team) + 1;
 
+        /// <summary>내 열 중 그 상대를 가리키는 열 (ArenaGeometry.ColumnTarget 의 반대) — 1:1 의 상대는 항상 가운데</summary>
+        public static Column ColumnToward(Team self, Team other)
+        {
+            int diff = (ClockIndex(other) - ClockIndex(self) + 4) % 4;
+            return diff == 0 ? Column.Center : (Column)(diff - 1);
+        }
+
         public static int ToWorldColumn(Team viewer, Column localColumn)
         {
             int c = (int)localColumn;
@@ -91,16 +98,26 @@ namespace SpellboundVR.Core
         /// <summary>엔티티 ID 규칙 — 플레이어: 1 + 진영 (Home 1, Away 2, Seat2 3, Seat4 4)</summary>
         public static int PlayerId(Team team) => 1 + (int)team;
 
+        /// <summary>구조물 ID 시작값 — 구조물 ID - 이 값 = 구조물 배열 번호 (MatchSnapshot)</summary>
+        public const int FirstStructureId = 10;
+
         /// <summary>엔티티 ID 규칙 — 구조물: 10 + team*2 + (넥서스?1:0)</summary>
-        public static int StructureId(Team team, bool isNexus) => 10 + (int)team * 2 + (isNexus ? 1 : 0);
+        public static int StructureId(Team team, bool isNexus) => FirstStructureId + (int)team * 2 + (isNexus ? 1 : 0);
+
+        /// <summary>엔티티 ID 규칙 — 타워: 가운데 레인은 StructureId, 개인전 왼쪽 · 오른쪽 레인은 18 + team*2 + (오른쪽?1:0)</summary>
+        public static int TowerId(Team team, Column column)
+        {
+            if (column == Column.Center) return StructureId(team, false);
+            return FirstStructureId + TeamCount * 2 + (int)team * 2 + (column == Column.Right ? 1 : 0);
+        }
 
         public static bool IsPlayerId(int id) => id >= 1 && id <= TeamCount;
 
-        public static bool IsStructureId(int id) => id >= 10 && id < 10 + TeamCount * 2;
+        public static bool IsStructureId(int id) => id >= FirstStructureId && id < FirstStructureId + TeamCount * 4;
 
         public static Team TeamOfPlayerId(int id) => (Team)(id - 1);
 
-        public static Team TeamOfStructureId(int id) => (Team)((id - 10) / 2);
+        public static Team TeamOfStructureId(int id) => (Team)((id - FirstStructureId) % (TeamCount * 2) / 2);
 
         /// <summary>유닛 ID는 이 값 이상</summary>
         public const int FirstUnitId = 1000;

@@ -176,7 +176,8 @@ namespace SpellboundVR.Network
     {
         public const int PlayerCount = 4;
         public const int SlotsPerPlayer = 8;
-        public const int StructureCount = PlayerCount * 2;
+        /// <summary>진영마다 가운데 타워 · 넥서스, 그 뒤로 진영마다 왼쪽 · 오른쪽 타워 (개인전 전용)</summary>
+        public const int StructureCount = PlayerCount * 4;
         /// <summary>팀당 생존 상한 40 × 4 + 여유 (UnitCount 가 byte 라 255 이하)</summary>
         public const int MaxUnits = 176;
         public const int MaxProjectiles = 80;
@@ -199,9 +200,37 @@ namespace SpellboundVR.Network
 
         public ref SlotSnap Slot(Contracts.Team team, int slot) => ref Slots[(int)team * SlotsPerPlayer + slot];
 
-        /// <summary>구조물 배열 순서: 진영마다 Tower, Nexus</summary>
+        /// <summary>구조물 배열 앞쪽 순서: 진영마다 Tower(가운데), Nexus</summary>
         public static int StructureIndex(Contracts.Team team, bool isNexus) => (int)team * 2 + (isNexus ? 1 : 0);
 
         public ref StructureSnap Structure(Contracts.Team team, bool isNexus) => ref Structures[StructureIndex(team, isNexus)];
+
+        public static int TowerIndex(Contracts.Team team, Contracts.Column column) => Core.TeamUtil.TowerId(team, column) - Core.TeamUtil.FirstStructureId;
+
+        /// <summary>그 진영이 column 쪽 레인에 세운 타워 (1:1 은 가운데만 있다)</summary>
+        public ref StructureSnap Tower(Contracts.Team team, Contracts.Column column) => ref Structures[TowerIndex(team, column)];
+
+        /// <summary>attacker 의 공격을 막아 주는 타워 — 둘을 잇는 레인 위의 team 타워</summary>
+        public ref StructureSnap TowerFacing(Contracts.Team team, Contracts.Team attacker) => ref Tower(team, Core.TeamUtil.ColumnToward(team, attacker));
+
+        /// <summary>서 있는 타워 수</summary>
+        public int TowersAlive(Contracts.Team team)
+        {
+            int n = 0;
+            for (int c = 0; c < Core.TeamUtil.ColumnCount; c++)
+                if (Tower(team, (Contracts.Column)c).Alive != 0) n++;
+            return n;
+        }
+
+        /// <summary>무너진 타워가 없는가 (세우지 않은 자리는 세지 않는다)</summary>
+        public bool AllTowersStanding(Contracts.Team team)
+        {
+            for (int c = 0; c < Core.TeamUtil.ColumnCount; c++)
+            {
+                ref var t = ref Tower(team, (Contracts.Column)c);
+                if (t.MaxHp > 0 && t.Alive == 0) return false;
+            }
+            return true;
+        }
     }
 }

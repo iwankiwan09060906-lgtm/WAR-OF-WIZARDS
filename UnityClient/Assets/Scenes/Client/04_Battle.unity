@@ -1058,6 +1058,7 @@ MonoBehaviour:
   playerPrefab: {fileID: 846135977548872242, guid: 62f0b77128f0cab4288653ef5292f698, type: 3}
   inputMode: 0
   desktopViewPitch: 28
+  serverArenaMode: 1
   localTeam: 0
   localAfkEnabled: 1
   showDebugPanels: 1
@@ -7941,7 +7942,6 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   _monoscopic: 0
   _sharpenType: 0
-  _disableRecording: 0
   _enableDynamicResolution: 1
   minDynamicResolutionScale: 1
   maxDynamicResolutionScale: 1
@@ -8013,8 +8013,6 @@ MonoBehaviour:
   SimultaneousHandsAndControllersEnabled: 0
   _readOnlyWideMotionModeHandPosesEnabled: 0
   wideMotionModeHandPosesEnabled: 0
-  _readOnlyFastMotionModeHandPosesEnabled: 0
-  fastMotionModeHandPosesEnabled: 0
   dynamicResolutionVersion: 1
 --- !u!4 &901452646 stripped
 Transform:
@@ -8720,6 +8718,8 @@ MonoBehaviour:
   towerDepth: 13
   spawnDepth: 6
   commanderPlatformHeight: 0.52243906
+  ffaNexusDepth: 4
+  ffaTowerDepth: 9
   homeTowerVisual: {fileID: 572280587}
   homeNexusVisual: {fileID: 269228009}
   awayTowerVisual: {fileID: 557882359}

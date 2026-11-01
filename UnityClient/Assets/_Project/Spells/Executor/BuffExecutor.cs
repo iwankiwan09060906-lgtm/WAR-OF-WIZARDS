@@ -2,6 +2,7 @@
 // S10 집중을 받은 방어 스킬은 지속 시간 × 집중 배율.
 
 using SpellboundVR.Contracts;
+using SpellboundVR.Core;
 using SpellboundVR.Spells.Behaviors;
 using SpellboundVR.Spells.Effects;
 
@@ -37,9 +38,10 @@ namespace SpellboundVR.Spells.Executor
 
                 case SpellBehaviorType.TowerBuff:
                 {
-                    var tower = _world.Arena.StructurePosition(casterTeam, false);
                     _world.BuffTower(casterTeam, _def.EffectDuration * durationScale, _def.AttackMultiplier, _def.IncomingDamageMultiplier);
-                    _world.PublishFx(_def.SpellId, VfxPart.Cast, tower, 0.05f, 1);
+                    for (int c = 0; c < TeamUtil.ColumnCount; c++)
+                        if (_world.IsTowerAlive(casterTeam, (Column)c))
+                            _world.PublishFx(_def.SpellId, VfxPart.Cast, _world.Arena.TowerPosition(casterTeam, (Column)c), 0.05f, 1);
                     return;
                 }
 

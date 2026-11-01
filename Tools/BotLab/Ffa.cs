@@ -67,7 +67,7 @@ internal static class Ffa
                     t += dt;
                     for (int i = 0; i < Seats.Length; i++)
                     {
-                        if (!towerSeen[i] && sim.Phase == MatchPhase.Playing && !sim.Defense.TowerAlive(Seats[i]))
+                        if (!towerSeen[i] && sim.Phase == MatchPhase.Playing && !sim.Defense.AllTowersStanding(Seats[i]))
                         {
                             towerSeen[i] = true;
                             towers.Add(sim.MatchTime);
@@ -133,7 +133,8 @@ internal static class Ffa
                     if (u.Team == t) n++;
                     else if ((u.Position - sim.Arena.BasePosition(t)).magnitude < 14f) near++;
                 }
-                line += $" | {TeamUtil.SeatNumber(t)}: hp{p.Hp,5:0} T{sim.Defense.Tower(t).Hp,5:0} N{sim.Defense.Nexus(t).Hp,5:0} u{n,2} near{near,2}";
+                var d = sim.Defense;
+                line += $" | {TeamUtil.SeatNumber(t)}: hp{p.Hp,5:0} T{d.Tower(t, Column.Left).Hp,5:0}/{d.Tower(t, Column.Center).Hp,5:0}/{d.Tower(t, Column.Right).Hp,5:0} N{d.Nexus(t).Hp,5:0} u{n,2} near{near,2}";
             }
             Console.WriteLine(line);
         }
@@ -224,10 +225,13 @@ internal static class Ffa
         Check(sim.Phase == MatchPhase.Countdown, "4명이면 카운트다운");
         while (sim.Phase == MatchPhase.Countdown) sim.Tick(rules.LocalTickInterval);
         Check(sim.Phase == MatchPhase.Playing, "경기 시작");
-        for (int i = 0; i < 12 / rules.LocalTickInterval && sim.Phase == MatchPhase.Playing; i++) sim.Tick(rules.LocalTickInterval);
         var lanesUsed = new HashSet<int>();
-        foreach (var u in sim.Units)
-            if (u.Active && !u.Dead) lanesUsed.Add(u.Lane);
+        for (int i = 0; i < 12 / rules.LocalTickInterval && sim.Phase == MatchPhase.Playing; i++)
+        {
+            sim.Tick(rules.LocalTickInterval);
+            foreach (var u in sim.Units)
+                if (u.Active && !u.Dead) lanesUsed.Add(u.Lane);
+        }
         Check(lanesUsed.Count == 6, $"웨이브가 레인 6개에 나와야 함: {lanesUsed.Count}");
 
         sim.DebugSetHp(Team.Seat2, 0f);
@@ -288,6 +292,23 @@ internal static class Ffa
         Check(sim3.GetPlayer(Team.Home).Place == 4, "기권은 지금 순위");
         Check(sim3.GetPlayer(Team.Seat2).Place == 3, "HP 낮은 봇이 낮은 순위");
 
+        // ⑥-2 관전: 쓰러진 사람은 접속해 있는 동안 관전하고 (경기 계속), 나가면 봇끼리 끝까지 두지 않는다
+        var watch = new MatchSimulation(rules, catalog, Arena(), cfg, null, null, null, 97u) { LogCasts = false };
+        watch.JoinHuman(Team.Home, watch.GetDeck(Team.Away));
+        watch.JoinBot(Team.Away);
+        watch.JoinBot(Team.Seat2);
+        watch.JoinBot(Team.Seat4);
+        watch.Tick(0.1f);
+        while (watch.Phase == MatchPhase.Countdown) watch.Tick(rules.LocalTickInterval);
+        watch.DebugSetHp(Team.Home, 0f);
+        Eliminated(watch, Team.Home, 4, rules);
+        for (int i = 0; i < 30; i++) watch.Tick(rules.LocalTickInterval);
+        Check(watch.Phase == MatchPhase.Playing, "사람이 관전하는 동안 봇 경기는 계속");
+        watch.NotifyDisconnected(Team.Home);
+        watch.Tick(rules.LocalTickInterval);
+        Check(watch.Phase == MatchPhase.Ended, "관전자가 나가면 경기를 끝낸다");
+        Check(watch.GetPlayer(Team.Home).Place == 4, "관전자의 순위는 탈락 순위 그대로");
+
         var sim4 = new MatchSimulation(rules, catalog, Arena(), cfg, null, null, null, 98u) { LogCasts = false };
         sim4.JoinHuman(Team.Home, sim4.GetDeck(Team.Away));
         sim4.JoinHuman(Team.Away, sim4.GetDeck(Team.Home));
@@ -317,8 +338,100 @@ internal static class Ffa
         for (int i = 0; i < 30; i++) sim5.Tick(rules.LocalTickInterval);
         Near(sim5.GetPlayer(Team.Seat2).Hp, hp, "칸을 옮기면 피해 없음");
 
+        LaneTowers(rules, catalog, arena, cfg);
+
         Console.WriteLine(s_failed == 0 ? "■ 4인 개인전 규칙 검사 통과" : $"■ 실패 {s_failed}건");
         return s_failed == 0 ? 0 : 1;
+    }
+
+    /// <summary>⑧ 레인 타워: 레인마다 타워가 하나고, 무너진 레인의 상대만 스킬 피해 100% · 공격 보너스 · 넥서스 공격이 열린다</summary>
+    private static void LaneTowers(MatchRuleConfig rules, SpellCatalog catalog, ArenaGeometry arena, BotConfig cfg)
+    {
+        foreach (var a in Seats)
+        {
+            var ids = new HashSet<int>();
+            for (int c = 0; c < 3; c++)
+            {
+                var col = (Column)c;
+                Team b = arena.ColumnTarget(a, col);
+                Check(TeamUtil.ColumnToward(a, b) == col, $"{a} {col} 되돌리기");
+                var f = arena.GetLane(a, arena.ResolveLane(a, col));
+                var at = arena.TowerPosition(a, col);
+                Near(f.Lateral(at), 0f, "타워가 레인 위에");
+                Near(f.Along(at), arena.TowerDepth, "타워 깊이");
+                ids.Add(TeamUtil.TowerId(a, col));
+                Check(TeamUtil.IsStructureId(TeamUtil.TowerId(a, col)) && TeamUtil.TeamOfStructureId(TeamUtil.TowerId(a, col)) == a, $"{a} 타워 ID → 진영");
+            }
+            ids.Add(TeamUtil.StructureId(a, true));
+            Check(ids.Count == 4, $"{a} 구조물 ID 중복");
+        }
+
+        var sim = Started(rules, catalog, cfg, 321u);
+        foreach (var t in Seats)
+        {
+            for (int c = 0; c < 3; c++)
+            {
+                var tower = sim.Defense.Tower(t, (Column)c);
+                Check(tower.Alive, $"{t} {(Column)c} 타워가 서 있음");
+                Near(tower.MaxHp, 1500f, "타워 HP 는 1:1 의 50%");
+            }
+        }
+
+        // 왼쪽 레인 타워만 무너진 1번: 왼쪽 상대만 100%, 맞은편 · 오른쪽 상대는 40%
+        Team left = arena.ColumnTarget(Team.Home, Column.Left);
+        Team center = arena.ColumnTarget(Team.Home, Column.Center);
+        Team right = arena.ColumnTarget(Team.Home, Column.Right);
+        Near(sim.Defense.SkillDamageRatio(Team.Home, left, rules), 0.4f, "타워가 서 있으면 왼쪽 상대 40%");
+        sim.DebugDestroyStructure(Team.Home, false);
+        Check(!sim.Defense.Tower(Team.Home, Column.Left).Alive, "타워 하나 파괴");
+
+        Near(sim.Defense.SkillDamageRatio(Team.Home, left, rules), 1f, "왼쪽 레인이 뚫리면 왼쪽 상대 100%");
+        Near(sim.Defense.SkillDamageRatio(Team.Home, center, rules), 0.4f, "맞은편 상대는 그대로 40%");
+        Near(sim.Defense.SkillDamageRatio(Team.Home, right, rules), 0.4f, "오른쪽 상대는 그대로 40%");
+        Check(sim.Defense.TowerAlive(Team.Home) && !sim.Defense.AllTowersStanding(Team.Home), "타워 일부만 무너진 상태");
+
+        var hit = new DamageContext
+        {
+            AttackerKind = TargetKind.Player, TargetKind = TargetKind.Player, TargetId = TeamUtil.PlayerId(Team.Home), BaseDamage = 100f,
+            IsPlayerSkill = true, FocusBonusMultiplier = 1f, SpellId = SpellIds.S07_Gatling,
+        };
+        // 실제 데미지 처리 경로로 확인 (명중 판정은 BaseAccuracy 1 이라 항상 맞는다)
+        var fromLeft = hit;
+        fromLeft.AttackerTeam = left;
+        var fromCenter = hit;
+        fromCenter.AttackerTeam = center;
+        float aL = sim.Resolver.ResolveDamage(fromLeft);
+        float aC = sim.Resolver.ResolveDamage(fromCenter);
+        Near(aL, 100f * sim.GetAttackMultiplier(left, Team.Home), "왼쪽 상대 스킬은 100%");
+        Near(aC, 100f * sim.GetAttackMultiplier(center, Team.Home) * 0.4f, "맞은편 상대 스킬은 40%");
+        Check(sim.GetAttackMultiplier(left, Team.Home) > sim.GetAttackMultiplier(center, Team.Home), "타워 보너스는 뚫은 레인의 상대만");
+
+        // 넥서스: 뚫은 레인의 상대에게만 열린다
+        var targets = new TargetRuleValidator(sim.Defense);
+        Check(!targets.IsNexusLocked(Team.Home, left), "왼쪽 상대에겐 넥서스가 열림");
+        Check(targets.IsNexusLocked(Team.Home, center), "맞은편 상대에겐 넥서스가 잠김");
+        Check(!NexusLock.IsLocked(sim.Defense, Team.Home), "표시: 누군가 칠 수 있으면 잠김 아님");
+
+        // 탈락하면 레인 타워도 모두 사라지고, 타워가 없으면 S09 슬롯이 꺼진다
+        sim.DebugSetHp(Team.Seat2, 0f);
+        sim.Tick(rules.LocalTickInterval);
+        for (int c = 0; c < 3; c++) Check(!sim.Defense.Tower(Team.Seat2, (Column)c).Alive, "탈락하면 레인 타워도 사라짐");
+
+        // 1:1 은 타워가 하나 — 지금까지와 같다
+        var duelArena = ArenaGeometry.CreateDefault();
+        var duelRules = MatchRuleConfig.CreateDefault();
+        var duel = new MatchSimulation(duelRules, catalog, duelArena, cfg, null, null, null, 5u) { LogCasts = false };
+        duel.JoinBot(Team.Home);
+        duel.JoinBot(Team.Away);
+        duel.Tick(0.1f);
+        while (duel.Phase == MatchPhase.Countdown) duel.Tick(duelRules.LocalTickInterval);
+        Check(duel.Defense.Tower(Team.Home).Alive, "1:1 타워");
+        Check(!duel.Defense.Tower(Team.Home, Column.Left).Alive && !duel.Defense.Tower(Team.Home, Column.Right).Alive, "1:1 에 옆 레인 타워는 없음");
+        Check(duel.Defense.AllTowersStanding(Team.Home) && NexusLock.IsLocked(duel.Defense, Team.Home), "1:1 시작 상태");
+        Near(duel.Defense.SkillDamageRatio(Team.Home, Team.Away, duelRules), 0.2f, "1:1 타워 피해 20%");
+        duel.DebugDestroyStructure(Team.Home, false);
+        Check(!duel.Defense.TowerAlive(Team.Home) && !NexusLock.IsLocked(duel.Defense, Team.Home), "1:1 타워 파괴");
+        Near(duel.Defense.SkillDamageRatio(Team.Home, Team.Away, duelRules), 1f, "1:1 타워가 없으면 100%");
     }
 
     private static MatchSimulation Started(MatchRuleConfig rules, SpellCatalog catalog, BotConfig cfg, uint seed)

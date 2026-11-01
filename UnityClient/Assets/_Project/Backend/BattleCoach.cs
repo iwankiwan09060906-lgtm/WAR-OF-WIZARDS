@@ -65,13 +65,14 @@ namespace SpellboundVR.Backend
             if (_session == null || _inFlight || Time.time < _nextAt || !AuthService.IsLoggedIn) return;
             var s = _session.Events.Latest;
             if (s == null || !_session.Events.HasLocalTeam || (MatchPhase)s.Header.Phase != MatchPhase.Playing) return;
+            if (Eliminated(s)) return; // 관전 중에는 조언하지 않는다
             _nextAt = Time.time + Mathf.Max(3f, interval);
             _inFlight = true;
             BackendClient.Instance.Post<RequestDto, ResponseDto>("/api/ai/strategy", new RequestDto { state = BuildState(s) },
                 res =>
                 {
                     _inFlight = false;
-                    if (_hud != null && res != null) _hud.ShowCoach(Describe(res));
+                    if (_hud != null && res != null && !Eliminated(_session.Events.Latest)) _hud.ShowCoach(Describe(res));
                 },
                 _ =>
                 {
@@ -79,6 +80,8 @@ namespace SpellboundVR.Backend
                     _nextAt = Time.time + retryAfterFailure;
                 });
         }
+
+        private bool Eliminated(MatchSnapshot s) => s != null && s.Players[(int)_session.Events.LocalTeam].Place != 0;
 
         private string Describe(ResponseDto r)
         {
@@ -116,9 +119,9 @@ namespace SpellboundVR.Backend
                 selfColumn = (int)TeamUtil.ToLocalColumn(me, self.WorldColumn),
                 opponentColumn = arena.IsDuel ? (int)TeamUtil.ToLocalColumn(me, opp.WorldColumn) : (int)ColumnOf(me, focus),
                 time = s.Header.MatchTime,
-                selfTowerAlive = s.Structure(me, false).Alive != 0,
+                selfTowerAlive = s.AllTowersStanding(me),
                 selfNexusAlive = s.Structure(me, true).Alive != 0,
-                opponentTowerAlive = s.Structure(focus, false).Alive != 0,
+                opponentTowerAlive = s.TowerFacing(focus, me).Alive != 0,
                 opponentNexusAlive = s.Structure(focus, true).Alive != 0,
                 lanes = new LaneDto[TeamUtil.ColumnCount],
                 players = arena.TeamCount,
@@ -164,7 +167,7 @@ namespace SpellboundVR.Backend
                 Team enemy = _session.Arena.ColumnTarget(me, (Column)c);
                 ref var p = ref s.Players[(int)enemy];
                 if (p.Alive == 0) continue;
-                float v = p.Hp + (s.Structure(enemy, false).Alive != 0 ? 10000f : 0f);
+                float v = p.Hp + (s.TowerFacing(enemy, me).Alive != 0 ? 10000f : 0f);
                 if (v < score)
                 {
                     score = v;
@@ -188,7 +191,7 @@ namespace SpellboundVR.Backend
                 {
                     nickname = string.IsNullOrEmpty(s.Names[(int)enemy]) ? seat + "번" : s.Names[(int)enemy],
                     seat = seat, hp = p.Hp, column = c, bot = p.IsBot != 0,
-                    towerAlive = s.Structure(enemy, false).Alive != 0, nexusAlive = s.Structure(enemy, true).Alive != 0,
+                    towerAlive = s.TowerFacing(enemy, me).Alive != 0, nexusAlive = s.Structure(enemy, true).Alive != 0,
                 });
             }
             return list.ToArray();

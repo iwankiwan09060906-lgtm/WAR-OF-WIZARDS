@@ -290,6 +290,13 @@ namespace SpellboundVR.Arena
             return BasePosition(team) + SeatForward(team) * depth;
         }
 
+        /// <summary>타워 자리 — 1:1 은 발판 앞, 개인전은 column 쪽 상대로 가는 레인 위 (가운데 레인 = 발판 앞)</summary>
+        public Vector2 TowerPosition(Team team, Column column)
+        {
+            if (IsDuel) return StructurePosition(team, false);
+            return GetLane(team, ResolveLane(team, column)).Point(TowerDepth);
+        }
+
         public Vector2 SpawnPosition(Team team, int lane) => GetLane(team, lane).Point(SpawnDepth);
 
         /// <summary>§11.1 돌파 지점 — 대상 진영 Commander 발판 앞 (그 레인 위)</summary>

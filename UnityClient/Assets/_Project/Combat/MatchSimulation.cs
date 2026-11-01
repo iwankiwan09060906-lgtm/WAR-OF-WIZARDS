@@ -97,8 +97,13 @@ namespace SpellboundVR.Combat
             for (int t = 0; t < TeamUtil.TeamCount; t++) Players[t] = new PlayerState((Team)t);
             for (int t = 0; t < TeamUtil.TeamCount; t++)
             {
-                Structures[t * 2] = new StructureState((Team)t, false);
-                Structures[t * 2 + 1] = new StructureState((Team)t, true);
+                var nexus = new StructureState((Team)t, true);
+                Structures[nexus.Index] = nexus;
+                for (int c = 0; c < TeamUtil.ColumnCount; c++)
+                {
+                    var tower = new StructureState((Team)t, false, (Column)c);
+                    Structures[tower.Index] = tower;
+                }
             }
             for (int i = 0; i < Units.Length; i++) Units[i] = new UnitState();
 
@@ -251,9 +256,10 @@ namespace SpellboundVR.Combat
             if (!p.Present) return;
             if (_phase == MatchPhase.Playing && !Arena.IsDuel)
             {
-                // 개인전: 경기는 계속 — 살아 있으면 그 자리를 봇이 잇고, 이미 탈락했으면 그대로
-                if (p.Eliminated || !p.IsHuman) return;
-                TakeOverWithBot(team);
+                // 개인전: 경기는 계속 — 살아 있으면 그 자리를 봇이 잇고, 이미 탈락했으면 관전을 그만둔 것
+                if (!p.IsHuman) return;
+                if (p.Eliminated) p.Connected = false;
+                else TakeOverWithBot(team);
                 return;
             }
             p.Connected = false;
@@ -266,7 +272,7 @@ namespace SpellboundVR.Combat
             Debug.Log($"[MatchSimulation] {team} 연결 끊김 (phase {_phase})");
         }
 
-        /// <summary>기권 — 1:1 은 연결 끊김과 같은 패배, 개인전은 지금 순위로 그 사람만 탈락 (자리를 봇이 잇지 않는다)</summary>
+        /// <summary>기권 — 1:1 은 연결 끊김과 같은 패배, 개인전은 지금 순위로 그 사람만 탈락 (자리를 봇이 잇지 않고, 관전 없이 떠난다)</summary>
         public void Forfeit(Team team)
         {
             if (Arena.IsDuel)
@@ -277,6 +283,7 @@ namespace SpellboundVR.Combat
             if (_phase != MatchPhase.Playing) return;
             var p = Players[(int)team];
             if (!p.Eliminated) p.Hp = 0f;
+            p.Connected = false;
         }
 
         /// <summary>경기 중 사람이 나간 자리를 봇이 잇는다 (HP · 슬롯 · 덱 · 구조물 그대로)</summary>
@@ -401,7 +408,8 @@ namespace SpellboundVR.Combat
             _status.Tick(dt);
             _waves.Tick(this, dt);
             for (int i = 0; i < Units.Length; i++) MinionAI.Tick(this, Units[i], dt);
-            for (int t = 0; t < Arena.TeamCount; t++) TowerAI.Tick(this, Defense.Tower((Team)t), dt);
+            for (int t = 0; t < Arena.TeamCount; t++)
+                for (int c = 0; c < TeamUtil.ColumnCount; c++) TowerAI.Tick(this, Defense.Tower((Team)t, (Column)c), dt);
             _regen.Tick(this, dt);
             CleanupDeadUnits();
 
@@ -570,8 +578,18 @@ namespace SpellboundVR.Combat
             {
                 var team = (Team)t;
                 if (!IsPlayerAlive(team)) continue;
-                var s = Defense.TowerAlive(team) ? Defense.Tower(team) : Defense.Nexus(team);
-                if (s.Alive) Resolver.ResolveStorm(s.Id, Rules.StormStructureDamage);
+                if (Defense.TowerAlive(team))
+                {
+                    for (int c = 0; c < TeamUtil.ColumnCount; c++)
+                    {
+                        var tower = Defense.Tower(team, (Column)c);
+                        if (tower.Alive) Resolver.ResolveStorm(tower.Id, Rules.StormStructureDamage);
+                    }
+                }
+                else if (Defense.NexusAlive(team))
+                {
+                    Resolver.ResolveStorm(Defense.Nexus(team).Id, Rules.StormStructureDamage);
+                }
                 Resolver.ResolveStorm(TeamUtil.PlayerId(team), playerDamage);
             }
         }
@@ -612,8 +630,8 @@ namespace SpellboundVR.Combat
                 EndFfaWith(MatchEndReason.PlayerDeath);
                 return;
             }
-            // 사람이 모두 탈락했다면 봇끼리 끝까지 두지 않는다 — 남은 HP 순으로 순위를 매긴다
-            if (fallen > 0 && _hadHuman && !AnyHumanAlive()) EndFfaWith(MatchEndReason.PlayerDeath);
+            // 싸우는 사람도 관전하는 사람도 없으면 봇끼리 끝까지 두지 않는다 — 남은 HP 순으로 순위를 매긴다
+            if (_hadHuman && !AnyHumanWatching()) EndFfaWith(MatchEndReason.PlayerDeath);
         }
 
         private void Eliminate(Team team, int place)
@@ -625,7 +643,7 @@ namespace SpellboundVR.Combat
             p.Hp = 0f;
             _bots[t] = null;
             _status.ClearTarget(p.Id);
-            Defense.Tower(team).Alive = false;
+            for (int c = 0; c < TeamUtil.ColumnCount; c++) Defense.Tower(team, (Column)c).Alive = false;
             Defense.Nexus(team).Alive = false;
             for (int i = 0; i < Units.Length; i++)
             {
@@ -656,10 +674,11 @@ namespace SpellboundVR.Combat
             }
         }
 
-        private bool AnyHumanAlive()
+        /// <summary>아직 싸우거나, 탈락했어도 접속해서 관전 중인 사람이 있는가</summary>
+        private bool AnyHumanWatching()
         {
             for (int t = 0; t < Arena.TeamCount; t++)
-                if (Players[t].IsHuman && !Players[t].Eliminated) return true;
+                if (Players[t].IsHuman && (!Players[t].Eliminated || Players[t].Connected)) return true;
             return false;
         }
 
@@ -783,9 +802,10 @@ namespace SpellboundVR.Combat
             for (int i = 0; i < Structures.Length; i++)
             {
                 var s = Structures[i];
-                s.Reset(s.IsNexus ? Rules.NexusMaxHp : Rules.TowerMaxHp,
-                        Arena.StructurePosition(s.Team, s.IsNexus), Rules.StructureRadius);
-                if (!Arena.HasTeam(s.Team)) s.Alive = false; // 1:1 에서 쓰지 않는 자리
+                bool used = s.IsNexus || s.Column == Column.Center || !Arena.IsDuel; // 왼쪽 · 오른쪽 타워는 개인전 전용
+                s.Reset(!used ? 0f : s.IsNexus ? Rules.NexusMaxHp : Rules.TowerMaxHp,
+                        s.IsNexus ? Arena.StructurePosition(s.Team, true) : Arena.TowerPosition(s.Team, s.Column), Rules.StructureRadius);
+                if (!used || !Arena.HasTeam(s.Team)) s.Alive = false; // 1:1 에서 쓰지 않는 자리
             }
             for (int t = 0; t < Players.Length; t++) Players[t].ResetForMatch(Rules.PlayerMaxHp, Rules.BaseAccuracy);
         }
@@ -841,7 +861,7 @@ namespace SpellboundVR.Combat
             {
                 var s = GetStructureById(targetId);
                 if (s == null || !s.Alive || s.Team == attacker.Team) return false;
-                return !s.IsNexus || !Defense.TowerAlive(s.Team);
+                return !s.IsNexus || !Defense.TowerAlive(s.Team, attacker.Team);
             }
             var u = FindUnit(targetId);
             return u != null && u.Team != attacker.Team;
@@ -880,12 +900,20 @@ namespace SpellboundVR.Combat
         public void DebugDestroyStructure(Team team, bool isNexus)
         {
             if (_phase != MatchPhase.Playing) return;
-            var s = Defense.Structure(team, isNexus);
-            if (!s.Alive) return;
-            if (isNexus && Defense.TowerAlive(team))
-                DebugDestroyStructure(team, false);
-            s.Hp = 0f;
-            OnStructureDestroyed(s);
+            // 타워: 서 있는 것 하나, 넥서스: 남은 타워를 먼저 모두
+            for (int c = 0; c < TeamUtil.ColumnCount; c++)
+            {
+                var tower = Defense.Tower(team, (Column)c);
+                if (!tower.Alive) continue;
+                tower.Hp = 0f;
+                OnStructureDestroyed(tower);
+                if (!isNexus) return;
+            }
+            if (!isNexus) return;
+            var nexus = Defense.Nexus(team);
+            if (!nexus.Alive) return;
+            nexus.Hp = 0f;
+            OnStructureDestroyed(nexus);
         }
 
         public void DebugSetHp(Team team, float hp)

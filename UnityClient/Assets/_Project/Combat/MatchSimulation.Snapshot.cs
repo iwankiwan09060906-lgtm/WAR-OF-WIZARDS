@@ -157,9 +157,9 @@ namespace SpellboundVR.Combat
                 OpponentColumn = ColumnToward(team, enemy),
                 MatchTimeSeconds = _matchTime,
                 SelfSlotReadyMask = mask,
-                SelfTowerAlive = Defense.TowerAlive(team),
+                SelfTowerAlive = Defense.AllTowersStanding(team),
                 SelfNexusAlive = Defense.NexusAlive(team),
-                OpponentTowerAlive = Defense.TowerAlive(enemy),
+                OpponentTowerAlive = Defense.TowerAlive(enemy, team),
                 OpponentNexusAlive = Defense.NexusAlive(enemy),
                 IncomingProjectileCount = incoming,
                 NearestIncomingProjectileColumn = incoming > 0 ? TeamUtil.ToLocalColumn(team, nearestCol) : Column.Center,
@@ -175,7 +175,7 @@ namespace SpellboundVR.Combat
             return local;
         }
 
-        /// <summary>봇이 지금 노릴 상대 — 1:1 은 상대, 개인전은 타워가 무너진 상대 중 HP 가 낮은 쪽 (없으면 HP 가 낮은 쪽)</summary>
+        /// <summary>봇이 지금 노릴 상대 — 1:1 은 상대, 개인전은 내 쪽 레인 타워가 무너진 상대 중 HP 가 낮은 쪽 (없으면 HP 가 낮은 쪽)</summary>
         public Team FocusEnemy(Team team)
         {
             if (Arena.IsDuel) return TeamUtil.Opponent(team);
@@ -186,7 +186,7 @@ namespace SpellboundVR.Combat
             {
                 var enemy = TeamUtil.TeamAtClock(TeamUtil.ClockIndex(team) + step);
                 if (!IsPlayerAlive(enemy)) continue;
-                float score = Players[(int)enemy].Hp + (Defense.TowerAlive(enemy) ? 10000f : 0f);
+                float score = Players[(int)enemy].Hp + (Defense.TowerAlive(enemy, team) ? 10000f : 0f);
                 if (score < bestScore)
                 {
                     bestScore = score;

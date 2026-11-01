@@ -59,7 +59,7 @@ namespace SpellboundVR.Combat
 
         public float GetAccuracy(Team attackerTeam) => Players[(int)attackerTeam].Accuracy;
 
-        public float GetAttackMultiplier(Team attacker, Team target) => TeamAttackMultiplier.Compute(target, Defense, _scaling.Stage, Rules);
+        public float GetAttackMultiplier(Team attacker, Team target) => TeamAttackMultiplier.Compute(attacker, target, Defense, _scaling.Stage, Rules);
 
         /// <summary>HUD 표시용 배율 — 1:1 은 상대 기준, 개인전은 상대마다 달라서 강화 단계만</summary>
         public float GetDisplayAttackMultiplier(Team team)
@@ -123,10 +123,10 @@ namespace SpellboundVR.Combat
             if (s.IsNexus)
                 Debug.Log($"[MatchSimulation] {s.Team} 넥서스 파괴 → {s.Team} 상대로 공격력 +{Rules.NexusDestroyedAttackBonus * 100f:0}%, 회복 중단, 돌파 시작");
             else
-                Debug.Log($"[MatchSimulation] {s.Team} 타워 파괴 → {s.Team} 상대로 공격력 +{Rules.TowerDestroyedAttackBonus * 100f:0}%, 받는 스킬 피해 100%");
+                Debug.Log($"[MatchSimulation] {s.Team} {(Arena.IsDuel ? "" : s.Column + " 레인 ")}타워 파괴 → {s.Team} 상대로 공격력 +{Rules.TowerDestroyedAttackBonus * 100f:0}%, 받는 스킬 피해 100%");
 
-            // §14.4 S09 타워 버프: 타워 파괴 후 슬롯 Disabled
-            if (!s.IsNexus)
+            // §14.4 S09 타워 버프: 타워를 모두 잃으면 슬롯 Disabled
+            if (!s.IsNexus && !Defense.TowerAlive(s.Team))
             {
                 var owner = Players[(int)s.Team];
                 for (int i = 0; i < owner.Slots.Length; i++)
@@ -291,8 +291,11 @@ namespace SpellboundVR.Combat
 
         public void FreezeTower(Team team, float duration)
         {
-            var tower = Defense.Tower(team);
-            if (tower.Alive) tower.FrozenUntil = Mathf.Max(tower.FrozenUntil, _matchTime + duration);
+            for (int c = 0; c < TeamUtil.ColumnCount; c++)
+            {
+                var tower = Defense.Tower(team, (Column)c);
+                if (tower.Alive) tower.FrozenUntil = Mathf.Max(tower.FrozenUntil, _matchTime + duration);
+            }
         }
 
         public void StunUnit(int unitId, float duration)
@@ -322,13 +325,18 @@ namespace SpellboundVR.Combat
 
         public bool IsTowerAlive(Team team) => Defense.TowerAlive(team);
 
+        public bool IsTowerAlive(Team team, Column column) => Defense.Tower(team, column).Alive;
+
         public void BuffTower(Team team, float duration, float attack, float incomingDamage)
         {
-            var tower = Defense.Tower(team);
-            if (!tower.Alive) return;
-            tower.BuffUntil = Mathf.Max(tower.BuffUntil, _matchTime + duration);
-            tower.BuffAttack = attack;
-            tower.BuffDefense = incomingDamage;
+            for (int c = 0; c < TeamUtil.ColumnCount; c++)
+            {
+                var tower = Defense.Tower(team, (Column)c);
+                if (!tower.Alive) continue;
+                tower.BuffUntil = Mathf.Max(tower.BuffUntil, _matchTime + duration);
+                tower.BuffAttack = attack;
+                tower.BuffDefense = incomingDamage;
+            }
         }
 
         public void BlindPlayer(Team team, float duration)
@@ -370,7 +378,7 @@ namespace SpellboundVR.Combat
 
         public Vector2 GetPlacementPosition(Team team, int worldColumn)
         {
-            float depth = (Defense.TowerAlive(team) ? Arena.TowerDepth : Arena.NexusDepth) + Rules.PlacementOffset;
+            float depth = (Defense.TowerAlive(team, Arena.LaneTarget(team, worldColumn)) ? Arena.TowerDepth : Arena.NexusDepth) + Rules.PlacementOffset;
             return Arena.GetLane(team, worldColumn).Point(depth);
         }
     }

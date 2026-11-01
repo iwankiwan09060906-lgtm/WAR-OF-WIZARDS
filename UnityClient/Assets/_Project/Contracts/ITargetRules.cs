@@ -20,7 +20,10 @@ namespace SpellboundVR.Contracts
         /// </summary>
         bool CanUnitAttackPlayer(Team targetTeam);
 
-        /// <summary>넥서스 Lock 검증 — 자기 타워가 살아있는 동안 무적(§11.4, §19)</summary>
+        /// <summary>넥서스 Lock 검증 — 자기 타워가 하나라도 살아있는 동안 무적(§11.4, §19)</summary>
         bool IsNexusLocked(Team nexusTeam);
+
+        /// <summary>attacker 에게 잠겨 있는가 — attacker 쪽 레인의 타워가 살아있는 동안 무적 (1:1 은 위와 같다)</summary>
+        bool IsNexusLocked(Team nexusTeam, Team attacker);
     }
 }

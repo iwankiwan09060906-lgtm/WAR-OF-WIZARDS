@@ -10,6 +10,8 @@ namespace SpellboundVR.Combat
     {
         public readonly Team Team;
         public readonly bool IsNexus;
+        /// <summary>타워가 선 레인 (주인 시점 열). 1:1 타워 · 넥서스는 가운데</summary>
+        public readonly Column Column;
         public readonly int Id;
 
         public float Hp;
@@ -31,14 +33,18 @@ namespace SpellboundVR.Combat
         public float BuffDefense = 1f;
         public float FrozenUntil = -1f;
 
-        public StructureState(Team team, bool isNexus)
+        public StructureState(Team team, bool isNexus, Column column = Column.Center)
         {
             Team = team;
             IsNexus = isNexus;
-            Id = TeamUtil.StructureId(team, isNexus);
+            Column = column;
+            Id = isNexus ? TeamUtil.StructureId(team, true) : TeamUtil.TowerId(team, column);
         }
 
         public TargetKind Kind => IsNexus ? TargetKind.Nexus : TargetKind.Tower;
+
+        /// <summary>구조물 배열 번호 (MatchSimulation.Structures · MatchSnapshot.Structures 공통)</summary>
+        public int Index => Id - TeamUtil.FirstStructureId;
 
         public void Reset(float maxHp, Vector2 position, float radius)
         {

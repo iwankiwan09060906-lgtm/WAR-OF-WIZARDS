@@ -17,7 +17,7 @@ namespace SpellboundVR.Combat
             if (tower.IsFrozen(sim.Time)) return; // H01 프리즈: 공격 정지
 
             var rules = sim.Rules;
-            int self = (int)tower.Team;
+            int self = tower.Index;
             float now = sim.Time;
             float rangeSq = (rules.TowerRange + tower.Radius) * (rules.TowerRange + tower.Radius);
 

@@ -4,6 +4,7 @@
 using System.Text;
 using SpellboundVR.Combat;
 using SpellboundVR.Contracts;
+using SpellboundVR.Core;
 using SpellboundVR.Deck;
 using SpellboundVR.Network;
 using SpellboundVR.Spells;
@@ -93,8 +94,13 @@ namespace SpellboundVR.Server
                    .Append("  col ").Append(p.WorldColumn)
                    .Append("  ATK x").Append(sim.GetDisplayAttackMultiplier(team).ToString("0.00"))
                    .Append("  units ").Append(AliveUnitLimiter.CountAlive(sim, team)).Append('\n');
-                _sb.Append("   T ").Append(sim.Defense.TowerAlive(team) ? Mathf.CeilToInt(sim.Defense.Tower(team).Hp).ToString() : "X")
-                   .Append("  N ").Append(sim.Defense.NexusAlive(team) ? Mathf.CeilToInt(sim.Defense.Nexus(team).Hp).ToString() : "X")
+                _sb.Append("   T");
+                for (int c = 0; c < TeamUtil.ColumnCount; c++)
+                {
+                    var tower = sim.Defense.Tower(team, (Column)c);
+                    if (tower.MaxHp > 0f) _sb.Append(' ').Append(tower.Alive ? Mathf.CeilToInt(tower.Hp).ToString() : "X");
+                }
+                _sb.Append("  N ").Append(sim.Defense.NexusAlive(team) ? Mathf.CeilToInt(sim.Defense.Nexus(team).Hp).ToString() : "X")
                    .Append(NexusLock.IsLocked(sim.Defense, team) ? " (locked)" : "").Append('\n');
                 _sb.Append("   slots: ");
                 for (int i = 0; i < DeckData.SlotCount; i++)

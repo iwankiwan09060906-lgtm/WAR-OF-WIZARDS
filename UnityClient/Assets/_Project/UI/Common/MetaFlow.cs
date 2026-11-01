@@ -7,6 +7,8 @@
 //
 //   · C11에 들어가면 GameBootstrap.BeginBattle(덱)로 실제 경기를 시작하고, 서버(로컬 호스트)의 카운트다운이 끝나면 메뉴를 숨긴다.
 //   · 경기가 끝나면 2.5초 뒤(HUD의 VICTORY/DEFEAT를 보여준 뒤) C13. 전적 저장은 MatchResultReporter가 한다.
+//   · 개인전 탈락: 전적은 그 자리에서 저장하고, 경기가 끝날 때까지 남은 플레이어를 관전한다 (SpectatorView).
+//     경기가 끝나거나 경기 메뉴에서 "결과 보기"를 고르면 C13. 기권은 관전 없이 바로 C13.
 //   · 다시 로비 · 다시 대전은 씬을 다시 불러와 전투 상태를 깨끗이 지운다 (로그인 · 덱 · 설정은 MetaState에 남는다).
 //   · 경기 종류별 접속: 봇 연습 · 스킬 테스트 = 항상 이 기기 안에서 (PC 서버 불필요),
 //     랭킹전 · 친선전 = FusionClient 빌드면 PC 게임 서버, 아니면 이 기기의 봇. PC 서버에 25초 안에 붙지 못하면 로비로 돌아간다.
@@ -41,6 +43,7 @@ namespace SpellboundVR.UI
         private bool _online;
         private bool _menuOpen;
         private bool _forfeited;
+        private bool _spectating;
 
         [Tooltip("PC 게임 서버 경기에서 이 시간(초) 안에 서버 응답이 없으면 로비로 돌아간다")]
         public float onlineConnectTimeout = 25f;
@@ -71,6 +74,10 @@ namespace SpellboundVR.UI
             }
         }
         public bool MenuOpen => _menuOpen;
+        /// <summary>탈락한 뒤 남은 플레이어를 관전하는 중인지 (경기 메뉴가 관전 메뉴로 바뀐다)</summary>
+        public bool Spectating => _spectating;
+        /// <summary>지금 보는 사람 ("2번 (AI)")</summary>
+        public string SpectatorTargetLabel => _boot != null ? _boot.SpectatorTargetLabel : "";
 
         public void Initialize(GameBootstrap boot, bool vr, Transform head, Transform rightHandAnchor)
         {
@@ -217,7 +224,33 @@ namespace SpellboundVR.UI
                 for (int i = 0; i < _lastHp.Length; i++) _lastHp[i] = -1;
                 _ui.SetVisible(false); // C12 전투 HUD만 남긴다
             }
+            if (phase == MatchPhase.Ended && _spectating)
+            {
+                StopSpectating();
+                _boot.EndSpectating();
+                _resultAt = Time.unscaledTime + resultDelay;
+            }
         }
+
+        private void StopSpectating()
+        {
+            _spectating = false;
+            if (!_menuOpen) return;
+            _menuOpen = false;
+            _ui.SetVisible(false);
+        }
+
+        /// <summary>관전을 그만두고 결과 화면(C13)으로 (경기 메뉴 "결과 보기")</summary>
+        public void LeaveSpectating()
+        {
+            if (!_spectating) return;
+            StopSpectating();
+            _boot.LeaveSpectating();
+            _resultAt = Time.unscaledTime;
+        }
+
+        /// <summary>다음(dir=+1) · 이전(dir=-1) 사람을 본다 (경기 메뉴 버튼)</summary>
+        public void StepSpectator(int dir) => _boot.StepSpectator(dir);
 
         private void HandleCast(int slot, int spellId) => _casts++;
 
@@ -262,6 +295,13 @@ namespace SpellboundVR.UI
                             : MetaState.Offline ? "오프라인 경기는 전적에 저장되지 않습니다."
                             : !AuthService.IsLoggedIn ? "로그인하지 않아 전적을 저장하지 않았습니다." : "",
             };
+            // 개인전 탈락: 남은 사람이 계속 싸우면 관전 — 결과 화면은 경기가 끝날 때 (HandlePhase) · 그만둘 때 (LeaveSpectating)
+            if (ffa && !_forfeited && result == MatchResult.Lose && _events.Latest != null &&
+                _events.Latest.Phase == MatchPhase.Playing && _boot.BeginSpectating())
+            {
+                _spectating = true;
+                return;
+            }
             _resultAt = Time.unscaledTime + resultDelay;
         }
 
@@ -301,8 +341,8 @@ namespace SpellboundVR.UI
                 return;
             }
 
-            // 경기 중 메뉴 (왼손 메뉴 제스처 · 컨트롤러 ☰ · Esc)
-            if (Phase == MatchPhase.Playing && _resultAt < 0f && MetaState.LastMatch == null && MenuPressed())
+            // 경기 중 메뉴 (왼손 메뉴 제스처 · 컨트롤러 ☰ · Esc) — 관전 중이면 관전 메뉴
+            if (Phase == MatchPhase.Playing && _resultAt < 0f && (MetaState.LastMatch == null || _spectating) && MenuPressed())
             {
                 if (_menuOpen) CloseBattleMenu();
                 else OpenBattleMenu();
@@ -323,6 +363,7 @@ namespace SpellboundVR.UI
             if (_menuOpen || !_battleStarted || Phase != MatchPhase.Playing) return;
             _menuOpen = true;
             _boot.SetBattleInputEnabled(false);
+            _boot.SetSpectatorInputEnabled(false);
             _ui.Go(MetaScreenId.BattleMenu);
         }
 
@@ -331,7 +372,8 @@ namespace SpellboundVR.UI
             if (!_menuOpen) return;
             _menuOpen = false;
             _ui.SetVisible(false);
-            _boot.SetBattleInputEnabled(true);
+            _boot.SetBattleInputEnabled(!_spectating);
+            _boot.SetSpectatorInputEnabled(true);
         }
 
         /// <summary>기권 — 패배로 기록되고 결과 화면(C13)으로 간다</summary>

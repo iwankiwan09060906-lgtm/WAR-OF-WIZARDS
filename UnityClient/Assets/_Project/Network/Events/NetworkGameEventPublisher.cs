@@ -217,15 +217,19 @@ namespace SpellboundVR.Network
             for (int t = 0; t < teamCount; t++)
             {
                 var team = (Team)t;
-                ref var tower = ref s.Structure(team, false);
                 ref var nexus = ref s.Structure(team, true);
-                ref var pTower = ref _prev.Structure(team, false);
                 ref var pNexus = ref _prev.Structure(team, true);
-                if (full || tower.Alive != pTower.Alive || nexus.Alive != pNexus.Alive)
-                    OnDefenseLayerChanged?.Invoke(team, tower.Alive != 0, nexus.Alive != 0);
+                bool layerChanged = full || nexus.Alive != pNexus.Alive;
+                for (int c = 0; c < TeamUtil.ColumnCount; c++)
+                {
+                    ref var tower = ref s.Tower(team, (Column)c);
+                    ref var pTower = ref _prev.Tower(team, (Column)c);
+                    if (tower.Alive != pTower.Alive) layerChanged = true;
+                    if (full || tower.Hp != pTower.Hp) OnStructureHpChanged?.Invoke(tower.Id, tower.Hp, tower.MaxHp);
+                }
+                if (layerChanged) OnDefenseLayerChanged?.Invoke(team, s.TowersAlive(team) > 0, nexus.Alive != 0);
                 if (!full && pNexus.Alive != 0 && nexus.Alive == 0 && s.Players[t].Place == 0)
                     OnBreachStarted?.Invoke(team == LocalTeam ? TeamUtil.Opponent(team) : LocalTeam); // 개인전: 남의 넥서스 = 내 쪽 돌파 소식
-                if (full || tower.Hp != pTower.Hp) OnStructureHpChanged?.Invoke(tower.Id, tower.Hp, tower.MaxHp);
                 if (full || nexus.Hp != pNexus.Hp) OnStructureHpChanged?.Invoke(nexus.Id, nexus.Hp, nexus.MaxHp);
             }
 

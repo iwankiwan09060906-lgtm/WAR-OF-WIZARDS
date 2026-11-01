@@ -40,8 +40,8 @@ namespace SpellboundVR.Combat
         /// <summary>설치물 소환 타이머 (H06)</summary>
         public float SpawnTimer;
 
-        /// <summary>진영별 적 타워 사거리에 처음 들어온 시각 (§18 Target Priority: 먼저 진입한 유닛), 미진입 = -1</summary>
-        public readonly float[] EnteredTowerRangeTime = new float[Core.TeamUtil.TeamCount];
+        /// <summary>구조물 번호별 적 타워 사거리에 처음 들어온 시각 (§18 Target Priority: 먼저 진입한 유닛), 미진입 = -1</summary>
+        public readonly float[] EnteredTowerRangeTime = new float[Network.MatchSnapshot.StructureCount];
 
         public bool IsStructure => TargetKindSelf == TargetKind.Structure;
 

@@ -114,6 +114,7 @@ namespace SpellboundVR.Core
         private LocalMatchHost _localHost;
         private FusionServerLauncher _serverLauncher;
         private ClientConnector _clientConnector;
+        private ArenaStateView _arenaView;
         private MatchSimulation _serverSim;
         private ISpellInputSource _input;
         private CastStateMachine _cast;
@@ -226,6 +227,72 @@ namespace SpellboundVR.Core
                 return true;
             }
             return false;
+        }
+
+        private SpectatorView _spectator;
+
+        /// <summary>지금 보는 사람 한 줄 ("2번 (AI)"), 관전 중이 아니면 빈 문자열</summary>
+        public string SpectatorTargetLabel
+        {
+            get
+            {
+                if (_spectator == null || !_spectator.Active) return "";
+                var latest = _session.Events.Latest;
+                bool bot = latest != null && latest.Players[(int)_spectator.Target].IsBot != 0;
+                return TeamUtil.SeatNumber(_spectator.Target) + "번" + (bot ? " (AI)" : "");
+            }
+        }
+
+        /// <summary>개인전 탈락 후 관전 — 남은 플레이어 시점을 돌아가며 본다. 볼 사람이 없거나 1:1 이면 false</summary>
+        public bool BeginSpectating()
+        {
+            if (_session == null || _arenaMode != ArenaMode.Ffa4 || _session.Arena.IsDuel) return false;
+            var hud = GetComponent<BattleHudView>();
+            if (_spectator == null)
+            {
+                var platform = GetComponent<CommanderPlatform>();
+                string keys = WantsHandTracking() ? "A 다음  B 이전  ·  메뉴에서 전환 · 결과 보기" : "Tab · → 다음  ← 이전  ·  Esc 메뉴";
+                _spectator = gameObject.AddComponent<SpectatorView>();
+                _spectator.Initialize(_session, playerRig, platform != null ? platform.viewPitch : 0f);
+                _spectator.OnTargetChanged += team =>
+                {
+                    if (_arenaView != null) _arenaView.SetViewpoint(team);
+                    if (hud != null) hud.SetSpectating(team, "관전 중 — " + SpectatorTargetLabel + "   ·   " + keys);
+                };
+            }
+            if (!_spectator.Begin()) return false;
+            SetBattleInputEnabled(false);
+            var mover = GetComponent<LocalMovePredictor>();
+            if (mover != null) mover.enabled = false;
+            return true;
+        }
+
+        /// <summary>다음(dir=+1) · 이전(dir=-1) 사람을 본다 (경기 메뉴 버튼)</summary>
+        public void StepSpectator(int dir)
+        {
+            if (_spectator != null) _spectator.Step(dir);
+        }
+
+        public void SetSpectatorInputEnabled(bool enabled)
+        {
+            if (_spectator != null) _spectator.InputEnabled = enabled;
+        }
+
+        /// <summary>경기가 끝나 관전을 마친다 — 결과 화면이 뜰 때까지 마지막 시점을 그대로 둔다</summary>
+        public void EndSpectating()
+        {
+            if (_spectator == null || !_spectator.Active) return;
+            _spectator.End();
+            var hud = GetComponent<BattleHudView>();
+            if (hud != null) hud.SetSpectating(null, "경기가 끝났습니다");
+        }
+
+        /// <summary>경기가 끝나기 전에 관전을 그만두고 떠난다 — 서버가 관전자가 없다는 걸 알아야 봇끼리 경기를 끝낸다</summary>
+        public void LeaveSpectating()
+        {
+            EndSpectating();
+            if (_localHost != null && _localHost.Simulation != null) _localHost.Simulation.NotifyDisconnected(localTeam);
+            else if (_clientConnector != null) _clientConnector.Leave();
         }
 
         /// <summary>헤드셋 핸드트래킹을 쓸지 (전투 입력 · 메타 UI 조작 방식이 같이 바뀐다)</summary>
@@ -368,7 +435,8 @@ namespace SpellboundVR.Core
             var presentation = new GameObject("[Presentation]");
             if (_arenaMode == ArenaMode.Ffa4) presentation.AddComponent<FfaArenaView>().Initialize(_session); // 구조물 · 팀 아트를 쓰기 전에
             presentation.AddComponent<VFXPlayer>().Initialize(_session, vfxCatalog);
-            presentation.AddComponent<ArenaStateView>().Initialize(_session, vfxCatalog, head);
+            _arenaView = presentation.AddComponent<ArenaStateView>();
+            _arenaView.Initialize(_session, vfxCatalog, head);
             presentation.AddComponent<DamageTextView>().Initialize(_session, head);
             presentation.AddComponent<BlindOverlayView>().Initialize(_session, head);
             var hud = gameObject.AddComponent<BattleHudView>();

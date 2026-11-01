@@ -358,7 +358,7 @@ namespace SpellboundVR.Backend
                 list.Add(new OpponentDto
                 {
                     nickname = TeamUtil.SeatNumber(enemy) + "번", seat = TeamUtil.SeatNumber(enemy), hp = Mathf.CeilToInt(p.Hp), column = c,
-                    towerAlive = sim.Defense.TowerAlive(enemy), nexusAlive = sim.Defense.NexusAlive(enemy), bot = p.IsBot,
+                    towerAlive = sim.Defense.TowerAlive(enemy, team), nexusAlive = sim.Defense.NexusAlive(enemy), bot = p.IsBot,
                 });
             }
             return list.ToArray();

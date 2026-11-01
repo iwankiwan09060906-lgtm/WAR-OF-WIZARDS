@@ -94,9 +94,13 @@ namespace SpellboundVR.Spells.Executor
         /// <summary>H05 — 유닛 강화</summary>
         void RageUnit(int unitId, float duration, float attack, float attackSpeed, float move, float incomingDamage);
 
+        /// <summary>타워가 하나라도 서 있는가</summary>
         bool IsTowerAlive(Team team);
 
-        /// <summary>S09 — 타워 공격력 · 받는 피해 배율</summary>
+        /// <summary>그 진영이 column 쪽 레인에 세운 타워가 서 있는가</summary>
+        bool IsTowerAlive(Team team, Column column);
+
+        /// <summary>S09 — 서 있는 타워 전부의 공격력 · 받는 피해 배율</summary>
         void BuffTower(Team team, float duration, float attack, float incomingDamage);
 
         /// <summary>S01 — 상대 시야 암전</summary>

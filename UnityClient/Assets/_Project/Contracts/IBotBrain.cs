@@ -30,8 +30,10 @@ namespace SpellboundVR.Contracts
         /// <summary>bit i = 슬롯 i 가 Ready (§13.3). 덱 내용은 봇 생성 시 두뇌에 전달된다.</summary>
         public byte SelfSlotReadyMask;
 
+        /// <summary>내 타워가 하나도 무너지지 않았는가 (개인전: 하나라도 무너지면 그 레인 피해가 100% 들어온다)</summary>
         public bool SelfTowerAlive;
         public bool SelfNexusAlive;
+        /// <summary>상대의 내 쪽 레인 타워가 서 있는가</summary>
         public bool OpponentTowerAlive;
         public bool OpponentNexusAlive;
 

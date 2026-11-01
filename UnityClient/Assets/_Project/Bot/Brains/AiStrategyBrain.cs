@@ -479,7 +479,7 @@ namespace SpellboundVR.Bot
             if (!_hasOrders || _orders.FocusColumn < 0 || _orders.FocusColumn > 2 || _sim == null || _sim.Arena.IsDuel) return;
             if (_lanes[_orders.FocusColumn].Closed) return;
             _focusColumn = (Column)_orders.FocusColumn;
-            _focusExposed = !_sim.Defense.TowerAlive(_sim.Arena.ColumnTarget(_team, _focusColumn));
+            _focusExposed = !_sim.Defense.TowerAlive(_sim.Arena.ColumnTarget(_team, _focusColumn), _team);
         }
 
         /// <summary>레인을 고르는 스킬인가 (자기 · 전체 스킬은 닫힌 레인과 상관없다)</summary>
@@ -691,7 +691,7 @@ namespace SpellboundVR.Bot
                     int near = 0;
                     for (int c = 0; c < _lanes.Length; c++) near += _lanes[c].EnemiesNearMyBase;
                     why = $"{def.Code} 타워 강화 (타워 앞 적 {near}기)";
-                    return obs.SelfTowerAlive ? near * 0.9f : 0f;
+                    return obs.SelfTowerAlive || (_sim != null && _sim.Defense.TowerAlive(_team)) ? near * 0.9f : 0f;
                 }
                 case SpellBehaviorType.Focus:
                     why = $"{def.Code} 집중";
