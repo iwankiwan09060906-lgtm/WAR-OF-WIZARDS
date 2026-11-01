@@ -51,6 +51,7 @@ namespace SpellboundVR.UI
                 R("인식 민감도", null, 0, 100, "%", s => s.gestureSensitivity, (s, v) => s.gestureSensitivity = v),
                 R("유지 시간 (포인팅)", "검지로 조준을 확정하기까지 필요한 프레임 수 (웹캠 손 추적)", 5, 45, "", s => s.holdFrames, (s, v) => s.holdFrames = v),
                 S("햅틱 피드백", "시전 · 피격 때 컨트롤러 진동", s => s.haptics, (s, v) => s.haptics = v),
+                S("웹캠 손 입력 (MediaPipe)", "헤드셋 없는 PC 에서 손으로 플레이합니다. GestureTools/MediaPipe/run_hand_tracker.bat 을 먼저 켜 주세요.", s => s.webcamHands, (s, v) => s.webcamHands = v),
             }),
             ("접근성", "Accessibility", UiTheme.Purple, new[]
             {

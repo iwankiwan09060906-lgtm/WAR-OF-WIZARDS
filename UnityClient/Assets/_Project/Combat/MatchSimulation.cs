@@ -43,7 +43,7 @@ namespace SpellboundVR.Combat
         private readonly MinionDefinition[] _minionDefs = new MinionDefinition[MinionDefinition.KindCount];
         private readonly BotPlayer[] _bots = new BotPlayer[TeamUtil.TeamCount];
         private readonly IBotBrain[] _botBrainOverrides = new IBotBrain[TeamUtil.TeamCount];
-        private readonly int[][] _decks = { new int[DeckData.SlotCount], new int[DeckData.SlotCount] };
+        private readonly int[][] _decks = { new int[DeckData.SlotCount], new int[DeckData.SlotCount], new int[DeckData.SlotCount], new int[DeckData.SlotCount] };
         private readonly List<ISpellRoutine> _routines = new List<ISpellRoutine>(16);
         private readonly PendingRequest[] _queue = new PendingRequest[QueueCapacity];
         private readonly TargetRuleValidator _targetRules;
@@ -70,6 +70,12 @@ namespace SpellboundVR.Combat
         private bool _botRequireAlt;
         /// <summary>실행 중인 시전의 S10 집중 배율 (ISpellWorld.CastFocus)</summary>
         private float _castFocus = 1f;
+        /// <summary>경기를 시작할 때 사람이 있었는지 (4인 개인전: 사람이 모두 탈락하면 봇끼리 끝까지 두지 않는다)</summary>
+        private bool _hadHuman;
+        private float _stormTimer;
+        private int _stormTicks;
+        /// <summary>4인 개인전 탈락 처리용 (할당 없이)</summary>
+        private readonly bool[] _fallen = new bool[TeamUtil.TeamCount];
 
         /// <summary>덱 밖 룬 테스트 시전 슬롯 번호 (AllowTestCasts일 때만 허용)</summary>
         public const int TestCastSlot = -1;
@@ -89,10 +95,11 @@ namespace SpellboundVR.Combat
             _rng = new DeterministicRandom(seed);
 
             for (int t = 0; t < TeamUtil.TeamCount; t++) Players[t] = new PlayerState((Team)t);
-            Structures[0] = new StructureState(Team.Home, false);
-            Structures[1] = new StructureState(Team.Home, true);
-            Structures[2] = new StructureState(Team.Away, false);
-            Structures[3] = new StructureState(Team.Away, true);
+            for (int t = 0; t < TeamUtil.TeamCount; t++)
+            {
+                Structures[t * 2] = new StructureState((Team)t, false);
+                Structures[t * 2 + 1] = new StructureState((Team)t, true);
+            }
             for (int i = 0; i < Units.Length; i++) Units[i] = new UnitState();
 
             Defense = new DefenseLayerState(Structures);
@@ -162,10 +169,19 @@ namespace SpellboundVR.Combat
 
         public bool IsSlotFree(Team team) => !Players[(int)team].Present;
 
+        /// <summary>자리별 표시 이름 (사람만, 봇은 빈 문자열)</summary>
+        public readonly string[] Names = { "", "", "", "" };
+
+        public void SetPlayerName(Team team, string name) => Names[(int)team] = name ?? "";
+
         public bool TryGetFreeTeam(out Team team)
         {
-            if (!Players[0].Present) { team = Team.Home; return true; }
-            if (!Players[1].Present) { team = Team.Away; return true; }
+            for (int t = 0; t < Arena.TeamCount; t++)
+            {
+                if (Players[t].Present) continue;
+                team = (Team)t;
+                return true;
+            }
             team = Team.Home;
             return false;
         }
@@ -189,6 +205,7 @@ namespace SpellboundVR.Combat
             p.Present = true;
             p.IsBot = true;
             p.Connected = true;
+            Names[t] = "";
             if (brainOverride != null) _botBrainOverrides[t] = brainOverride;
             bool wasManual = _bots[t] != null && _bots[t].ManualMode;
 
@@ -232,6 +249,13 @@ namespace SpellboundVR.Combat
         {
             var p = Players[(int)team];
             if (!p.Present) return;
+            if (_phase == MatchPhase.Playing && !Arena.IsDuel)
+            {
+                // 개인전: 경기는 계속 — 살아 있으면 그 자리를 봇이 잇고, 이미 탈락했으면 그대로
+                if (p.Eliminated || !p.IsHuman) return;
+                TakeOverWithBot(team);
+                return;
+            }
             p.Connected = false;
             if (_phase != MatchPhase.Playing)
             {
@@ -240,6 +264,30 @@ namespace SpellboundVR.Combat
                 if (_phase == MatchPhase.Countdown) _phase = MatchPhase.WaitingForPlayers;
             }
             Debug.Log($"[MatchSimulation] {team} 연결 끊김 (phase {_phase})");
+        }
+
+        /// <summary>기권 — 1:1 은 연결 끊김과 같은 패배, 개인전은 지금 순위로 그 사람만 탈락 (자리를 봇이 잇지 않는다)</summary>
+        public void Forfeit(Team team)
+        {
+            if (Arena.IsDuel)
+            {
+                NotifyDisconnected(team);
+                return;
+            }
+            if (_phase != MatchPhase.Playing) return;
+            var p = Players[(int)team];
+            if (!p.Eliminated) p.Hp = 0f;
+        }
+
+        /// <summary>경기 중 사람이 나간 자리를 봇이 잇는다 (HP · 슬롯 · 덱 · 구조물 그대로)</summary>
+        private void TakeOverWithBot(Team team)
+        {
+            int t = (int)team;
+            var p = Players[t];
+            p.IsBot = true;
+            p.Connected = true;
+            _bots[t] = new BotPlayer(team, _decks[t], Catalog, BotConfig, _rng.NextUInt(), _botManualKeys, _botRequireAlt, _botBrainOverrides[t]);
+            Debug.Log($"[MatchSimulation] {team} 사람이 나가서 봇이 자리를 잇습니다");
         }
 
         public void RemovePlayer(Team team)
@@ -305,11 +353,11 @@ namespace SpellboundVR.Combat
             switch (_phase)
             {
                 case MatchPhase.WaitingForPlayers:
-                    if (BothPlayersReady()) BeginCountdown();
+                    if (AllSeatsReady()) BeginCountdown();
                     break;
 
                 case MatchPhase.Countdown:
-                    if (!BothPlayersReady())
+                    if (!AllSeatsReady())
                     {
                         _phase = MatchPhase.WaitingForPlayers;
                         break;
@@ -330,7 +378,7 @@ namespace SpellboundVR.Combat
                         if (_phaseTimer <= 0f)
                         {
                             DropDisconnectedPlayers();
-                            if (BothPlayersReady()) BeginCountdown();
+                            if (AllSeatsReady()) BeginCountdown();
                             else _phase = MatchPhase.WaitingForPlayers;
                         }
                     }
@@ -353,11 +401,16 @@ namespace SpellboundVR.Combat
             _status.Tick(dt);
             _waves.Tick(this, dt);
             for (int i = 0; i < Units.Length; i++) MinionAI.Tick(this, Units[i], dt);
-            TowerAI.Tick(this, Structures[0], dt);
-            TowerAI.Tick(this, Structures[2], dt);
+            for (int t = 0; t < Arena.TeamCount; t++) TowerAI.Tick(this, Defense.Tower((Team)t), dt);
             _regen.Tick(this, dt);
             CleanupDeadUnits();
 
+            if (!Arena.IsDuel)
+            {
+                TickStorm(dt);
+                TickFfaResult();
+                return;
+            }
             var outcome = MatchResultResolver.Evaluate(Players[0], Players[1], _matchTime, Rules);
             if (outcome.Decided) EndMatch(outcome);
         }
@@ -385,6 +438,8 @@ namespace SpellboundVR.Combat
             var reason = testCast
                 ? ValidateTestCast(caster, request, out def)
                 : ServerSpellValidator.Validate(_phase, caster, request, Catalog, _executors, out def);
+            if (reason == CastRejectReason.None && NeedsOpenLane(def) && !IsLaneOpen(team, Arena.ResolveLane(team, request.TargetColumn)))
+                reason = CastRejectReason.LaneClosed;
             if (reason == CastRejectReason.None && !CanPlaceUnits(team, def)) reason = CastRejectReason.UnitCapReached;
             if (reason != CastRejectReason.None || !_executors.TryGet(request.SpellId, out ISpellExecutor executor))
             {
@@ -431,6 +486,12 @@ namespace SpellboundVR.Combat
             if (!Catalog.TryGet(request.SpellId, out def) || !_executors.Has(request.SpellId)) return CastRejectReason.NotImplemented;
             if ((int)request.TargetColumn > 2 || float.IsNaN(request.TargetDepth)) return CastRejectReason.InvalidTarget;
             return CastRejectReason.None;
+        }
+
+        /// <summary>개인전: 레인을 고르는 스킬은 상대가 살아 있는 레인에만 (자기 · 전체 스킬 제외)</summary>
+        private static bool NeedsOpenLane(SpellDefinition def)
+        {
+            return def != null && def.Targeting != SpellTargeting.Self && def.Targeting != SpellTargeting.Tower && def.Targeting != SpellTargeting.Global;
         }
 
         /// <summary>§14.5 소환 · 설치: 진영 생존 상한이면 거절 (쿨타임 미소모). 설치물 교체는 자리가 생기므로 허용.</summary>
@@ -492,10 +553,160 @@ namespace SpellboundVR.Combat
 
         // ── 단계 전환 ─────────────────────────────────────────
 
-        private bool BothPlayersReady()
+        // ── 마나 폭풍 (4인 개인전 후반) ───────────────────────
+
+        /// <summary>폭풍까지 남은 초, 시작했으면 0, 1:1 은 -1</summary>
+        public float StormIn => Arena.IsDuel ? -1f : Mathf.Max(0f, Rules.StormStartSeconds - _matchTime);
+
+        private void TickStorm(float dt)
         {
-            return Players[0].Present && Players[1].Present && Players[0].Connected && Players[1].Connected;
+            if (_matchTime < Rules.StormStartSeconds) return;
+            _stormTimer -= dt;
+            if (_stormTimer > 0f) return;
+            _stormTimer += Mathf.Max(0.5f, Rules.StormInterval);
+            float playerDamage = Rules.StormPlayerDamage + Rules.StormPlayerRamp * _stormTicks;
+            _stormTicks++;
+            for (int t = 0; t < Arena.TeamCount; t++)
+            {
+                var team = (Team)t;
+                if (!IsPlayerAlive(team)) continue;
+                var s = Defense.TowerAlive(team) ? Defense.Tower(team) : Defense.Nexus(team);
+                if (s.Alive) Resolver.ResolveStorm(s.Id, Rules.StormStructureDamage);
+                Resolver.ResolveStorm(TeamUtil.PlayerId(team), playerDamage);
+            }
         }
+
+        // ── 4인 개인전 탈락 · 순위 ─────────────────────────────
+
+        /// <summary>쓰러진 사람을 탈락시키고 (같은 틱이면 같은 순위), 한 명 남으면 끝낸다</summary>
+        private void TickFfaResult()
+        {
+            int alive = 0, fallen = 0;
+            for (int t = 0; t < Arena.TeamCount; t++)
+            {
+                var p = Players[t];
+                _fallen[t] = false;
+                if (!p.Present || p.Eliminated) continue;
+                if (!p.Alive || AfkMonitor.IsForfeit(p, _matchTime, Rules))
+                {
+                    _fallen[t] = true;
+                    fallen++;
+                }
+                else alive++;
+            }
+
+            if (fallen > 0)
+            {
+                for (int t = 0; t < Arena.TeamCount; t++)
+                    if (_fallen[t]) Eliminate((Team)t, alive + 1);
+                ReassignLanes();
+            }
+
+            if (alive == 0)
+            {
+                EndMatch(new MatchOutcome { Decided = true, Winner = MatchWinner.Draw, Reason = MatchEndReason.Draw });
+                return;
+            }
+            if (alive == 1)
+            {
+                EndFfaWith(MatchEndReason.PlayerDeath);
+                return;
+            }
+            // 사람이 모두 탈락했다면 봇끼리 끝까지 두지 않는다 — 남은 HP 순으로 순위를 매긴다
+            if (fallen > 0 && _hadHuman && !AnyHumanAlive()) EndFfaWith(MatchEndReason.PlayerDeath);
+        }
+
+        private void Eliminate(Team team, int place)
+        {
+            int t = (int)team;
+            var p = Players[t];
+            p.Eliminated = true;
+            p.Place = place;
+            p.Hp = 0f;
+            _bots[t] = null;
+            _status.ClearTarget(p.Id);
+            Defense.Tower(team).Alive = false;
+            Defense.Nexus(team).Alive = false;
+            for (int i = 0; i < Units.Length; i++)
+            {
+                var u = Units[i];
+                if (!u.Active || u.Team != team) continue;
+                _status.ClearTarget(u.Id);
+                u.Deactivate();
+            }
+            Debug.Log($"[MatchSimulation] {team} 탈락 → {place}위 t={_matchTime:0.0}");
+        }
+
+        /// <summary>탈락한 상대에게 가던 유닛은 살아 있는 다음 상대의 레인으로 갈아탄다</summary>
+        private void ReassignLanes()
+        {
+            for (int i = 0; i < Units.Length; i++)
+            {
+                var u = Units[i];
+                if (!u.Active || u.Dead || IsLaneOpen(u.Team, u.Lane)) continue;
+                Team from = Arena.LaneTarget(u.Team, u.Lane);
+                for (int step = 1; step < 4; step++)
+                {
+                    Team next = TeamUtil.TeamAtClock(TeamUtil.ClockIndex(from) + step);
+                    if (next == u.Team || !IsPlayerAlive(next)) continue;
+                    u.Lane = Arena.LaneBetween(u.Team, next);
+                    u.TargetId = 0;
+                    break;
+                }
+            }
+        }
+
+        private bool AnyHumanAlive()
+        {
+            for (int t = 0; t < Arena.TeamCount; t++)
+                if (Players[t].IsHuman && !Players[t].Eliminated) return true;
+            return false;
+        }
+
+        /// <summary>남은 사람을 HP 순으로 순위 매기고 1위를 승자로 끝낸다</summary>
+        private void EndFfaWith(MatchEndReason reason)
+        {
+            for (int place = 1; place <= Arena.TeamCount; place++)
+            {
+                int best = -1;
+                for (int t = 0; t < Arena.TeamCount; t++)
+                {
+                    var p = Players[t];
+                    if (!p.Present || p.Eliminated || p.Place != 0) continue;
+                    if (best < 0 || p.Hp > Players[best].Hp) best = t;
+                }
+                if (best < 0) break;
+                Players[best].Place = place;
+            }
+            var winner = MatchWinner.Draw;
+            for (int t = 0; t < Arena.TeamCount; t++)
+                if (Players[t].Place == 1) winner = MatchResultResolver.WinnerOf((Team)t);
+            EndMatch(new MatchOutcome { Decided = true, Winner = winner, Reason = reason });
+        }
+
+        // ── 자리 ─────────────────────────────────────────────
+
+        /// <summary>이 경기의 자리가 모두 찼는가 (1:1 = 2자리, 개인전 = 4자리)</summary>
+        private bool AllSeatsReady()
+        {
+            for (int t = 0; t < Arena.TeamCount; t++)
+                if (!Players[t].Present || !Players[t].Connected) return false;
+            return true;
+        }
+
+        /// <summary>자리에 들어온 사람 수 · 전체 자리 수 (봇 채우기 · 대기 화면)</summary>
+        public int HumanCount
+        {
+            get
+            {
+                int n = 0;
+                for (int t = 0; t < Arena.TeamCount; t++) if (Players[t].IsHuman) n++;
+                return n;
+            }
+        }
+
+        /// <summary>대기 중: 사람이 들어온 뒤 빈자리를 AI 가 채우기까지 남은 초 (NetworkMatchState 가 넣는다, 없으면 -1)</summary>
+        public float BotFillIn { get; set; } = -1f;
 
         private void DropDisconnectedPlayers()
         {
@@ -527,7 +738,8 @@ namespace SpellboundVR.Combat
             _phaseTimer = 0f;
             _matchTime = 0f;
             for (int t = 0; t < Players.Length; t++) Players[t].LastActivityTime = 0f;
-            Debug.Log($"[MatchSimulation] 경기 #{_matchSerial} 시작 — Home({(Players[0].IsBot ? "Bot" : "Human")}) vs Away({(Players[1].IsBot ? "Bot" : "Human")})");
+            _hadHuman = HumanCount > 0;
+            Debug.Log($"[MatchSimulation] 경기 #{_matchSerial} 시작 — {Arena.Mode} 사람 {HumanCount}명 · 봇 {Arena.TeamCount - HumanCount}명");
         }
 
         private void EndMatch(in MatchOutcome outcome)
@@ -564,6 +776,8 @@ namespace SpellboundVR.Combat
             _projectiles.Clear();
             _routines.Clear();
             _status.Clear();
+            _stormTimer = 0f;
+            _stormTicks = 0;
             for (int i = 0; i < Units.Length; i++) Units[i].Deactivate();
 
             for (int i = 0; i < Structures.Length; i++)
@@ -571,6 +785,7 @@ namespace SpellboundVR.Combat
                 var s = Structures[i];
                 s.Reset(s.IsNexus ? Rules.NexusMaxHp : Rules.TowerMaxHp,
                         Arena.StructurePosition(s.Team, s.IsNexus), Rules.StructureRadius);
+                if (!Arena.HasTeam(s.Team)) s.Alive = false; // 1:1 에서 쓰지 않는 자리
             }
             for (int t = 0; t < Players.Length; t++) Players[t].ResetForMatch(Rules.PlayerMaxHp, Rules.BaseAccuracy);
         }
@@ -665,9 +880,9 @@ namespace SpellboundVR.Combat
         public void DebugDestroyStructure(Team team, bool isNexus)
         {
             if (_phase != MatchPhase.Playing) return;
-            var s = Structures[MatchSnapshot.StructureIndex(team, isNexus)];
+            var s = Defense.Structure(team, isNexus);
             if (!s.Alive) return;
-            if (isNexus && Structures[MatchSnapshot.StructureIndex(team, false)].Alive)
+            if (isNexus && Defense.TowerAlive(team))
                 DebugDestroyStructure(team, false);
             s.Hp = 0f;
             OnStructureDestroyed(s);

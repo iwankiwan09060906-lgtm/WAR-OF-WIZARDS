@@ -1,6 +1,6 @@
 # 개인전 2~4명 · 공식 팀 계정 · AI 전략 코치(VLM) · 서버 MediaPipe
 
-백엔드(`Backend/wow_server.py`)에 추가한 기능과 API. **Unity 코드는 바꾸지 않았다** — 기존 1:1 응답 칸은 그대로 두고 새 칸만 더했으므로 지금 Unity 빌드는 그대로 동작한다. Unity 쪽에서 쓰려면 맨 아래 "Unity 담당에게"를 본다.
+백엔드(`Backend/wow_server.py`)에 추가한 기능과 API. 기존 1:1 응답 칸은 그대로 두고 새 칸만 더했다. Unity 4인 개인전은 [`Docs/Battle/Ffa4.md`](../Battle/Ffa4.md).
 
 ```text
         ①
@@ -27,14 +27,14 @@ Claude VLM 을 쓰려면 실행 전에 `set ANTHROPIC_API_KEY=키` (없으면 �
 ## 2. 개인전 2~4명 (기본 4명)
 
 > 2026-10-29: 인원을 안 정한 요청(Unity 큐 · 방 만들기, 웹 기본값)은 **4인 개인전**이 된다. 1:1 로 되돌리려면 관리자 콘솔 → 게임 설정 → `match.default_players = 2`.
-> Unity 전투(MatchSimulation)는 아직 진영 2개(Home · Away)라 Unity 쪽 4인 전투는 Unity 담당이 진영 · 관찰(BotObservation 상대 목록)을 늘려야 한다.
+> Unity 전투도 4인 개인전을 지원한다 (로비에서 인원 선택, [`Ffa4.md`](../Battle/Ffa4.md)). 3명 경기는 Unity 에서 4자리로 열리고 남는 자리는 AI 가 앉는다.
 
 ### 2.1 매칭 큐
 
 | 요청 | 설명 |
 | --- | --- |
 | `POST /api/matchmaking/queue` `{ "players": 4 }` | 2 · 3 · 4. **없으면 설정 `match.default_players`(기본 4 = 4명까지 모으는 4인 개인전, 빈자리는 봇)** — 1:1 은 `{"players": 2}`. `{"format":"ffa4"}` · `{"maxPlayers":4}` 도 된다. 방 만들기(`POST /api/rooms`)도 같다 |
-| `GET /api/matchmaking/status` | 같은 인원을 고른 사람끼리 레이팅 범위가 맞으면 모아서 매칭. `matchmaking.bot_timeout`(기본 15초)이 지나면 모인 사람만으로 시작하고 빈자리는 봇 |
+| `GET /api/matchmaking/status` | 같은 인원을 고른 사람끼리 레이팅 범위가 맞으면 모아서 매칭. `matchmaking.bot_timeout`(기본 30초)이 지나면 모인 사람만으로 시작하고 빈자리는 AI |
 
 탐색 중: `{"state":"searching","maxPlayers":4,"playersFound":2,"playersNeeded":4, ...예전 칸}`
 
@@ -53,7 +53,7 @@ Claude VLM 을 쓰려면 실행 전에 `set ANTHROPIC_API_KEY=키` (없으면 �
 
 ### 2.2 게임 방 (`/api/match/{id}/join · result · leave`, `GET /api/match/current`)
 
-- `join`: 사람 자리가 모두 들어오면 `PLAYING` (봇 자리는 처음부터 들어온 것으로 본다).
+- `join`: 사람 자리가 모두 들어오면 `PLAYING` (봇 자리는 처음부터 들어온 것으로 본다). 개인전은 `match.join_timeout`(기본 30초)이 지나면 안 들어온 자리를 AI 가 대신하고 `PLAYING`.
 - `result`: `{"result":"WIN"|"LOSE"|"DRAW","place":1~4, durationSec, casts, damageDealt, damageTaken}` — 남아 있는 사람이 모두 보고하면 `ENDED`.
 - `leave`: 시작 전이면 방 취소. 경기 중 1:1 은 취소(예전 그대로), 개인전은 **그 사람만 빠지고 경기는 계속** (사람이 모두 나가면 취소).
 - `GET /api/match/current` 의 `match`: 예전 칸(`opponent` · `unity.opponent` · `opponentResult`) + `maxPlayers` · `seat` · `opponents`(나 빼고 전부) · `players`(자리 표 전체) · `place`.
@@ -154,24 +154,15 @@ Claude 는 공식 `anthropic` SDK 로 부르고(structured outputs 로 JSON 고�
 ## 6. 검사
 
 ```text
-python Backend/test_web_ui_api.py                     # 110개 (1:1 예전 검사 · AI 학습 포함)
+python Backend/test_web_ui_api.py                     # 124개 (1:1 예전 검사 · 개인전 · AI 학습 포함)
 set WOW_TEST_PYTHON=GestureTools\MediaPipe\.venv\Scripts\python.exe   # 이렇게 하면 카메라 프레임(MediaPipe)까지
 ```
 
 ---
 
-## 7. Unity 담당에게 (Unity 는 손대지 않았음)
+## 7. Unity 연결
 
-지금 Unity 빌드는 그대로 1:1 로 동작한다. 개인전 · AI 를 Unity 에서 쓰려면:
-
-| 할 일 | 내용 |
-| --- | --- |
-| 매칭 인원 | `BackendSessionService.RequestMatchmaking` 이 `/api/matchmaking/queue` 에 `{"players":4}` 를 보내게 (지금은 빈 몸 = 1:1) |
-| DTO | `MatchmakingStatusDto` 에 `int maxPlayers; int seat; MatchOpponentDto[] opponents;` (`MatchOpponentDto { long playerId; string nickname; int rating; bool bot; int seat; }`), `MatchSessionDto` 에 `maxPlayers · seat · place`, `MatchResultRequestDto` 에 `int place` |
-| 친선전 방 | `RoomCreateRequestDto` 에 `int players`, `RoomDto` 에 `int maxPlayers; long matchId; RoomMemberDto[] members;` — 3 · 4인 방은 `start` 응답의 `matchId` 로 게임 방에 들어간다 |
-| 전투 | 지금 시뮬레이션은 Home/Away 2명 고정 (`TeamUtil.TeamCount = 2`, PlayerId 1 · 2). 4명 개인전 전장 배치 · Fusion 세션 인원은 Unity 쪽 설계 |
-| 봇 두뇌 | `IBotBrain` 구현에서 `BotObservation` 을 `/api/ai/strategy` 로 보내고(`X-Server-Key`, `botId`) 응답 `cast` · `move` 를 `BotCommand` 로 — 1~3초에 한 번 (`ai.vlm_min_interval`) |
-| 로그인 | 조 계정은 이메일 `group1@wow.dev` ~ `group4@wow.dev` 로 (로그인 화면이 `@` 를 요구하고 VR 키보드에 한글이 없음) |
+개인전 · AI 는 Unity 에 연결되어 있다 ([`Ffa4.md`](../Battle/Ffa4.md)). 조 계정 로그인은 이메일 `group1@wow.dev` ~ `group4@wow.dev` 로 한다 (로그인 화면이 `@` 를 요구하고 VR 키보드에 한글이 없음).
 
 ---
 

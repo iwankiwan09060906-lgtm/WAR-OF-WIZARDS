@@ -3,7 +3,6 @@
 // S10 집중: 소환수 체력 × 집중 배율.
 
 using SpellboundVR.Contracts;
-using SpellboundVR.Core;
 using SpellboundVR.Spells.Behaviors;
 using UnityEngine;
 
@@ -22,7 +21,7 @@ namespace SpellboundVR.Spells.Executor
 
         public void Execute(in SpellCastRequest request, Team casterTeam)
         {
-            int lane = TeamUtil.ToWorldColumn(casterTeam, request.TargetColumn);
+            int lane = _world.Arena.ResolveLane(casterTeam, request.TargetColumn);
             Vector2 pos = _world.Arena.SpawnPosition(casterTeam, lane);
             _world.PublishFx(_def.SpellId, VfxPart.Cast, pos, 0.05f, lane);
             if (!_world.SpawnUnit(casterTeam, _def.SummonKind, lane, pos, SpellDamage.HpFocus(_def, _world.CastFocus), out _))

@@ -61,9 +61,7 @@ namespace SpellboundVR.Spells.Behaviors
 
         private Vector2 MuzzlePosition(ISpellWorld world)
         {
-            Vector2 p = world.GetPlayerPosition(_team);
-            p.y += world.Arena.ForwardSign(_team) * 0.6f;
-            return p;
+            return SpellDamage.Muzzle(world, _team);
         }
 
         private void FireOne(ISpellWorld world)
@@ -87,6 +85,8 @@ namespace SpellboundVR.Spells.Behaviors
                 SpellId = _def.SpellId,
                 CasterTeam = _team,
                 WorldColumn = _worldColumn,
+                TargetTeam = world.GetLaneTarget(_team, _worldColumn),
+                AimColumn = world.GetAimColumn(_team, _worldColumn),
                 From = MuzzlePosition(world),
                 Height = 1.5f,
                 Speed = Mathf.Max(1f, _def.ProjectileSpeed),

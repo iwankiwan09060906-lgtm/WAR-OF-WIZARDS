@@ -8,8 +8,8 @@
 //   H02 레이저 빔 : 0.5초 예고선 후 EffectDuration 동안 레인 전체를 태우는 빔. 틱마다 레인 안 유닛 + 그 열에 선 상대 플레이어
 
 using System.Collections.Generic;
+using SpellboundVR.Arena;
 using SpellboundVR.Contracts;
-using SpellboundVR.Core;
 using SpellboundVR.Spells.Executor;
 using UnityEngine;
 
@@ -64,7 +64,8 @@ namespace SpellboundVR.Spells.Behaviors
 
         private readonly SpellDefinition _def;
         private readonly Team _team;
-        private readonly Vector2 _center;
+        private readonly LaneFrame _band;
+        private readonly float _along;
         private readonly int _worldColumn;
         private readonly float _focus;
         private readonly int[] _ids = new int[MaxTracked];
@@ -77,11 +78,12 @@ namespace SpellboundVR.Spells.Behaviors
         {
             _def = def;
             _team = team;
-            _center = center;
+            _band = world.Arena.BandFrame(team, worldColumn);
+            _along = _band.Along(center);
             _worldColumn = worldColumn;
             _focus = SpellDamage.DamageFocus(def, focus);
-            // 장판 VFX는 3열 폭으로 제작 → 전장 가운데(u = 0)에 둔다
-            var bandCenter = new Vector2(0f, center.y);
+            // 장판 VFX는 3열 폭으로 제작 → 1:1 은 전장 가운데, 개인전은 레인 위에 레인을 가로질러 둔다
+            var bandCenter = _band.Point(_along);
             world.PublishFx(def.SpellId, VfxPart.Impact, bandCenter, 0f, worldColumn);
             world.PublishFx(def.SpellId, VfxPart.Field, bandCenter, 0.02f, worldColumn);
         }
@@ -101,21 +103,24 @@ namespace SpellboundVR.Spells.Behaviors
         private void ApplyTick(ISpellWorld world)
         {
             var arena = world.Arena;
-            float vMin = _center.y - _def.FieldHalfDepth;
-            float vMax = _center.y + _def.FieldHalfDepth;
-            world.CollectEnemyUnitsInRect(_team, arena.MinU, arena.MaxU, vMin, vMax, s_buffer);
+            float min = _along - _def.FieldHalfDepth;
+            float max = _along + _def.FieldHalfDepth;
+            world.CollectEnemyUnitsInLaneRect(_team, _band, min, max, arena.BandHalfWidth, s_buffer);
             for (int i = 0; i < s_buffer.Count; i++)
             {
                 int id = s_buffer[i];
                 SpellDamage.HitUnit(world, _def.SpellId, _team, id, TickDamage(Stack(id)), _focus);
             }
 
-            Team enemy = TeamUtil.Opponent(_team);
-            if (world.IsPlayerAlive(enemy))
+            for (int t = 0; t < arena.TeamCount; t++)
             {
-                float v = world.GetPlayerPosition(enemy).y;
-                if (v >= vMin - SpellDamage.PlayerBodyRadius && v <= vMax + SpellDamage.PlayerBodyRadius)
-                    SpellDamage.HitEnemyPlayer(world, _def.SpellId, _team, TickDamage(Stack(world.GetPlayerId(enemy))), _focus);
+                var enemy = (Team)t;
+                if (enemy == _team || !world.IsPlayerAlive(enemy)) continue;
+                Vector2 p = world.GetPlayerPosition(enemy);
+                float along = _band.Along(p);
+                if (along >= min - SpellDamage.PlayerBodyRadius && along <= max + SpellDamage.PlayerBodyRadius &&
+                    Mathf.Abs(_band.Lateral(p)) <= arena.BandHalfWidth + SpellDamage.PlayerBodyRadius)
+                    SpellDamage.HitEnemyPlayer(world, _def.SpellId, _team, enemy, TickDamage(Stack(world.GetPlayerId(enemy))), _focus);
             }
         }
 
@@ -147,7 +152,7 @@ namespace SpellboundVR.Spells.Behaviors
 
         private readonly SpellDefinition _def;
         private readonly Team _team;
-        private readonly int _worldColumn;
+        private readonly LaneFrame _lane;
         private readonly float _focus;
         private readonly float _startDepth;
         private readonly float _endDepth;
@@ -160,30 +165,28 @@ namespace SpellboundVR.Spells.Behaviors
         {
             _def = def;
             _team = team;
-            _worldColumn = worldColumn;
+            _lane = world.Arena.GetLane(team, worldColumn);
             _focus = SpellDamage.DamageFocus(def, focus);
-            var arena = world.Arena;
             // 깊이(m, 시전자 발판 기준)로 계산 — 진영 방향과 무관
-            _startDepth = Mathf.Clamp01(def.LaneStartDepth) * arena.FieldLength;
-            _endDepth = Mathf.Max(_startDepth + 1f, Mathf.Clamp01(def.LaneEndDepth) * arena.FieldLength);
+            _startDepth = Mathf.Clamp01(def.LaneStartDepth) * _lane.Length;
+            _endDepth = Mathf.Max(_startDepth + 1f, Mathf.Clamp01(def.LaneEndDepth) * _lane.Length);
             _duration = Mathf.Max(0.3f, def.EffectDuration);
 
             world.PublishFx(def.SpellId, VfxPart.Cast, SpellDamage.Muzzle(world, team), 1.5f, world.GetPlayerWorldColumn(team));
             // 회오리 비주얼 = 레인을 따라 같은 속도로 움직이는 지점 투사체 (판정은 이 루틴이 한다)
-            float u = arena.ColumnU(worldColumn);
             world.LaunchProjectile(new ProjectileLaunch
             {
                 SpellId = def.SpellId,
                 CasterTeam = team,
                 WorldColumn = worldColumn,
-                From = new Vector2(u, arena.BaseV(team) + arena.ForwardSign(team) * _startDepth),
+                From = _lane.Point(_startDepth),
                 Height = 0.05f,
                 Speed = (_endDepth - _startDepth) / _duration,
                 Damage = 0f,
                 IsPlayerSkill = true,
                 FocusBonus = 1f,
                 Mode = ProjectileMode.Point,
-                TargetPoint = new Vector2(u, arena.BaseV(team) + arena.ForwardSign(team) * _endDepth),
+                TargetPoint = _lane.Point(_endDepth),
                 TargetHeight = 0.05f,
                 SuppressImpactFx = true,
             });
@@ -192,16 +195,10 @@ namespace SpellboundVR.Spells.Behaviors
         public bool Tick(float deltaTime, ISpellWorld world)
         {
             _elapsed += deltaTime;
-            var arena = world.Arena;
-            float fwd = arena.ForwardSign(_team);
-            float baseV = arena.BaseV(_team);
             float front = Mathf.Lerp(_startDepth, _endDepth, Mathf.Clamp01(_elapsed / _duration));
-            float frontV = baseV + fwd * front;
             float r = Mathf.Max(0.5f, _def.Radius);
-            float u = arena.ColumnU(_worldColumn);
-            float half = arena.LaneHalfWidth;
 
-            world.CollectEnemyUnitsInRect(_team, u - half, u + half, Mathf.Min(frontV - r, frontV + r), Mathf.Max(frontV - r, frontV + r), s_buffer);
+            world.CollectEnemyUnitsInLaneRect(_team, _lane, front - r, front + r, world.Arena.LaneHalfWidth, s_buffer);
             for (int i = 0; i < s_buffer.Count; i++)
             {
                 int id = s_buffer[i];
@@ -210,9 +207,9 @@ namespace SpellboundVR.Spells.Behaviors
                 SpellDamage.HitUnit(world, _def.SpellId, _team, id, _def.BaseDamage, _focus);
                 // 회오리 앞쪽(상대 진영 방향)으로 밀어낸다 — 회오리가 다시 잡지 않도록 반경 밖까지
                 if (!world.TryGetUnitInfo(id, out Vector2 pos, out _, out _)) continue;
-                float depth = (pos.y - baseV) * fwd;
+                float depth = _lane.Along(pos);
                 float target = Mathf.Max(depth, front) + r + Mathf.Max(0f, _def.KnockbackDistance);
-                world.PushUnit(id, new Vector2(0f, (target - depth) * fwd), Mathf.Max(0f, _def.EffectRatio));
+                world.PushUnit(id, _lane.Dir * (target - depth), Mathf.Max(0f, _def.EffectRatio));
             }
             return _elapsed < _duration;
         }
@@ -237,7 +234,10 @@ namespace SpellboundVR.Spells.Behaviors
 
         private readonly SpellDefinition _def;
         private readonly Team _team;
-        private readonly Vector2 _center;
+        private readonly LaneFrame _lane;
+        private readonly float _along;
+        private readonly Team _target;
+        private readonly int _aimColumn;
         private readonly int _worldColumn;
         private readonly float _focus;
         private readonly float _halfDepth;
@@ -248,7 +248,10 @@ namespace SpellboundVR.Spells.Behaviors
         {
             _def = def;
             _team = team;
-            _center = center;
+            _lane = world.Arena.GetLane(team, worldColumn);
+            _along = _lane.Along(center);
+            _target = world.GetLaneTarget(team, worldColumn);
+            _aimColumn = world.GetAimColumn(team, worldColumn);
             _worldColumn = worldColumn;
             _focus = SpellDamage.DamageFocus(def, focus);
             _halfDepth = Mathf.Max(0.5f, def.FieldHalfDepth);
@@ -260,7 +263,7 @@ namespace SpellboundVR.Spells.Behaviors
 
         private Vector2 Mark(ISpellWorld world, float t)
         {
-            return world.Arena.ClampToField(new Vector2(_center.x, _center.y + t * _halfDepth));
+            return world.Arena.ClampToField(_lane.Point(_along + t * _halfDepth));
         }
 
         public bool Tick(float deltaTime, ISpellWorld world)
@@ -282,19 +285,17 @@ namespace SpellboundVR.Spells.Behaviors
             world.PublishFx(_def.SpellId, VfxPart.Impact, Mark(world, s_marks[index % s_marks.Length]), 0f, _worldColumn);
             world.PublishFx(_def.SpellId, VfxPart.Impact, Mark(world, s_marks[(index + 2) % s_marks.Length] * 0.7f), 0f, _worldColumn);
 
-            var arena = world.Arena;
-            float half = arena.LaneHalfWidth;
-            float vMin = _center.y - _halfDepth, vMax = _center.y + _halfDepth;
-            world.CollectEnemyUnitsInRect(_team, _center.x - half, _center.x + half, vMin, vMax, s_buffer);
+            float half = world.Arena.LaneHalfWidth;
+            float min = _along - _halfDepth, max = _along + _halfDepth;
+            world.CollectEnemyUnitsInLaneRect(_team, _lane, min, max, half, s_buffer);
             for (int i = 0; i < s_buffer.Count; i++)
                 SpellDamage.HitUnit(world, _def.SpellId, _team, s_buffer[i], _def.BaseDamage, _focus);
 
             // 상대 플레이어: 낙뢰 순간 범위 안(그 열 + 깊이)에 서 있으면 명중 (§11.2 회피 = 순간 위치)
-            Team enemy = TeamUtil.Opponent(_team);
-            if (!world.IsPlayerAlive(enemy)) return;
-            Vector2 p = world.GetPlayerPosition(enemy);
-            if (p.y >= vMin - SpellDamage.PlayerBodyRadius && p.y <= vMax + SpellDamage.PlayerBodyRadius)
-                SpellDamage.HitEnemyPlayer(world, _def.SpellId, _team, _def.BaseDamage, _focus, _def.Dodgeable, _worldColumn);
+            if (!world.IsPlayerAlive(_target)) return;
+            float along = _lane.Along(world.GetPlayerPosition(_target));
+            if (along >= min - SpellDamage.PlayerBodyRadius && along <= max + SpellDamage.PlayerBodyRadius)
+                SpellDamage.HitEnemyPlayer(world, _def.SpellId, _team, _target, _def.BaseDamage, _focus, _def.Dodgeable, _aimColumn);
         }
     }
 
@@ -304,6 +305,9 @@ namespace SpellboundVR.Spells.Behaviors
 
         private readonly SpellDefinition _def;
         private readonly Team _team;
+        private readonly LaneFrame _lane;
+        private readonly Team _target;
+        private readonly int _aimColumn;
         private readonly int _worldColumn;
         private readonly float _focus;
         private float _elapsed;
@@ -315,16 +319,13 @@ namespace SpellboundVR.Spells.Behaviors
         {
             _def = def;
             _team = team;
+            _lane = world.Arena.GetLane(team, worldColumn);
+            _target = world.GetLaneTarget(team, worldColumn);
+            _aimColumn = world.GetAimColumn(team, worldColumn);
             _worldColumn = worldColumn;
             _focus = SpellDamage.DamageFocus(def, focus);
             world.PublishFx(def.SpellId, VfxPart.Cast, SpellDamage.Muzzle(world, team), 1.6f, world.GetPlayerWorldColumn(team));
-            world.PublishFx(def.SpellId, VfxPart.Telegraph, LaneCenter(world), 1.4f, worldColumn); // §11.2 예고선 (상대에게도 보임)
-        }
-
-        private Vector2 LaneCenter(ISpellWorld world)
-        {
-            var arena = world.Arena;
-            return new Vector2(arena.ColumnU(_worldColumn), arena.FieldLength * 0.5f);
+            world.PublishFx(def.SpellId, VfxPart.Telegraph, _lane.Point(_lane.Length * 0.5f), 1.4f, worldColumn); // §11.2 예고선 (상대에게도 보임)
         }
 
         public bool Tick(float deltaTime, ISpellWorld world)
@@ -337,7 +338,7 @@ namespace SpellboundVR.Spells.Behaviors
             if (!_fired)
             {
                 _fired = true;
-                world.PublishFx(_def.SpellId, VfxPart.Field, LaneCenter(world), 1.4f, _worldColumn);
+                world.PublishFx(_def.SpellId, VfxPart.Field, _lane.Point(_lane.Length * 0.5f), 1.4f, _worldColumn);
             }
 
             _tickTimer -= deltaTime;
@@ -351,20 +352,17 @@ namespace SpellboundVR.Spells.Behaviors
 
         private void ApplyTick(ISpellWorld world)
         {
-            var arena = world.Arena;
-            float u = arena.ColumnU(_worldColumn);
-            float half = Mathf.Min(arena.LaneHalfWidth, _def.Radius);
-            world.CollectEnemyUnitsInRect(_team, u - half, u + half, 0f, arena.FieldLength, s_buffer);
+            float half = Mathf.Min(world.Arena.LaneHalfWidth, _def.Radius);
+            world.CollectEnemyUnitsInLaneRect(_team, _lane, 0f, _lane.Length, half, s_buffer);
             for (int i = 0; i < s_buffer.Count; i++)
                 SpellDamage.HitUnit(world, _def.SpellId, _team, s_buffer[i], _def.BaseDamage, _focus);
 
-            // 상대 플레이어: 매 틱 그 열에 있으면 명중 (열을 옮기면 그 틱부터 피함)
-            Team enemy = TeamUtil.Opponent(_team);
-            if (world.IsPlayerAlive(enemy) && world.GetPlayerWorldColumn(enemy) == _worldColumn)
+            // 상대 플레이어: 매 틱 그 칸에 있으면 명중 (칸을 옮기면 그 틱부터 피함)
+            if (world.IsPlayerAlive(_target) && world.GetPlayerWorldColumn(_target) == _aimColumn)
             {
-                float applied = SpellDamage.HitEnemyPlayer(world, _def.SpellId, _team, _def.BaseDamage, _focus);
+                float applied = SpellDamage.HitEnemyPlayer(world, _def.SpellId, _team, _target, _def.BaseDamage, _focus);
                 if (applied > 0f && (_playerHits++ % 3) == 0)
-                    world.PublishFx(_def.SpellId, VfxPart.Impact, world.GetPlayerPosition(enemy), 1.2f, _worldColumn);
+                    world.PublishFx(_def.SpellId, VfxPart.Impact, world.GetPlayerPosition(_target), 1.2f, _worldColumn);
             }
         }
     }

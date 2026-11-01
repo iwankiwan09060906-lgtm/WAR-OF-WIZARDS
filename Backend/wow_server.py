@@ -673,7 +673,8 @@ def init_db():
 
         # 게임 기본 설정 시딩
         default_configs = [
-            ("matchmaking.bot_timeout", "15", "랭킹전 대기 이 시간(초)이 지나면 봇과 매칭"),
+            ("matchmaking.bot_timeout", "30", "랭킹전 대기 이 시간(초)이 지나면 모인 사람만으로 시작하고 빈자리는 AI"),
+            ("match.join_timeout", "30", "개인전: 매칭된 뒤 이 시간(초) 안에 게임에 안 들어온 사람의 자리는 AI 가 대신한다"),
             ("match.default_players", "4", "인원을 안 정한 요청(Unity 큐 · 방 만들기 등)의 경기 인원 2~4 — 4 = 4인 개인전(4명까지 모으고 빈자리는 봇), 2 = 1:1"),
             ("rating.ranked_win", "16", "랭킹전 승리 시 레이팅 +"),
             ("rating.ranked_lose", "16", "랭킹전 패배 시 레이팅 -"),
@@ -1302,7 +1303,7 @@ class WowHttpHandler(BaseHTTPRequestHandler):
             return
 
         # 17. 매칭 대기열 상태 (/api/matchmaking/status)
-        #     대기 중인 다른 사람과 레이팅 범위가 맞으면 서로 매칭, bot_timeout 초가 지나면 봇과 매칭
+        #     대기 중인 다른 사람과 레이팅 범위가 맞으면 서로 매칭, bot_timeout 초(기본 30)가 지나면 빈자리는 AI
         if path == "/api/matchmaking/status":
             user = self.get_auth_user()
             if not user:
@@ -1311,7 +1312,7 @@ class WowHttpHandler(BaseHTTPRequestHandler):
                 p = conn.execute("SELECT id FROM players WHERE user_id = ?", (user["sub"],)).fetchone()
                 if not p:
                     return self.send_error_json(404, "플레이어가 없습니다.")
-                bot_timeout = get_config_float(conn, "matchmaking.bot_timeout", 15)
+                bot_timeout = get_config_float(conn, "matchmaking.bot_timeout", 30)
             return self.send_json(200, matchmaking_status(p["id"], bot_timeout))
 
         # 17-1. 내 게임 방 (/api/match/current) — 웹 연결 화면과 Unity 가 같이 본다
@@ -1324,6 +1325,9 @@ class WowHttpHandler(BaseHTTPRequestHandler):
                                     WHERE m.player_id = ?
                                       AND (s.status IN ('MATCHED', 'PLAYING') OR (s.status = 'ENDED' AND s.updated_at > ?))
                                     ORDER BY s.id DESC LIMIT 1""", (p["id"], time.time() - 600)).fetchone()
+                if s and replace_no_shows(conn, s):
+                    conn.commit()
+                    s = conn.execute("SELECT * FROM match_sessions WHERE id = ?", (s["id"],)).fetchone()
                 return self.send_json(200, {"match": session_view(conn, s, p["id"]) if s else None})
 
         # 18. 공지사항 (/api/notices)
@@ -1860,6 +1864,7 @@ class WowHttpHandler(BaseHTTPRequestHandler):
                                               WHERE match_id = ? AND player_id IS NOT NULL AND unity = 0""", (match_id,)).fetchone()["n"]
                     if waiting == 0 and s["status"] == "MATCHED":
                         conn.execute("UPDATE match_sessions SET status = 'PLAYING' WHERE id = ?", (match_id,))
+                    replace_no_shows(conn, s)
                 elif action == "leave":
                     if s["status"] == "MATCHED" or (s["status"] == "PLAYING" and (s["max_players"] or 2) == 2):
                         conn.execute("UPDATE match_sessions SET status = 'CANCELLED', updated_at = ? WHERE id = ?", (now, match_id))
@@ -2503,6 +2508,27 @@ def session_view(conn, s, me_id):
         "opponentResult": next((o["result"] for o in opponents if o["result"]), None),
         "createdAt": s["created_at"],
     }
+
+
+def replace_no_shows(conn, s):
+    """개인전: 매칭 뒤 match.join_timeout 초(기본 30) 안에 게임에 안 들어온 사람은 AI 가 자리를 대신하고 경기를 시작한다.
+    늦게라도 join 하면 그 자리로 돌아온다 (게임 서버가 대기 중이면 AI 가 사람에게 자리를 내준다). 바꿨으면 True"""
+    if s["status"] != "MATCHED" or (s["max_players"] or 2) <= 2:
+        return False
+    timeout = get_config_float(conn, "match.join_timeout", 30)
+    waited = conn.execute("SELECT strftime('%s', 'now') - strftime('%s', ?) AS d", (s["created_at"],)).fetchone()["d"] or 0
+    if waited < timeout:
+        return False
+    rows = conn.execute("""SELECT id FROM match_session_players WHERE match_id = ? AND player_id IS NOT NULL
+                            AND unity = 0 AND left_at = 0""", (s["id"],)).fetchall()
+    now = time.time()
+    for r in rows:
+        conn.execute("UPDATE match_session_players SET left_at = ? WHERE id = ?", (now, r["id"]))
+    joined = conn.execute("""SELECT COUNT(*) AS n FROM match_session_players WHERE match_id = ?
+                              AND player_id IS NOT NULL AND unity = 1""", (s["id"],)).fetchone()["n"]
+    if joined:
+        conn.execute("UPDATE match_sessions SET status = 'PLAYING', updated_at = ? WHERE id = ?", (now, s["id"]))
+    return bool(rows) or bool(joined)
 
 
 def close_session_if_reported(conn, mid):

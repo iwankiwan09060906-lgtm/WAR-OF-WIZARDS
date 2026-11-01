@@ -44,12 +44,16 @@ namespace SpellboundVR.UI
 
         [Tooltip("PC 게임 서버 경기에서 이 시간(초) 안에 서버 응답이 없으면 로비로 돌아간다")]
         public float onlineConnectTimeout = 25f;
-        private readonly int[] _lastHp = { -1, -1 };
+        private readonly int[] _lastHp = { -1, -1, -1, -1 };
 
         public MetaUiRoot Ui => _ui;
         public bool BattleStarted => _battleStarted;
         /// <summary>지금 경기 단계 (C11 카운트다운 표시용)</summary>
         public MatchPhase Phase { get; private set; } = MatchPhase.WaitingForPlayers;
+        /// <summary>지금 경기 상태 (C11 자리 표시용, 없으면 null)</summary>
+        public MatchSnapshot Latest => _events != null ? _events.Latest : null;
+        /// <summary>내 자리 (C11)</summary>
+        public Team LocalTeam => _events != null ? _events.LocalTeam : Team.Home;
         public float PhaseTimeLeft { get; private set; }
         /// <summary>PC 게임 서버 경기인지 (C11 안내 문구용)</summary>
         public bool OnlineBattle => _online;
@@ -61,7 +65,7 @@ namespace SpellboundVR.UI
                 if (!_online) return "";
                 var c = FindAnyObjectByType<ClientConnector>();
                 if (c == null) return "PC 게임 서버에 접속하는 중…";
-                if (c.IsConnected) return "서버에 접속했습니다. 상대를 기다리는 중… (없으면 봇)";
+                if (c.IsConnected) return "서버에 접속했습니다. 상대를 기다리는 중… (30초 안에 안 오면 AI 가 대신 앉습니다)";
                 string fail = string.IsNullOrEmpty(c.LastFailure) ? "" : c.LastFailure + "\n";
                 return fail + $"PC 게임 서버에 접속하는 중… (시도 {c.Attempts}/{c.MaxAttempts})";
             }
@@ -169,7 +173,8 @@ namespace SpellboundVR.UI
             var ids = DeckService.ToSpellIds(MetaState.Deck.ToArray());
             var deck = new int[Deck.DeckData.SlotCount];
             for (int i = 0; i < deck.Length && i < ids.Length; i++) deck[i] = ids[i];
-            _boot.BeginBattle(deck, _online, skillTest && _boot.recognizeAllRunes);
+            _boot.LocalPlayerName = MetaState.Nickname;
+            _boot.BeginBattle(deck, _online, skillTest && _boot.recognizeAllRunes, ctx.IsFfa ? Arena.ArenaMode.Ffa4 : Arena.ArenaMode.Duel);
             MetaState.ApplySettings(); // 전투용 비네팅 등은 BeginBattle에서 생긴다
 
             _events = _boot.Session != null ? _boot.Session.Events : null;
@@ -209,7 +214,7 @@ namespace SpellboundVR.UI
             {
                 _casts = 0;
                 _damageDealt = _damageTaken = 0;
-                _lastHp[0] = _lastHp[1] = -1;
+                for (int i = 0; i < _lastHp.Length; i++) _lastHp[i] = -1;
                 _ui.SetVisible(false); // C12 전투 HUD만 남긴다
             }
         }
@@ -219,12 +224,12 @@ namespace SpellboundVR.UI
         private void HandleHp(Team team, int current, int max)
         {
             int i = (int)team;
-            if (i < 0 || i > 1) return;
+            if (i < 0 || i >= _lastHp.Length) return;
             int prev = _lastHp[i];
             _lastHp[i] = current;
             if (prev < 0 || current >= prev || Phase != MatchPhase.Playing) return;
             if (_events != null && team == _events.LocalTeam) _damageTaken += prev - current;
-            else _damageDealt += prev - current;
+            else if (_events != null && _events.Arena.IsDuel) _damageDealt += prev - current;
         }
 
         private void HandleMatchEnded(MatchResult result, MatchEndReason reason, float duration)
@@ -237,10 +242,15 @@ namespace SpellboundVR.UI
             }
             var ctx = MetaState.Match ?? new MatchContext();
             bool skillTest = string.IsNullOrEmpty(ctx.Mode);
+            bool ffa = _events != null && !_events.Arena.IsDuel;
+            int place = !ffa ? 0 : result == MatchResult.Win ? 1 : _events.LocalPlace;
+            if (ffa) _damageDealt = _events.LocalDamageDealt;
             MetaState.LastMatch = new MatchRecord
             {
                 Result = result,
-                Reason = _forfeited && result == MatchResult.Lose ? "경기 중 기권했습니다." : ReasonText(result, reason),
+                Reason = _forfeited && result == MatchResult.Lose ? "경기 중 기권했습니다." : ffa ? FfaReasonText(result, place) : ReasonText(result, reason),
+                Place = place,
+                Players = ctx.Players,
                 DurationSec = duration,
                 Casts = _casts,
                 DamageDealt = _damageDealt,
@@ -355,6 +365,13 @@ namespace SpellboundVR.UI
                 Application.Quit();
 #endif
             });
+        }
+
+        private static string FfaReasonText(MatchResult result, int place)
+        {
+            if (result == MatchResult.Win) return "마지막까지 살아남았습니다!";
+            if (result == MatchResult.Draw) return "모두 함께 쓰러졌습니다.";
+            return place + "위로 탈락했습니다.";
         }
 
         private static string ReasonText(MatchResult result, MatchEndReason reason)

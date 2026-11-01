@@ -23,8 +23,9 @@ namespace SpellboundVR.Combat
             h.WaveIndex = _waves.WaveIndex;
             h.NextWaveIn = _waves.NextWaveIn;
             h.NextWaveIsBrute = (byte)(_waves.NextIsBrute(Rules) ? 1 : 0);
-            h.HomeAttackMultiplier = GetAttackMultiplier(Team.Home);
-            h.AwayAttackMultiplier = GetAttackMultiplier(Team.Away);
+            h.ArenaMode = (byte)Arena.Mode;
+            h.BotFillIn = _phase == MatchPhase.WaitingForPlayers ? BotFillIn : -1f;
+            h.StormIn = StormIn;
             h.Winner = (byte)(_phase == MatchPhase.Ended ? _outcome.Winner : MatchWinner.None);
             h.EndReason = (byte)_outcome.Reason;
             h.Duration = _phase == MatchPhase.Ended ? _duration : _matchTime;
@@ -41,6 +42,10 @@ namespace SpellboundVR.Combat
                 ps.Hp = Mathf.CeilToInt(p.Hp);
                 ps.MaxHp = Mathf.CeilToInt(p.MaxHp);
                 ps.Accuracy = p.Accuracy;
+                ps.AttackMultiplier = GetDisplayAttackMultiplier((Team)t);
+                ps.Place = (byte)p.Place;
+                ps.DamageDealt = Mathf.RoundToInt(p.DamageDealt);
+                s.Names[t] = Names[t];
                 ps.AfkSecondsLeft = _phase == MatchPhase.Playing ? AfkMonitor.SecondsLeft(p, _matchTime, Rules) : -1f;
 
                 if (_status.TryGet(p.Id, "S08_Shield", out IStatusEffect effect) && effect is ShieldRegenEffect shield)
@@ -134,7 +139,7 @@ namespace SpellboundVR.Combat
         /// <summary>§20.1 BotObservation — 열은 봇 자신의 시점</summary>
         public BotObservation BuildObservation(Team team)
         {
-            Team enemy = TeamUtil.Opponent(team);
+            Team enemy = FocusEnemy(team);
             var self = Players[(int)team];
             var opp = Players[(int)enemy];
 
@@ -149,7 +154,7 @@ namespace SpellboundVR.Combat
                 SelfHp = Mathf.CeilToInt(self.Hp),
                 OpponentHp = Mathf.CeilToInt(opp.Hp),
                 SelfColumn = TeamUtil.ToLocalColumn(team, self.WorldColumn),
-                OpponentColumn = TeamUtil.ToLocalColumn(team, opp.WorldColumn),
+                OpponentColumn = ColumnToward(team, enemy),
                 MatchTimeSeconds = _matchTime,
                 SelfSlotReadyMask = mask,
                 SelfTowerAlive = Defense.TowerAlive(team),
@@ -160,6 +165,35 @@ namespace SpellboundVR.Combat
                 NearestIncomingProjectileColumn = incoming > 0 ? TeamUtil.ToLocalColumn(team, nearestCol) : Column.Center,
                 NearestIncomingProjectileEta = incoming > 0 ? eta : -1f,
             };
+        }
+
+        /// <summary>그 상대를 치려면 조준할 내 열 — 1:1 은 상대가 선 열, 개인전은 그 상대로 가는 레인</summary>
+        public Column ColumnToward(Team self, Team enemy)
+        {
+            if (Arena.IsDuel) return TeamUtil.ToLocalColumn(self, Players[(int)enemy].WorldColumn);
+            Arena.TryLocalColumn(self, Arena.LaneBetween(self, enemy), out Column local);
+            return local;
+        }
+
+        /// <summary>봇이 지금 노릴 상대 — 1:1 은 상대, 개인전은 타워가 무너진 상대 중 HP 가 낮은 쪽 (없으면 HP 가 낮은 쪽)</summary>
+        public Team FocusEnemy(Team team)
+        {
+            if (Arena.IsDuel) return TeamUtil.Opponent(team);
+            var best = team;
+            float bestScore = float.MaxValue;
+            // 시계 방향으로 돌며 본다 — 동점이면 왼쪽 이웃 (모두가 같은 자리를 노리지 않게)
+            for (int step = 1; step < 4; step++)
+            {
+                var enemy = TeamUtil.TeamAtClock(TeamUtil.ClockIndex(team) + step);
+                if (!IsPlayerAlive(enemy)) continue;
+                float score = Players[(int)enemy].Hp + (Defense.TowerAlive(enemy) ? 10000f : 0f);
+                if (score < bestScore)
+                {
+                    bestScore = score;
+                    best = enemy;
+                }
+            }
+            return best == team ? TeamUtil.Opponent(team) : best;
         }
     }
 }

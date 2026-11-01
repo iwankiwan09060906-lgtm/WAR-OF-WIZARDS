@@ -2,7 +2,6 @@
 // 서버가 Column / Depth로 지점을 계산한다(§7).
 
 using SpellboundVR.Contracts;
-using SpellboundVR.Core;
 using SpellboundVR.Spells.Behaviors;
 using UnityEngine;
 
@@ -21,10 +20,11 @@ namespace SpellboundVR.Spells.Executor
 
         public void Execute(in SpellCastRequest request, Team casterTeam)
         {
-            int worldColumn = TeamUtil.ToWorldColumn(casterTeam, request.TargetColumn);
-            float depth = Mathf.Clamp(request.TargetDepth, 0f, _def.MaxDepth);
             var arena = _world.Arena;
-            var center = new Vector2(arena.ColumnU(worldColumn), arena.DepthToV(casterTeam, depth));
+            int worldColumn = arena.ResolveLane(casterTeam, request.TargetColumn);
+            float depth = Mathf.Clamp(request.TargetDepth, 0f, _def.MaxDepth);
+            var lane = arena.GetLane(casterTeam, worldColumn);
+            var center = lane.Point(depth * lane.Length);
             float focus = _world.CastFocus;
 
             switch (_def.Behavior)
@@ -46,7 +46,7 @@ namespace SpellboundVR.Spells.Executor
                     break;
 
                 case SpellBehaviorType.RageField:
-                    _world.StartRoutine(new RageRoutine(_def, _world, casterTeam, center, focus));
+                    _world.StartRoutine(new RageRoutine(_def, _world, casterTeam, center, worldColumn, focus));
                     break;
 
                 default:

@@ -15,6 +15,10 @@ namespace UnityEngine
         public Vector2(float x, float y) { this.x = x; this.y = y; }
         public static Vector2 zero => new Vector2(0f, 0f);
         public static Vector2 one => new Vector2(1f, 1f);
+        public static Vector2 up => new Vector2(0f, 1f);
+        public static Vector2 down => new Vector2(0f, -1f);
+        public static Vector2 right => new Vector2(1f, 0f);
+        public static Vector2 left => new Vector2(-1f, 0f);
         public float sqrMagnitude => x * x + y * y;
         public float magnitude => (float)Math.Sqrt(sqrMagnitude);
         public Vector2 normalized { get { float m = magnitude; return m > 1e-5f ? new Vector2(x / m, y / m) : zero; } }

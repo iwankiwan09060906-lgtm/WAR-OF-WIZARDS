@@ -2,7 +2,8 @@
 //   · 지속 상태: [Networked] 헤더 + 고정 용량 배열 (플레이어 · 슬롯 · 구조물 · 유닛 · 투사체)
 //   · 1회성 이벤트: RPC (VFX · 시전 거절/확정 · 이동 거절 · 피격 표시)
 //   · 서버만 시뮬레이션을 돌린다. 클라이언트는 받은 상태를 게임 이벤트로 바꿔 표시만 한다 (Rule 4).
-//   · 매칭(§22.1): 사람 1명 입장 후 BotFillWaitSeconds 안에 두 번째 사람이 없으면 봇으로 채운다.
+//   · 매칭(§22.1): 첫 사람이 입장한 뒤 BotFillWaitSeconds(30초) 안에 들어오지 않은 자리는 AI 가 대신 앉는다
+//     (1:1 은 1자리, 4인 개인전은 빈자리 전부). 대기 중이면 나중에 온 사람에게 AI 가 자리를 내준다.
 //
 // 프리팹: Prefabs/Network/NetworkMatchState.prefab (NetworkObject + 이 컴포넌트) — 셋업 도구가 생성.
 
@@ -24,6 +25,7 @@ namespace SpellboundVR.Network
         [Networked, Capacity(MatchSnapshot.StructureCount)] public NetworkArray<StructureSnap> NetStructures => default;
         [Networked, Capacity(MatchSnapshot.MaxUnits)] public NetworkArray<UnitSnap> NetUnits => default;
         [Networked, Capacity(MatchSnapshot.MaxProjectiles)] public NetworkArray<ProjectileSnap> NetProjectiles => default;
+        [Networked, Capacity(MatchSnapshot.PlayerCount)] public NetworkArray<NetworkString<_16>> NetNames => default;
 
         public static NetworkMatchState Instance { get; private set; }
 
@@ -36,6 +38,7 @@ namespace SpellboundVR.Network
         private MatchSimulation _sim;
         private NetworkGameEventPublisher _viewEvents;
         private float _botFillTimer;
+        private readonly NetworkString<_16>[] _shownNames = new NetworkString<_16>[MatchSnapshot.PlayerCount];
 
         public MatchSimulation Simulation => _sim;
 
@@ -82,24 +85,20 @@ namespace SpellboundVR.Network
 
         private void TickBotFill(float dt)
         {
-            if (_sim.Phase != MatchPhase.WaitingForPlayers)
+            if (_sim.Phase != MatchPhase.WaitingForPlayers || _sim.HumanCount == 0 || !_sim.TryGetFreeTeam(out _))
             {
                 _botFillTimer = 0f;
-                return;
-            }
-            bool homePresent = !_sim.IsSlotFree(Team.Home);
-            bool awayPresent = !_sim.IsSlotFree(Team.Away);
-            if (homePresent == awayPresent)
-            {
-                _botFillTimer = 0f;
+                _sim.BotFillIn = -1f;
                 return;
             }
             _botFillTimer += dt;
-            if (_botFillTimer >= _sim.Rules.BotFillWaitSeconds)
+            _sim.BotFillIn = Mathf.Max(0f, _sim.Rules.BotFillWaitSeconds - _botFillTimer);
+            if (_botFillTimer < _sim.Rules.BotFillWaitSeconds) return;
+            _botFillTimer = 0f;
+            _sim.BotFillIn = -1f;
+            while (_sim.TryGetFreeTeam(out Team free))
             {
-                _botFillTimer = 0f;
-                Team free = homePresent ? Team.Away : Team.Home;
-                Debug.Log($"[NetworkMatchState] {_sim.Rules.BotFillWaitSeconds:0}초 동안 상대 없음 → 봇 매칭 ({free})");
+                Debug.Log($"[NetworkMatchState] {_sim.Rules.BotFillWaitSeconds:0}초 안에 들어오지 않아 AI 가 자리를 채웁니다 ({free})");
                 _sim.JoinBot(free);
             }
         }
@@ -116,7 +115,7 @@ namespace SpellboundVR.Network
             {
                 if (_sim.Phase == MatchPhase.WaitingForPlayers || _sim.Phase == MatchPhase.Ended)
                 {
-                    for (int t = 0; t < 2; t++)
+                    for (int t = 0; t < _sim.Arena.TeamCount; t++)
                     {
                         if (_sim.GetPlayer((Team)t).IsBot)
                         {
@@ -143,6 +142,11 @@ namespace SpellboundVR.Network
         }
 
         public bool TryGetTeam(PlayerRef player, out Team team) => _playerTeams.TryGetValue(player, out team);
+
+        public void ServerSetName(PlayerRef player, string name)
+        {
+            if (_sim != null && _playerTeams.TryGetValue(player, out var team)) _sim.SetPlayerName(team, name);
+        }
 
         public void ServerSubmitDeck(PlayerRef player, int[] deck)
         {
@@ -177,6 +181,9 @@ namespace SpellboundVR.Network
             for (int i = 0; i < s.UnitCount; i++) units.Set(i, s.Units[i]);
             var projectiles = NetProjectiles;
             for (int i = 0; i < s.ProjectileCount; i++) projectiles.Set(i, s.Projectiles[i]);
+            var names = NetNames;
+            for (int i = 0; i < MatchSnapshot.PlayerCount; i++)
+                if (names.Get(i).Value != s.Names[i]) names.Set(i, s.Names[i]);
         }
 
         // ── 표시 (클라이언트 + 서버 디버그 뷰) ───────────────────
@@ -210,6 +217,14 @@ namespace SpellboundVR.Network
             int pc = Mathf.Min(s.Header.ProjectileCount, MatchSnapshot.MaxProjectiles);
             var projectiles = NetProjectiles;
             for (int i = 0; i < pc; i++) s.Projectiles[i] = projectiles.Get(i);
+            var names = NetNames;
+            for (int i = 0; i < MatchSnapshot.PlayerCount; i++)
+            {
+                var n = names.Get(i);
+                if (n == _shownNames[i]) continue; // 바뀔 때만 문자열로 (매 프레임 할당 금지)
+                _shownNames[i] = n;
+                s.Names[i] = n.Value;
+            }
         }
 
         // ── IMatchEventSink (서버) → RPC → 모든 클라이언트 ─────────────

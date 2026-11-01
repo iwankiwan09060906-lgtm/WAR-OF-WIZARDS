@@ -78,7 +78,7 @@ namespace SpellboundVR.Network
 
             // ⑤ 기본 × 진영 배율 × 집중 보너스
             float focus = context.FocusBonusMultiplier > 0f ? context.FocusBonusMultiplier : 1f;
-            float damage = context.BaseDamage * _world.GetAttackMultiplier(context.AttackerTeam) * focus;
+            float damage = context.BaseDamage * _world.GetAttackMultiplier(context.AttackerTeam, targetTeam) * focus;
 
             // ⑥ 플레이어 대상 방어 계층 (상대 플레이어 스킬 피해만 20%)
             if (targetKind == TargetKind.Player && context.IsPlayerSkill)
@@ -98,6 +98,18 @@ namespace SpellboundVR.Network
             // ⑧ HP 적용
             float applied = _world.ApplyHpChange(context.TargetId, -damage, context.AttackerTeam);
             _world.ReportHit(context.TargetId, pos, applied, HitResultKind.Damage, context);
+            return applied;
+        }
+
+        /// <summary>마나 폭풍 — 타겟 규칙 · 회피 · 명중 · 방어 효과를 거치지 않는 전장 피해 (타워 · 넥서스는 파괴 순서만 지킨다)</summary>
+        public float ResolveStorm(int targetId, float amount)
+        {
+            if (amount <= 0f) return 0f;
+            if (!_world.TryGetTargetInfo(targetId, out Team team, out TargetKind kind, out Vector2 pos)) return 0f;
+            if (kind == TargetKind.Nexus && _rules.IsNexusLocked(team)) return 0f;
+            float applied = _world.ApplyHpChange(targetId, -amount, team);
+            var ctx = new DamageContext { TargetId = targetId, TargetKind = kind, AttackerTeam = team };
+            _world.ReportHit(targetId, pos, applied, HitResultKind.Damage, ctx);
             return applied;
         }
 

@@ -1,5 +1,6 @@
 // §15 미니언 웨이브 — 15초마다 각 진영 레인 3개에 Melee ×1 + Ranged ×1씩 (총 6), 3번째 웨이브마다 Brute ×1 (waveIndex % 3 == 0, 레인 순환)
 // 유닛은 스폰 시 열(레인)을 배정받는다. 상한 도달 시 그 진영 웨이브는 스킵(누적 금지).
+// 4인 개인전: 살아 있는 상대에게 가는 레인에만 나온다 (진영당 최대 3레인 — 1:1 과 같은 수).
 
 using SpellboundVR.Contracts;
 using UnityEngine;
@@ -31,8 +32,11 @@ namespace SpellboundVR.Combat
             if (_timer > 0f) return;
             _timer += Mathf.Max(1f, sim.Rules.WaveInterval);
             WaveIndex++;
-            SpawnWave(sim, Team.Home);
-            SpawnWave(sim, Team.Away);
+            for (int t = 0; t < sim.Arena.TeamCount; t++)
+            {
+                var team = (Team)t;
+                if (sim.IsPlayerAlive(team)) SpawnWave(sim, team);
+            }
         }
 
         private void SpawnWave(MatchSimulation sim, Team team)
@@ -44,8 +48,10 @@ namespace SpellboundVR.Combat
                 return;
             }
 
-            for (int lane = 0; lane < 3; lane++)
+            for (int c = 0; c < 3; c++)
             {
+                int lane = sim.Arena.IsDuel ? c : sim.Arena.ResolveLane(team, (Contracts.Column)c);
+                if (!sim.IsLaneOpen(team, lane)) continue;
                 int order = 0;
                 for (int i = 0; i < rules.MeleePerLane; i++, order++)
                     TrySpawn(sim, team, MinionKind.Melee, lane, order);
@@ -53,14 +59,25 @@ namespace SpellboundVR.Combat
                     TrySpawn(sim, team, MinionKind.Ranged, lane, order);
             }
             if (rules.BruteEveryNWaves > 0 && WaveIndex % rules.BruteEveryNWaves == 0)
-                TrySpawn(sim, team, MinionKind.Brute, (WaveIndex / rules.BruteEveryNWaves) % 3, 2);
+            {
+                // 레인 순환 — 닫힌 레인(탈락한 상대)은 건너뛴다
+                int start = WaveIndex / rules.BruteEveryNWaves;
+                for (int i = 0; i < 3; i++)
+                {
+                    int c = (start + i) % 3;
+                    int lane = sim.Arena.IsDuel ? c : sim.Arena.ResolveLane(team, (Contracts.Column)c);
+                    if (!sim.IsLaneOpen(team, lane)) continue;
+                    TrySpawn(sim, team, MinionKind.Brute, lane, 2);
+                    break;
+                }
+            }
         }
 
         private static void TrySpawn(MatchSimulation sim, Team team, MinionKind kind, int lane, int order)
         {
             if (!AliveUnitLimiter.CanSpawn(sim, team)) return;
             Vector2 pos = sim.Arena.SpawnPosition(team, lane);
-            pos.x += ((order % 2 == 0) ? -0.4f : 0.4f);
+            pos += sim.Arena.ColumnAxis(team) * ((order % 2 == 0) ? -0.4f : 0.4f);
             sim.SpawnUnit(team, sim.GetMinionDefinition(kind), lane, pos);
         }
     }

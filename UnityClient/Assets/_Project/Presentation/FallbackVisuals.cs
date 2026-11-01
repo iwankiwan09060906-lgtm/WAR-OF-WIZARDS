@@ -15,7 +15,19 @@ namespace SpellboundVR.Presentation
         private static readonly Dictionary<Color32, Material> s_transparent = new Dictionary<Color32, Material>();
         private static Font s_font;
 
-        public static Color TeamColor(Contracts.Team team) => team == Contracts.Team.Home ? HomeColor : AwayColor;
+        public static readonly Color Seat2Color = new Color(0.3f, 0.85f, 0.45f);
+        public static readonly Color Seat4Color = new Color(1f, 0.75f, 0.2f);
+
+        public static Color TeamColor(Contracts.Team team)
+        {
+            switch (team)
+            {
+                case Contracts.Team.Home: return HomeColor;
+                case Contracts.Team.Away: return AwayColor;
+                case Contracts.Team.Seat2: return Seat2Color;
+                default: return Seat4Color;
+            }
+        }
 
         /// <summary>팀 색을 흰색 쪽으로 연하게 — 텍스처 모델(미니언)에 곱해도 원래 색이 살아 있도록</summary>
         public static Color LightTeamColor(Contracts.Team team) => Color.Lerp(Color.white, TeamColor(team), 0.45f);

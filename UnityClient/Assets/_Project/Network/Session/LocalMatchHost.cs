@@ -27,7 +27,7 @@ namespace SpellboundVR.Network
 
         public Team LocalTeam => _localTeam;
 
-        public void Initialize(MatchSimulation sim, NetworkGameEventPublisher events, Team localTeam, int[] deck, bool fillOpponentWithBot)
+        public void Initialize(MatchSimulation sim, NetworkGameEventPublisher events, Team localTeam, int[] deck, bool fillOpponentWithBot, string playerName = "")
         {
             _sim = sim;
             _events = events;
@@ -36,7 +36,9 @@ namespace SpellboundVR.Network
 
             sim.SetEventSink(events);
             sim.JoinHuman(localTeam, deck);
-            if (fillOpponentWithBot) sim.JoinBot(TeamUtil.Opponent(localTeam));
+            sim.SetPlayerName(localTeam, playerName);
+            if (fillOpponentWithBot)
+                while (sim.TryGetFreeTeam(out Team free)) sim.JoinBot(free); // 빈자리 전부 (1:1 = 1명, 개인전 = 3명)
             events.SetLocalTeam(localTeam);
 
             sim.WriteSnapshot(_snapshot);

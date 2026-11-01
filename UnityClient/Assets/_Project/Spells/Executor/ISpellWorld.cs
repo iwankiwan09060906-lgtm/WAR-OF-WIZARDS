@@ -21,6 +21,15 @@ namespace SpellboundVR.Spells.Executor
 
         IDamageResolver Damage { get; }
 
+        /// <summary>시전자가 그 레인으로 노리는 상대 (1:1 은 항상 상대)</summary>
+        Team GetLaneTarget(Team caster, int lane);
+
+        /// <summary>
+        /// 시전 순간 그 레인 공격이 노리는 상대 발판의 칸(월드 열) — 1:1 은 조준한 열,
+        /// 4인 개인전은 열이 상대를 고르므로 상대가 지금 선 칸. 도착 때 그 칸을 벗어나면 피한다.
+        /// </summary>
+        int GetAimColumn(Team caster, int lane);
+
         IStatusEffectHost StatusEffects { get; }
 
         /// <summary>
@@ -47,8 +56,8 @@ namespace SpellboundVR.Spells.Executor
         /// <summary>시전자 기준 적 유닛(설치물 포함) 중 반경 안에 있는 것을 채운다.</summary>
         int CollectEnemyUnitsInRadius(Team casterTeam, Vector2 center, float radius, List<int> results);
 
-        /// <summary>시전자 기준 적 유닛(설치물 포함) 중 v가 [vMin, vMax], u가 [uMin, uMax] 안인 것</summary>
-        int CollectEnemyUnitsInRect(Team casterTeam, float uMin, float uMax, float vMin, float vMax, List<int> results);
+        /// <summary>시전자 기준 적 유닛(설치물 포함) 중 레인 좌표로 along [alongMin, alongMax], lateral [-lateralHalf, lateralHalf] 안인 것</summary>
+        int CollectEnemyUnitsInLaneRect(Team casterTeam, in LaneFrame lane, float alongMin, float alongMax, float lateralHalf, List<int> results);
 
         /// <summary>팀의 살아있는 모든 유닛 (includeStructures면 설치물 포함)</summary>
         int CollectTeamUnits(Team team, bool includeStructures, List<int> results);
@@ -130,6 +139,7 @@ namespace SpellboundVR.Spells.Executor
     {
         public int SpellId;
         public Team CasterTeam;
+        public Team TargetTeam;
         public int WorldColumn;
         public Vector2 Position;
         public float Height;
@@ -151,7 +161,11 @@ namespace SpellboundVR.Spells.Executor
     {
         public int SpellId;
         public Team CasterTeam;
+        /// <summary>날아가는 레인</summary>
         public int WorldColumn;
+        /// <summary>Auto 모드 플레이어 대상: 그 상대 · 상대 발판의 칸 (GetLaneTarget · GetAimColumn)</summary>
+        public Team TargetTeam;
+        public int AimColumn;
         public Vector2 From;
         public float Height;
         public float Speed;

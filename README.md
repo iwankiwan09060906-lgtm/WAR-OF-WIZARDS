@@ -6,7 +6,7 @@ Quest 3 핸드트래킹으로 룬을 그려 마법을 쓰는 1:1 VR 대전 게�
 
 | 폴더 | 내용 |
 | --- | --- |
-| `UnityClient/` | Unity 6 (6000.3.10f1) 프로젝트. 게임 코드는 `Assets/_Project/`, 씬은 `Assets/Scenes/Client/04_Battle.unity` 하나 |
+| `UnityClient/` | Unity 6 (6000.3.10f1) 프로젝트. 게임 코드는 `Assets/_Project/`, 씬은 `Assets/Scenes/Client/04_Battle.unity` 하나. 1:1 · 4인 개인전 ([`Docs/Battle/Ffa4.md`](Docs/Battle/Ffa4.md)) |
 | `Backend/` | Python 웹 서버 (`wow_server.py`) · 웹 UI (`static/`) — 로그인 · 마법서(덱) · 랭킹 · 매칭 |
 | `GestureTools/MediaPipe/` | 웹캠 손 추적 → Unity 입력 (MediaPipe) |
 | `Docs/` | 분야별 문서 (아래) |

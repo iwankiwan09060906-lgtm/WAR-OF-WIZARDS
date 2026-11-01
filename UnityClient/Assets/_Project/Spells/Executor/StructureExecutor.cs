@@ -3,7 +3,6 @@
 // S10 집중: 설치물 체력 × 집중 배율.
 
 using SpellboundVR.Contracts;
-using SpellboundVR.Core;
 using SpellboundVR.Spells.Behaviors;
 using UnityEngine;
 
@@ -22,7 +21,7 @@ namespace SpellboundVR.Spells.Executor
 
         public void Execute(in SpellCastRequest request, Team casterTeam)
         {
-            int lane = TeamUtil.ToWorldColumn(casterTeam, request.TargetColumn);
+            int lane = _world.Arena.ResolveLane(casterTeam, request.TargetColumn);
             int existing = _world.FindTeamUnit(casterTeam, _def.SummonKind);
             if (existing != 0) _world.RemoveUnit(existing);
 

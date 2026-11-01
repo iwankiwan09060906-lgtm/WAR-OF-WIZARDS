@@ -107,11 +107,16 @@ namespace SpellboundVR.Backend
 
         // ── ISessionService: 매칭 큐 (§22.1) ─────────────────
 
-        public void RequestMatchmaking()
+        private int _roomPlayers = 2;
+
+        public void RequestMatchmaking() => RequestMatchmaking(2);
+
+        /// <summary>players: 2 = 1:1, 4 = 4인 개인전</summary>
+        public void RequestMatchmaking(int players)
         {
             ResetSession(null);
             Kind = SessionKind.Matchmaking;
-            BackendClient.Instance.PostEmpty<MessageDto>("/api/matchmaking/queue",
+            BackendClient.Instance.Post<QueueRequestDto, MessageDto>("/api/matchmaking/queue", new QueueRequestDto { players = players },
                 _ => StartPoll(PollMatchmaking()),
                 err =>
                 {
@@ -187,9 +192,13 @@ namespace SpellboundVR.Backend
 
         // ── ISessionService: 친선전 (§22.2) ──────────────────
 
-        public string CreateFriendlyRoom()
+        public string CreateFriendlyRoom() => CreateFriendlyRoom(2);
+
+        /// <summary>players: 2 = 1:1 방, 4 = 4인 개인전 방</summary>
+        public string CreateFriendlyRoom(int players)
         {
             ResetSession(null);
+            _roomPlayers = players;
             Kind = SessionKind.FriendlyRoom;
             IsHost = true;
             IsReady = true;
@@ -197,7 +206,7 @@ namespace SpellboundVR.Backend
             CurrentMode = MatchResultService.ModeFriendly;
 
             string requested = RoomCode;
-            BackendClient.Instance.Post<RoomCreateRequestDto, RoomCodeDto>("/api/rooms", new RoomCreateRequestDto { code = requested },
+            BackendClient.Instance.Post<RoomCreateRequestDto, RoomCodeDto>("/api/rooms", new RoomCreateRequestDto { code = requested, players = players },
                 res =>
                 {
                     if (Kind != SessionKind.FriendlyRoom || RoomCode != requested) return;
@@ -265,7 +274,8 @@ namespace SpellboundVR.Backend
         {
             if (Kind != SessionKind.FriendlyRoom || !IsHost) return;
             bool guestReady = Room != null && Room.HasGuest && Room.GuestReady;
-            if (!guestReady && !OpponentIsBot)
+            bool ffa = _roomPlayers > 2 || (Room != null && Room.IsFfa); // 개인전 방은 서버가 준비를 확인하고 빈자리는 AI 로 채운다
+            if (!ffa && !guestReady && !OpponentIsBot)
             {
                 OnSessionError?.Invoke("상대가 준비하지 않았습니다. 기다리거나 봇으로 채우세요.");
                 return;
@@ -322,7 +332,7 @@ namespace SpellboundVR.Backend
                     OpponentNickname = room.hostNickname ?? string.Empty;
                     OpponentIsBot = false;
                     if (room.status == "CLOSED") { _poll = null; ResetSession("방장이 방을 닫았습니다."); yield break; }
-                    if (room.guest_player_id != AuthService.PlayerId && AuthService.PlayerId != 0)
+                    if (!IsMember(room, AuthService.PlayerId) && AuthService.PlayerId != 0)
                     {
                         _poll = null;
                         ResetSession("방에서 내보내졌습니다.");
@@ -334,6 +344,16 @@ namespace SpellboundVR.Backend
                 if (room.status == "PLAYING" && !_friendlyStarted) RaiseFriendlyStarted();
                 yield return wait;
             }
+        }
+
+        /// <summary>내가 아직 방에 있는가 — 개인전 방은 게스트가 여럿이다</summary>
+        private static bool IsMember(RoomDto room, long playerId)
+        {
+            if (room.guest_player_id == playerId) return true;
+            if (room.members == null) return false;
+            for (int i = 0; i < room.members.Length; i++)
+                if (room.members[i].playerId == playerId) return true;
+            return false;
         }
 
         private void RaiseFriendlyStarted()

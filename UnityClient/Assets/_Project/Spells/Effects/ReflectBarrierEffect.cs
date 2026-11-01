@@ -52,7 +52,7 @@ namespace SpellboundVR.Spells.Effects
             if (context.IsReflected) return 0f; // 되돌아온 피해는 막기만
 
             Team self = TeamUtil.TeamOfPlayerId(targetId);
-            Team attacker = TeamUtil.Opponent(self);
+            Team attacker = context.AttackerTeam;
             if (!world.IsPlayerAlive(attacker)) return 0f;
 
             // 원래 스킬 위력(진영 배율 · 집중 포함, 타워 감쇄 전) 기준으로 되돌린다
@@ -65,6 +65,8 @@ namespace SpellboundVR.Spells.Effects
                 SpellId = _spellId,
                 CasterTeam = self,
                 WorldColumn = world.GetPlayerWorldColumn(attacker), // 지금 서 있는 열 → 회피 판정 없음
+                TargetTeam = attacker,
+                AimColumn = world.GetPlayerWorldColumn(attacker),
                 From = from,
                 Height = 1.5f,
                 Speed = _speed,

@@ -107,6 +107,9 @@ namespace SpellboundVR.Backend
         public int casts;
         public float damageDealt;
         public float damageTaken;
+        /// <summary>개인전 순위 · 인원 (1:1 은 0 · 2)</summary>
+        public int place;
+        public int players = 2;
     }
 
     /// <summary>POST /api/match/{id}/result</summary>
@@ -118,6 +121,8 @@ namespace SpellboundVR.Backend
         public int casts;
         public float damageDealt;
         public float damageTaken;
+        /// <summary>개인전 순위 1 ~ 4 (0 = 1:1) — 서버가 순위별 레이팅을 준다</summary>
+        public int place;
     }
 
     [Serializable] public class MatchRecordResultDto { public long matchId; public string result; public int ratingDelta; public int newRating; }
@@ -162,6 +167,12 @@ namespace SpellboundVR.Backend
 
     // ── 매칭 큐 ───────────────────────────────────────────
 
+    /// <summary>POST /api/matchmaking/queue — 경기 인원 2 · 4</summary>
+    [Serializable] public class QueueRequestDto { public int players; }
+
+    /// <summary>개인전 상대 한 명</summary>
+    [Serializable] public class MatchOpponentDto { public long playerId; public string nickname; public int rating; public bool bot; public int seat; }
+
     /// <summary>GET /api/matchmaking/status</summary>
     [Serializable]
     public class MatchmakingStatusDto
@@ -179,6 +190,11 @@ namespace SpellboundVR.Backend
         public bool bot;
         public string roomCode;
         public long matchId;
+        public int maxPlayers;
+        public int playersFound;
+        public int playersNeeded;
+        public int seat;
+        public MatchOpponentDto[] opponents;
 
         public bool IsMatched => state == "matched";
         public bool IsSearching => state == "searching";
@@ -186,7 +202,9 @@ namespace SpellboundVR.Backend
 
     // ── 친선전 방 ─────────────────────────────────────────
 
-    [Serializable] public class RoomCreateRequestDto { public string code; }
+    [Serializable] public class RoomCreateRequestDto { public string code; public int players; }
+    /// <summary>방 자리 한 칸</summary>
+    [Serializable] public class RoomMemberDto { public long playerId; public string nickname; public int rating; public bool bot; public int seat; public bool ready; public bool host; }
     [Serializable] public class RoomCodeDto { public string code; public string roomCode; public string message; }
 
     /// <summary>GET /api/rooms/{code}</summary>
@@ -205,9 +223,13 @@ namespace SpellboundVR.Backend
         public int hostRating;
         public string guestNickname;
         public int guestRating;
+        public int maxPlayers;
+        public long matchId;
+        public RoomMemberDto[] members;
 
         public bool HasGuest => guest_player_id != 0;
         public bool GuestReady => guest_ready != 0;
+        public bool IsFfa => maxPlayers > 2;
     }
 
     [Serializable] public class ReadyDto { public bool ready; }

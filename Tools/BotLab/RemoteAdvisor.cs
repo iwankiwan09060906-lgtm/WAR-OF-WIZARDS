@@ -40,7 +40,7 @@ internal sealed class RemoteAdvisor : IStrategyAdvisor
     private readonly string _base;
     private readonly string _key;
     private readonly string _session = Guid.NewGuid().ToString("N").Substring(0, 6);
-    private readonly TeamState[] _teams = { new TeamState(), new TeamState() };
+    private readonly TeamState[] _teams = { new TeamState(), new TeamState(), new TeamState(), new TeamState() };
     private int _game;
 
     public int Calls, Failures;

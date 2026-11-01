@@ -116,16 +116,23 @@ namespace SpellboundVR.Presentation
         private readonly Dictionary<int, GameObject> _projectiles = new Dictionary<int, GameObject>(64);
         private readonly Dictionary<GameObject, Renderer[]> _modelRenderers = new Dictionary<GameObject, Renderer[]>(128);
         private readonly List<int> _removeBuffer = new List<int>(64);
-        private readonly ObjectPool[,] _unitPools = new ObjectPool[2, MinionDefinition.KindCount];
+        private readonly ObjectPool[,] _unitPools = new ObjectPool[TeamUtil.TeamCount, MinionDefinition.KindCount];
         private readonly Dictionary<int, ObjectPool> _projectilePools = new Dictionary<int, ObjectPool>();
         private Transform _poolRoot;
-        private readonly StructureView[] _structures = new StructureView[4];
+        private readonly StructureView[] _structures = new StructureView[MatchSnapshot.StructureCount];
         /// <summary>[0] = 아군 타워 총알, [1] = 적 타워 총알 (보는 사람 기준)</summary>
         private readonly ObjectPool[] _shotPools = new ObjectPool[2];
         private ObjectPool _arrowShotPool;
         private readonly List<TowerShot> _shots = new List<TowerShot>(16);
-        private Transform _opponentAvatar;
-        private GameObject _oppShield, _oppReflect, _oppFocus, _oppBlind;
+        /// <summary>진영마다 아바타 하나 — 로컬 플레이어 것만 끈다 (1:1 은 2개, 개인전은 4개)</summary>
+        private sealed class AvatarView
+        {
+            public Team Team;
+            public Transform Root;
+            public GameObject Shield, Reflect, Focus, Blind;
+        }
+
+        private readonly List<AvatarView> _avatars = new List<AvatarView>(4);
         private GameObject _selfShield, _selfReflect, _selfFocus;
         private Transform _selfShieldRing;
         private MaterialPropertyBlock _block;
@@ -196,16 +203,17 @@ namespace SpellboundVR.Presentation
 
             var poolRoot = new GameObject("[Unit Pools]").transform;
             poolRoot.SetParent(transform, false);
-            for (int t = 0; t < 2; t++)
+            int divide = _arena.TeamCount / 2; // 4개 진영이면 진영당 미리 만드는 수를 줄인다 (모자라면 풀이 늘린다)
+            for (int t = 0; t < _arena.TeamCount; t++)
             {
                 var team = (Team)t;
                 for (int k = 0; k < MinionDefinition.KindCount; k++)
                 {
                     var kind = (MinionKind)k;
-                    int prewarm = kind == MinionKind.Melee ? meleePrewarm
-                                : kind == MinionKind.Ranged ? rangedPrewarm
-                                : kind == MinionKind.Brute ? brutePrewarm
-                                : kind == MinionKind.Skeleton ? skeletonPrewarm
+                    int prewarm = kind == MinionKind.Melee ? meleePrewarm / divide
+                                : kind == MinionKind.Ranged ? rangedPrewarm / divide
+                                : kind == MinionKind.Brute ? brutePrewarm / divide
+                                : kind == MinionKind.Skeleton ? skeletonPrewarm / divide
                                 : IsStructureKind(kind) ? 1 : summonPrewarm;
                     _unitPools[t, k] = new ObjectPool(() => CreateUnitVisual(team, kind), poolRoot, prewarm, "Unit_" + team + "_" + kind);
                 }
@@ -218,10 +226,10 @@ namespace SpellboundVR.Presentation
             }
             _arrowShotPool = new ObjectPool(CreateArrowShotVisual, poolRoot, 4, "TurretArrow");
 
+            BuildStructures(); // 개인전 2 · 4번 구조물은 여기서 복제되므로 팀 아트 적용보다 먼저
             TeamArt.ApplyAll(LocalTeam);
             _session.Events.OnLocalTeamAssigned += TeamArt.ApplyAll;
-            BuildStructures();
-            BuildOpponentAvatar();
+            for (int t = 0; t < _arena.TeamCount; t++) _avatars.Add(BuildAvatar((Team)t));
             BuildSelfStatusVisuals();
         }
 
@@ -403,7 +411,7 @@ namespace SpellboundVR.Presentation
         private void BuildStructures()
         {
             var layout = _session.Layout;
-            for (int t = 0; t < 2; t++)
+            for (int t = 0; t < _arena.TeamCount; t++)
             {
                 var team = (Team)t;
                 for (int n = 0; n < 2; n++)
@@ -411,6 +419,7 @@ namespace SpellboundVR.Presentation
                     bool isNexus = n == 1;
                     Transform visual = layout != null ? layout.GetStructureVisual(team, isNexus) : null;
                     Vector3 pos = _arena.ToWorld(_arena.StructurePosition(team, isNexus));
+                    if (!_arena.IsDuel && layout != null) visual = PlaceFfaStructure(layout, team, isNexus, visual, pos);
                     if (visual == null)
                     {
                         string modelName = isNexus ? "MDL_Structure_Nexus" : "MDL_Structure_Tower";
@@ -456,6 +465,21 @@ namespace SpellboundVR.Presentation
             }
         }
 
+        /// <summary>개인전: 씬의 1 · 3번 구조물은 개인전 깊이로 옮기고, 2 · 4번은 1번 구조물을 복제해 세운다</summary>
+        private Transform PlaceFfaStructure(ArenaLayout layout, Team team, bool isNexus, Transform visual, Vector3 pos)
+        {
+            if (visual == null)
+            {
+                var source = layout.GetStructureVisual(Team.Home, isNexus);
+                if (source == null) return null;
+                visual = Instantiate(source.gameObject, transform).transform;
+                visual.name = (isNexus ? "Nexus_" : "Tower_") + team;
+                foreach (var art in visual.GetComponentsInChildren<TeamArt>(true)) art.team = team;
+            }
+            visual.SetPositionAndRotation(pos, _arena.FacingRotation(team));
+            return visual;
+        }
+
         /// <summary>파괴된 타워 · 넥서스 자리에 남는 돌무더기 (구조물 크기에 맞춤, 회색 돌)</summary>
         private static GameObject CreateRubble(Transform parent, Vector3 size)
         {
@@ -489,7 +513,7 @@ namespace SpellboundVR.Presentation
             return new Vector3(b.size.x, Mathf.Max(0.5f, b.max.y - visual.position.y), b.size.z);
         }
 
-        private void BuildOpponentAvatar()
+        private AvatarView BuildAvatar(Team team)
         {
             GameObject go;
             if (_catalog != null && _catalog.TryGet("MDL_Avatar_Wizard", out var prefab)) go = Instantiate(prefab);
@@ -507,28 +531,31 @@ namespace SpellboundVR.Presentation
             }
             go.transform.SetParent(transform, false);
             go.transform.localScale = Vector3.one * playerScale;
-            _opponentAvatar = go.transform;
+            go.transform.position = _arena.ToWorld(_arena.PlayerPosition(team, 1), PlatformHeight);
+            go.SetActive(false);
+            var avatar = new AvatarView { Team = team, Root = go.transform };
 
             // S08 쉴드 (구, 반경 1 프리팹 → 아바타 기준 1.3)
-            _oppShield = CreateStatusFx("VFX_S08_Shield_Loop", _opponentAvatar);
-            if (_oppShield == null)
+            avatar.Shield = CreateStatusFx("VFX_S08_Shield_Loop", avatar.Root);
+            if (avatar.Shield == null)
             {
-                _oppShield = FallbackVisuals.Primitive(PrimitiveType.Sphere, "OpponentShield",
-                                                       FallbackVisuals.Transparent(new Color(0.35f, 0.75f, 1f, 0.25f)));
-                _oppShield.transform.SetParent(_opponentAvatar, false);
-                _oppShield.SetActive(false);
+                avatar.Shield = FallbackVisuals.Primitive(PrimitiveType.Sphere, "OpponentShield",
+                                                          FallbackVisuals.Transparent(new Color(0.35f, 0.75f, 1f, 0.25f)));
+                avatar.Shield.transform.SetParent(avatar.Root, false);
+                avatar.Shield.SetActive(false);
             }
-            _oppShield.transform.localPosition = new Vector3(0f, 1.1f, 0f);
-            _oppShield.transform.localScale = Vector3.one * 1.3f;
+            avatar.Shield.transform.localPosition = new Vector3(0f, 1.1f, 0f);
+            avatar.Shield.transform.localScale = Vector3.one * 1.3f;
 
             // H04 반사 결계 (반경 1 · 높이 2 프리팹)
-            _oppReflect = CreateStatusFx("VFX_H04_ReflectBarrier_Loop", _opponentAvatar);
-            if (_oppReflect != null) _oppReflect.transform.localScale = new Vector3(1.4f, 1.25f, 1.4f);
+            avatar.Reflect = CreateStatusFx("VFX_H04_ReflectBarrier_Loop", avatar.Root);
+            if (avatar.Reflect != null) avatar.Reflect.transform.localScale = new Vector3(1.4f, 1.25f, 1.4f);
             // S10 집중 (발밑)
-            _oppFocus = CreateStatusFx("VFX_S10_Focus_Loop", _opponentAvatar);
+            avatar.Focus = CreateStatusFx("VFX_S10_Focus_Loop", avatar.Root);
             // S01 연막에 맞은 상대 — 머리 주변 검은 연기
-            _oppBlind = CreateStatusFx("VFX_S01_Smoke_Loop", _opponentAvatar);
-            if (_oppBlind != null) _oppBlind.transform.localPosition = new Vector3(0f, 2.0f, 0f);
+            avatar.Blind = CreateStatusFx("VFX_S01_Smoke_Loop", avatar.Root);
+            if (avatar.Blind != null) avatar.Blind.transform.localPosition = new Vector3(0f, 2.0f, 0f);
+            return avatar;
         }
 
         private void BuildSelfStatusVisuals()
@@ -596,7 +623,7 @@ namespace SpellboundVR.Presentation
                 bool isNew = false;
                 if (!_units.TryGetValue(u.Id, out var view))
                 {
-                    int team = Mathf.Clamp(u.Team, 0, 1);
+                    int team = Mathf.Clamp(u.Team, 0, TeamUtil.TeamCount - 1);
                     var go = _unitPools[team, (int)kind].Get(target, _arena.FacingRotation((Team)team));
                     _modelRenderers.TryGetValue(go, out var renderers);
                     view = new UnitView
@@ -743,7 +770,7 @@ namespace SpellboundVR.Presentation
             }
             if (TeamUtil.IsStructureId(targetId))
             {
-                var team = targetId >= 12 ? Team.Away : Team.Home;
+                var team = TeamUtil.TeamOfStructureId(targetId);
                 bool nexus = (targetId - 10) % 2 == 1;
                 var sv = _structures[MatchSnapshot.StructureIndex(team, nexus)];
                 if (sv == null || sv.Root == null) return false;
@@ -927,22 +954,23 @@ namespace SpellboundVR.Presentation
         {
             if (!_session.Events.HasLocalTeam) return;
             Team local = _session.Events.LocalTeam;
-            Team opp = TeamUtil.Opponent(local);
 
-            ref var o = ref s.Players[(int)opp];
-            bool show = o.Present != 0;
-            if (_opponentAvatar.gameObject.activeSelf != show) _opponentAvatar.gameObject.SetActive(show);
-            if (show)
+            for (int i = 0; i < _avatars.Count; i++)
             {
-                Vector3 target = _arena.ToWorld(_arena.PlayerPosition(opp, o.WorldColumn), PlatformHeight);
-                _opponentAvatar.position = Vector3.Lerp(_opponentAvatar.position, target, 1f - Mathf.Exp(-20f * Time.deltaTime));
-                _opponentAvatar.rotation = _arena.FacingRotation(opp);
+                var a = _avatars[i];
+                ref var o = ref s.Players[(int)a.Team];
+                bool show = o.Present != 0 && a.Team != local;
+                if (a.Root.gameObject.activeSelf != show) a.Root.gameObject.SetActive(show);
+                if (!show) continue;
+                Vector3 target = _arena.ToWorld(_arena.PlayerPosition(a.Team, o.WorldColumn), PlatformHeight);
+                a.Root.position = Vector3.Lerp(a.Root.position, target, 1f - Mathf.Exp(-20f * Time.deltaTime));
+                a.Root.rotation = _arena.FacingRotation(a.Team);
                 bool dead = o.Alive == 0;
-                _opponentAvatar.localScale = dead ? new Vector3(playerScale, playerScale * 0.2f, playerScale) : Vector3.one * playerScale;
-                SetActive(_oppShield, o.Shield > 0 && !dead);
-                SetActive(_oppReflect, (o.Flags & PlayerFlags.Reflect) != 0 && !dead);
-                SetActive(_oppFocus, (o.Flags & PlayerFlags.Focus) != 0 && !dead);
-                SetActive(_oppBlind, (o.Flags & PlayerFlags.Blind) != 0 && !dead);
+                a.Root.localScale = dead ? new Vector3(playerScale, playerScale * 0.2f, playerScale) : Vector3.one * playerScale;
+                SetActive(a.Shield, o.Shield > 0 && !dead);
+                SetActive(a.Reflect, (o.Flags & PlayerFlags.Reflect) != 0 && !dead);
+                SetActive(a.Focus, (o.Flags & PlayerFlags.Focus) != 0 && !dead);
+                SetActive(a.Blind, (o.Flags & PlayerFlags.Blind) != 0 && !dead);
             }
 
             ref var me = ref s.Players[(int)local];

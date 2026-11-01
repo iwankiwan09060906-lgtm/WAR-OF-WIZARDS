@@ -37,7 +37,7 @@ namespace SpellboundVR.Backend
         private NetworkGameEventPublisher _events;
         private Team _localTeam = Team.Home;
         private bool _inMatch;
-        private readonly int[] _lastHp = { -1, -1 };
+        private readonly int[] _lastHp = { -1, -1, -1, -1 };
         private float _damageDealt;
         private float _damageTaken;
 
@@ -94,7 +94,7 @@ namespace SpellboundVR.Backend
         private void HandleMatchStarted(OpponentType opponentType)
         {
             _inMatch = true;
-            _lastHp[0] = _lastHp[1] = -1;
+            for (int i = 0; i < _lastHp.Length; i++) _lastHp[i] = -1;
             _damageDealt = _damageTaken = 0f;
 
             var session = BackendSessionService.Existing;
@@ -114,7 +114,7 @@ namespace SpellboundVR.Backend
             if (!_inMatch || previous < 0 || current >= previous) return;
 
             if (team == _localTeam) _damageTaken += previous - current;
-            else _damageDealt += previous - current;
+            else if (_events.Arena.IsDuel) _damageDealt += previous - current; // 개인전은 남끼리 때린 피해가 섞이므로 서버 집계를 쓴다
         }
 
         private void HandleMatchEnded(MatchResult result, MatchEndReason reason, float duration)
@@ -125,6 +125,8 @@ namespace SpellboundVR.Backend
             var session = BackendSessionService.Existing;
             long matchId = session != null ? session.CurrentMatchId : 0;
             string serverResult = MatchResultService.ToServerResult(result);
+            int place = result == MatchResult.Win && !_events.Arena.IsDuel ? 1 : _events.LocalPlace;
+            if (!_events.Arena.IsDuel) _damageDealt = _events.LocalDamageDealt;
 
             if (!AuthService.IsLoggedIn)
             {
@@ -147,6 +149,7 @@ namespace SpellboundVR.Backend
                     durationSec = duration,
                     damageDealt = _damageDealt,
                     damageTaken = _damageTaken,
+                    place = place,
                 };
                 MatchResultService.ReportResult(matchId, req,
                     match =>
@@ -174,6 +177,8 @@ namespace SpellboundVR.Backend
                     durationSec = duration,
                     damageDealt = _damageDealt,
                     damageTaken = _damageTaken,
+                    place = place,
+                    players = _events.Arena.TeamCount,
                 };
                 MatchResultService.Record(record, _ => Saved("전적 저장 완료"), err => Saved(null, err));
             }

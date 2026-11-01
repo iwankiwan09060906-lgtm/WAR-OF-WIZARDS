@@ -2,7 +2,6 @@
 // 피해는 전부 IDamageResolver(§12.5)를 통과한다. 여기서는 DamageContext만 만든다.
 
 using SpellboundVR.Contracts;
-using SpellboundVR.Core;
 using SpellboundVR.Spells.Executor;
 using UnityEngine;
 
@@ -33,10 +32,9 @@ namespace SpellboundVR.Spells.Behaviors
         }
 
         /// <param name="dodgeable">true면 리졸버 ③이 aimedWorldColumn과 상대의 서버 열을 비교한다</param>
-        public static float HitEnemyPlayer(ISpellWorld world, int spellId, Team casterTeam, float damage, float focus,
+        public static float HitEnemyPlayer(ISpellWorld world, int spellId, Team casterTeam, Team enemy, float damage, float focus,
                                            bool dodgeable = false, int aimedWorldColumn = 0)
         {
-            Team enemy = TeamUtil.Opponent(casterTeam);
             if (!world.IsPlayerAlive(enemy)) return 0f;
             var ctx = new DamageContext
             {
@@ -55,9 +53,8 @@ namespace SpellboundVR.Spells.Behaviors
             return world.Damage.ResolveDamage(ctx);
         }
 
-        public static bool EnemyPlayerInRadius(ISpellWorld world, Team casterTeam, Vector2 center, float radius)
+        public static bool EnemyPlayerInRadius(ISpellWorld world, Team enemy, Vector2 center, float radius)
         {
-            Team enemy = TeamUtil.Opponent(casterTeam);
             if (!world.IsPlayerAlive(enemy)) return false;
             float r = radius + PlayerBodyRadius;
             return (world.GetPlayerPosition(enemy) - center).sqrMagnitude <= r * r;
@@ -77,9 +74,7 @@ namespace SpellboundVR.Spells.Behaviors
         /// <summary>시전자 앞 손 높이 (투사체 출발점)</summary>
         public static Vector2 Muzzle(ISpellWorld world, Team team, float forward = 0.6f)
         {
-            Vector2 p = world.GetPlayerPosition(team);
-            p.y += world.Arena.ForwardSign(team) * forward;
-            return p;
+            return world.GetPlayerPosition(team) + world.Arena.SeatForward(team) * forward;
         }
 
         /// <summary>결정적 난수 (서버 틱 기반 재현, 할당 없음)</summary>

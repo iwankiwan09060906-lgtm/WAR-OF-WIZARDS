@@ -22,6 +22,12 @@ namespace SpellboundVR.UI
         public bool OpponentBot = true;
         public long MatchId;
         public string RoomCode;
+        /// <summary>경기 인원 — 2 = 1:1, 3 · 4 = 4인 개인전 (3명이면 남는 자리는 AI)</summary>
+        public int Players = 2;
+        /// <summary>개인전 상대 이름 (대기 화면) — 없으면 자리 번호로 표시</summary>
+        public string[] OpponentNames;
+
+        public bool IsFfa => Players > 2;
     }
 
     /// <summary>지난 대전 결과 (C13)</summary>
@@ -35,6 +41,9 @@ namespace SpellboundVR.UI
         public int DamageTaken;
         public string Mode = MatchResultService.ModeBot;
         public string OpponentName = "Bot";
+        /// <summary>개인전 순위 (0 = 1:1) · 인원</summary>
+        public int Place;
+        public int Players = 2;
         /// <summary>null = 저장 중, true = 저장됨, false = 실패</summary>
         public bool? Saved;
         public string SaveMessage = "";
@@ -61,6 +70,8 @@ namespace SpellboundVR.UI
         public int pointerSize = 40;
         /// <summary>손에서 나오는 레이 선도 보일지 (기본 꺼짐 — 점만)</summary>
         public bool showRayLine;
+        /// <summary>헤드셋 없는 PC 에서 웹캠 손 추적(MediaPipe)으로 플레이 (GestureTools/MediaPipe/run_hand_tracker.bat)</summary>
+        public bool webcamHands;
     }
 
     public static class MetaState
@@ -86,6 +97,19 @@ namespace SpellboundVR.UI
         private static MetaSettings s_settings;
 
         public static event Action<string> OnChanged;
+
+        private const string PlayersKey = "wow.players.v1";
+
+        /// <summary>로비에서 고른 경기 인원 2 · 4 (기본 4인 개인전)</summary>
+        public static int PreferredPlayers
+        {
+            get => PlayerPrefs.GetInt(PlayersKey, 4) <= 2 ? 2 : 4;
+            set
+            {
+                PlayerPrefs.SetInt(PlayersKey, value);
+                PlayerPrefs.Save();
+            }
+        }
 
         public static bool LoggedIn => Offline || AuthService.IsLoggedIn;
         public static string Nickname => Profile != null ? Profile.nickname : (User != null ? User.nickname : "Wizard");

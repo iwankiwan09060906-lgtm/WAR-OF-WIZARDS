@@ -1,6 +1,8 @@
 // §10 승패 조건
 //   사망: HP 0 → 패배 (구조물 생존 무관, 리스폰 없음) / 양측 같은 틱 사망 → 무승부
 //   기권: 사람 30초 무활동 / 연결 끊김: 사람 이탈 → 패배 / 경기 무효: 서버 오류
+// 4인 개인전은 한 명씩 탈락하고 마지막까지 남은 사람이 이긴다 — MatchSimulation.TickFfaResult
+//   순위 = 탈락 순서의 반대 (같은 틱에 쓰러지면 같은 순위) · 사람이 빠지면 그 자리는 봇이 잇는다
 
 using SpellboundVR.Contracts;
 using SpellboundVR.Core;
@@ -66,14 +68,25 @@ namespace SpellboundVR.Combat
             return outcome;
         }
 
+        public static MatchWinner WinnerOf(Team team)
+        {
+            switch (team)
+            {
+                case Team.Home: return MatchWinner.Home;
+                case Team.Away: return MatchWinner.Away;
+                case Team.Seat2: return MatchWinner.Seat2;
+                default: return MatchWinner.Seat4;
+            }
+        }
+
         public static MatchResult ToLocalResult(MatchWinner winner, Team localTeam)
         {
             switch (winner)
             {
-                case MatchWinner.Home: return localTeam == Team.Home ? MatchResult.Win : MatchResult.Lose;
-                case MatchWinner.Away: return localTeam == Team.Away ? MatchResult.Win : MatchResult.Lose;
                 case MatchWinner.Draw: return MatchResult.Draw;
-                default: return MatchResult.Void;
+                case MatchWinner.None:
+                case MatchWinner.Void: return MatchResult.Void;
+                default: return winner == WinnerOf(localTeam) ? MatchResult.Win : MatchResult.Lose;
             }
         }
     }

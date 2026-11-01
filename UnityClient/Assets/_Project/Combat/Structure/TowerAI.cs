@@ -17,7 +17,7 @@ namespace SpellboundVR.Combat
             if (tower.IsFrozen(sim.Time)) return; // H01 프리즈: 공격 정지
 
             var rules = sim.Rules;
-            Team enemy = TeamUtil.Opponent(tower.Team);
+            int self = (int)tower.Team;
             float now = sim.Time;
             float rangeSq = (rules.TowerRange + tower.Radius) * (rules.TowerRange + tower.Radius);
 
@@ -30,25 +30,26 @@ namespace SpellboundVR.Combat
             for (int i = 0; i < units.Length; i++)
             {
                 var u = units[i];
-                if (!u.Active || u.Dead || u.Team != enemy || u.IsStructure) continue; // §11 타워 → 설치물 ✕
+                if (!u.Active || u.Dead || u.Team == tower.Team || u.IsStructure) continue; // §11 타워 → 설치물 ✕
                 bool inRange = (u.Position - tower.Position).sqrMagnitude <= rangeSq;
                 if (!inRange)
                 {
-                    u.EnteredEnemyTowerRangeTime = -1f;
+                    u.EnteredTowerRangeTime[self] = -1f;
                     continue;
                 }
-                if (u.EnteredEnemyTowerRangeTime < 0f) u.EnteredEnemyTowerRangeTime = now;
+                if (u.EnteredTowerRangeTime[self] < 0f) u.EnteredTowerRangeTime[self] = now;
 
                 int group = u.Kind == MinionKind.Brute ? 0 : 1;
                 int priority = u.Def.TowerTargetPriority;
+                float entered = u.EnteredTowerRangeTime[self];
                 bool better = group < bestGroup ||
-                              (group == bestGroup && u.EnteredEnemyTowerRangeTime < bestEntered - 1e-4f) ||
-                              (group == bestGroup && Mathf.Abs(u.EnteredEnemyTowerRangeTime - bestEntered) <= 1e-4f && priority < bestPriority);
+                              (group == bestGroup && entered < bestEntered - 1e-4f) ||
+                              (group == bestGroup && Mathf.Abs(entered - bestEntered) <= 1e-4f && priority < bestPriority);
                 if (better)
                 {
                     bestId = u.Id;
                     bestGroup = group;
-                    bestEntered = u.EnteredEnemyTowerRangeTime;
+                    bestEntered = entered;
                     bestPriority = priority;
                 }
             }

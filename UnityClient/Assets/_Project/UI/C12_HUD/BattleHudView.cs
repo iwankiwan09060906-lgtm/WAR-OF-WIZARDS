@@ -7,6 +7,8 @@
 //       고위력은 호박색 테두리 + 남은 횟수 (프로토타입 궁극기 게이지 자리)
 //     · 시전 거절 사유 · AFK 경고 · 돌파 알림 · 가운데 큰 글자(카운트다운 · FIGHT · 결과)
 //   프로토타입의 마나 · 킬 수 · 궁극기 충전은 이 게임 규칙에 없어서 옮기지 않았다.
+//   4인 개인전: 상대 카드 · 상대 방어 대신 FfaHudPanel(세 상대 · 전장 지도), Power Up 칸은 마나 폭풍 타이머
+//   AI 코치(BattleCoach) · 입력 상태 칸: HUD 오른쪽 아래
 
 using SpellboundVR.Contracts;
 using SpellboundVR.Core;
@@ -58,17 +60,20 @@ namespace SpellboundVR.UI
         private ClientSession _session;
         private IGameEvents _events;
         private readonly SlotView[] _slots = new SlotView[DeckData.SlotCount];
-        private readonly int[] _hp = new int[2];
-        private readonly int[] _maxHp = new int[2];
-        private readonly bool[] _tower = { true, true };
-        private readonly bool[] _nexus = { true, true };
-        private readonly float[] _mult = { 1f, 1f };
-        private Text _myHp, _enemyHp, _time, _stageText, _upText, _wave, _status, _message, _center, _afk;
+        private readonly int[] _hp = new int[TeamUtil.TeamCount];
+        private readonly int[] _maxHp = new int[TeamUtil.TeamCount];
+        private readonly bool[] _tower = { true, true, true, true };
+        private readonly bool[] _nexus = { true, true, true, true };
+        private readonly float[] _mult = { 1f, 1f, 1f, 1f };
+        private Text _myHp, _enemyHp, _time, _stageText, _upText, _wave, _status, _message, _center, _afk, _coach, _coachTitle;
+        private FfaHudPanel _ffa;
+        private GameObject _coachPanel;
         private RectTransform _myBar, _enemyBar;
         private GameObject _centerBack;
         private readonly Image[] _posCells = new Image[3];
         private readonly Text[] _posLabels = new Text[3];
         private DefenseView _myDefense, _enemyDefense;
+        private bool Ffa => !_session.Arena.IsDuel;
         private float _messageUntil;
         private float _centerUntil = -1f;
         private float _shieldEnd;
@@ -103,6 +108,7 @@ namespace SpellboundVR.UI
             _events.OnWaveTimerChanged -= HandleWave;
             _events.OnAfkWarning -= HandleAfk;
             _events.OnBreachStarted -= HandleBreach;
+            _session.Events.OnPlayerEliminated -= HandleEliminated;
             _events.OnMatchStarted -= HandleMatchStarted;
             _events.OnMatchEnded -= HandleMatchEnded;
             if (_session != null) _session.Events.OnPhaseInfo -= HandlePhase;
@@ -124,6 +130,7 @@ namespace SpellboundVR.UI
             _events.OnWaveTimerChanged += HandleWave;
             _events.OnAfkWarning += HandleAfk;
             _events.OnBreachStarted += HandleBreach;
+            _session.Events.OnPlayerEliminated += HandleEliminated;
             _events.OnMatchStarted += HandleMatchStarted;
             _events.OnMatchEnded += HandleMatchEnded;
             _session.Events.OnPhaseInfo += HandlePhase;
@@ -152,12 +159,14 @@ namespace SpellboundVR.UI
 
             // 위: HP 카드 · 시간 판
             _myHp = HpCard(rt, -335f, "You", UiTheme.PurpleLight, UiTheme.Purple, out _myBar);
-            _enemyHp = HpCard(rt, 335f, "Enemy", UiTheme.Hex(0xf87171), UiTheme.Enemy, out _enemyBar);
+            if (!Ffa) _enemyHp = HpCard(rt, 335f, "Enemy", UiTheme.Hex(0xf87171), UiTheme.Enemy, out _enemyBar);
             BuildTimer(rt);
 
             // 둘째 줄: 방어 계층
             _myDefense = DefenseGroup(rt, -250f, "내 방어");
-            _enemyDefense = DefenseGroup(rt, 250f, "상대 방어");
+            if (Ffa) _ffa = new FfaHudPanel(rt, _session);
+            else _enemyDefense = DefenseGroup(rt, 250f, "상대 방어");
+            BuildCoach(rt);
 
             // 셋째 줄: 웨이브 · 위치 · 상태
             _wave = Label(rt, "Wave", new Vector2(-330f, 142f), new Vector2(300f, 34f), 20, TextAnchor.MiddleLeft, UiTheme.Amber, true);
@@ -178,8 +187,9 @@ namespace SpellboundVR.UI
             Glow(_message, UiTheme.Alpha(Color.black, 0.8f));
             _afk = Label(rt, "Afk", new Vector2(0f, -192f), new Vector2(960f, 40f), 26, TextAnchor.MiddleCenter, UiTheme.Enemy, true);
             Glow(_afk, UiTheme.Alpha(Color.black, 0.8f));
-            var hint = Label(rt, "Hint", new Vector2(0f, -280f), new Vector2(960f, 30f), 16, TextAnchor.MiddleCenter, UiTheme.Alpha(UiTheme.PurpleLight, 0.6f), false);
-            hint.text = "핀치 룬 › 주먹 › 검지 2초   ·   손바닥 취소   ·   왼손 휘두르기 이동   ·   왼손 메뉴 제스처 = 경기 메뉴";
+            var hint = Label(rt, "Hint", new Vector2(Ffa ? 100f : 0f, -280f), new Vector2(Ffa ? 760f : 960f, 30f), Ffa ? 14 : 16, TextAnchor.MiddleCenter, UiTheme.Alpha(UiTheme.PurpleLight, 0.6f), false);
+            hint.text = Ffa ? "왼쪽 · 가운데 · 오른쪽을 가리키면 그쪽 상대를 공격   ·   왼손 휘두르기로 피하기   ·   왼손 메뉴 제스처 = 경기 메뉴"
+                            : "핀치 룬 › 주먹 › 검지 2초   ·   손바닥 취소   ·   왼손 휘두르기 이동   ·   왼손 메뉴 제스처 = 경기 메뉴";
 
             // 가운데 큰 글자 뒤 어두운 띠 (슬롯 위에 겹쳐도 읽히게, 글자가 있을 때만)
             _centerBack = Sliced(rt, "CenterBack", new Vector2(0f, 60f), new Vector2(980f, 190f),
@@ -193,7 +203,7 @@ namespace SpellboundVR.UI
             _center.gameObject.AddComponent<Shadow>().effectColor = new Color(0f, 0f, 0f, 0.9f);
 
             _myHp.text = "--";
-            _enemyHp.text = "--";
+            if (_enemyHp != null) _enemyHp.text = "--";
             _time.text = "대기";
             _stageText.text = "S0";
             _upText.text = "-:--";
@@ -237,7 +247,35 @@ namespace SpellboundVR.UI
                    UiTheme.Cut(new Color(0f, 0f, 0f, 0.55f), UiTheme.Alpha(UiTheme.Purple, 0.45f), 10, 2));
             _time = TimerCell(rt, -100f, "Time", UiTheme.CyanLight);
             _stageText = TimerCell(rt, 0f, "Stage", UiTheme.PurplePale);
-            _upText = TimerCell(rt, 100f, "Power Up", UiTheme.Amber);
+            _upText = TimerCell(rt, 100f, Ffa ? "Storm" : "Power Up", UiTheme.Amber);
+        }
+
+        /// <summary>AI 코치 · 입력 상태 — 말할 것이 있을 때만 보인다</summary>
+        private void BuildCoach(RectTransform rt)
+        {
+            var panel = Sliced(rt, "Coach", new Vector2(275f, -202f), new Vector2(430f, 124f),
+                               UiTheme.Cut(new Color(0f, 0f, 0f, 0.55f), UiTheme.Alpha(UiTheme.Cyan, 0.45f), 8, 2));
+            _coachPanel = panel.gameObject;
+            var crt = panel.rectTransform;
+            _coachTitle = Label(crt, "Title", new Vector2(0f, 46f), new Vector2(404f, 26f), 15, TextAnchor.MiddleLeft, UiTheme.CyanLight, true);
+            _coachTitle.text = "AI 코치";
+            _coach = Label(crt, "Text", new Vector2(0f, -14f), new Vector2(404f, 88f), 16, TextAnchor.UpperLeft, UiTheme.Text, false);
+            _coach.horizontalOverflow = HorizontalWrapMode.Wrap;
+            _coachPanel.SetActive(false);
+        }
+
+        public void ShowCoach(string text)
+        {
+            if (_coach == null) return;
+            _coachTitle.text = "AI 코치";
+            _coach.text = text;
+            _coachPanel.SetActive(!string.IsNullOrEmpty(text));
+        }
+
+        /// <summary>입력 장치 안내 (웹캠 손 추적 연결 상태)</summary>
+        public void ShowInputStatus(string text)
+        {
+            ShowMessage(text, UiTheme.CyanLight);
         }
 
         private static Text TimerCell(RectTransform rt, float x, string title, Color color)
@@ -398,10 +436,11 @@ namespace SpellboundVR.UI
         private void RefreshHp()
         {
             int me = (int)Local;
-            int opp = 1 - me;
             _myHp.text = _hp[me] + " / " + _maxHp[me];
-            _enemyHp.text = _hp[opp] + " / " + _maxHp[opp];
             SetBar(_myBar, _maxHp[me] > 0 ? (float)_hp[me] / _maxHp[me] : 0f);
+            if (_enemyHp == null) return;
+            int opp = (int)TeamUtil.Opponent(Local);
+            _enemyHp.text = _hp[opp] + " / " + _maxHp[opp];
             SetBar(_enemyBar, _maxHp[opp] > 0 ? (float)_hp[opp] / _maxHp[opp] : 0f);
         }
 
@@ -513,8 +552,9 @@ namespace SpellboundVR.UI
             bool wasNexus = _nexus[t];
             _tower[t] = towerAlive;
             _nexus[t] = nexusAlive;
-            if (wasTower && !towerAlive) ShowMessage(team == Local ? "내 타워가 무너졌습니다!" : "상대 타워 파괴!", UiTheme.Amber);
-            if (wasNexus && !nexusAlive) ShowMessage(team == Local ? "내 넥서스가 무너졌습니다!" : "상대 넥서스 파괴!", UiTheme.Orange);
+            string who = Ffa ? TeamUtil.SeatNumber(team) + "번 " : "상대 ";
+            if (wasTower && !towerAlive) ShowMessage(team == Local ? "내 타워가 무너졌습니다!" : who + "타워 파괴!", UiTheme.Amber);
+            if (wasNexus && !nexusAlive) ShowMessage(team == Local ? "내 넥서스가 무너졌습니다!" : who + "넥서스 파괴!", UiTheme.Orange);
             RefreshDefense();
         }
 
@@ -528,7 +568,7 @@ namespace SpellboundVR.UI
         {
             int me = (int)Local;
             PaintDefense(_myDefense, me);
-            PaintDefense(_enemyDefense, 1 - me);
+            if (!Ffa) PaintDefense(_enemyDefense, (int)TeamUtil.Opponent(Local));
         }
 
         private void PaintDefense(DefenseView v, int t)
@@ -564,6 +604,25 @@ namespace SpellboundVR.UI
             _time.text = (total / 60).ToString("00") + ":" + (total % 60).ToString("00");
             _stageText.text = "S" + _stage;
             _upText.text = (next / 60) + ":" + (next % 60).ToString("00");
+            if (!Ffa) return;
+            var s = _session.Events.Latest;
+            if (s == null) return;
+            int storm = Mathf.CeilToInt(s.Header.StormIn);
+            _upText.text = storm > 0 ? (storm / 60) + ":" + (storm % 60).ToString("00") : "폭풍!";
+            if (storm == 30) ShowMessage("30초 뒤 마나 폭풍 — 구조물과 마법사가 깎입니다", UiTheme.Amber);
+            if (storm == 0 && !_stormAnnounced)
+            {
+                _stormAnnounced = true;
+                ShowMessage("마나 폭풍 시작!", UiTheme.Enemy);
+            }
+        }
+
+        private bool _stormAnnounced;
+
+        private void HandleEliminated(Team team, int place)
+        {
+            if (team == Local) return; // 내 탈락은 경기 종료 글자로 나온다
+            ShowMessage(TeamUtil.SeatNumber(team) + "번 탈락 — " + place + "위", UiTheme.Amber);
         }
 
         private void HandleWave(float nextIn, bool isBrute)
@@ -584,7 +643,7 @@ namespace SpellboundVR.UI
         private void HandleMatchStarted(OpponentType opponent)
         {
             ShowCenter("FIGHT!", 1.5f);
-            ShowMessage(opponent == OpponentType.Bot ? "상대: 봇" : "상대: 사람", UiTheme.CyanLight);
+            ShowMessage(Ffa ? "마지막까지 살아남으세요!" : opponent == OpponentType.Bot ? "상대: 봇" : "상대: 사람", UiTheme.CyanLight);
             _afk.text = "";
         }
 
@@ -599,6 +658,7 @@ namespace SpellboundVR.UI
                 default: title = "NO CONTEST"; break;
             }
             _center.color = result == MatchResult.Lose ? UiTheme.Enemy : result == MatchResult.Win ? UiTheme.PurplePale : UiTheme.Text;
+            if (Ffa && result == MatchResult.Lose) title = _session.Events.LocalPlace + "위 탈락";
             ShowCenter(title, -1f);
             int t = Mathf.FloorToInt(duration);
             _message.text = ReasonText(reason) + "  ·  " + (t / 60) + ":" + (t % 60).ToString("00");
@@ -625,7 +685,7 @@ namespace SpellboundVR.UI
                 case MatchPhase.WaitingForPlayers:
                     _center.font = UiTheme.Bold;
                     _center.fontSize = 44;
-                    ShowCenter("상대를 기다리는 중…", -1f);
+                    ShowCenter(Ffa ? "자리가 차기를 기다리는 중…" : "상대를 기다리는 중…", -1f);
                     _time.text = "대기";
                     break;
                 case MatchPhase.Countdown:
@@ -662,6 +722,7 @@ namespace SpellboundVR.UI
         {
             if (_session == null) return;
             float now = Time.time;
+            if (_ffa != null) _ffa.Tick(_session.Events.Latest, Local);
 
             for (int i = 0; i < _slots.Length; i++)
             {

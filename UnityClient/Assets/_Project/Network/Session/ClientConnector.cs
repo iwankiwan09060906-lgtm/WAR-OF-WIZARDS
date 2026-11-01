@@ -19,6 +19,7 @@ namespace SpellboundVR.Network
         private NetworkRunner _runner;
         private ClientSession _session;
         private int[] _deck;
+        private string _playerName;
         private string _sessionName;
         private bool _viewBound;
         private bool _clientBound;
@@ -37,8 +38,9 @@ namespace SpellboundVR.Network
             ? (float)(_runner.GetPlayerRtt(_runner.LocalPlayer) * 1000.0)
             : -1f;
 
-        public void Connect(string sessionName, ClientSession session, int[] deck)
+        public void Connect(string sessionName, ClientSession session, int[] deck, string playerName = "")
         {
+            _playerName = playerName;
             _sessionName = sessionName;
             _session = session;
             _deck = deck;
@@ -132,6 +134,8 @@ namespace SpellboundVR.Network
                 var client = new FusionMatchClient(local);
                 _session.BindClient(client);
                 client.SubmitDeck(_deck);
+                if (!string.IsNullOrEmpty(_playerName))
+                    local.RPC_SetName(_playerName.Length > 15 ? _playerName.Substring(0, 15) : _playerName);
                 _clientBound = true;
                 Status = "In match as " + local.Team;
                 Debug.Log("[ClientConnector] " + Status);

@@ -1,7 +1,6 @@
 // §14.2 ProjectileExecutor — 조준: 열 / 스킬: S01 연막, S07 총난사
 
 using SpellboundVR.Contracts;
-using SpellboundVR.Core;
 using SpellboundVR.Spells.Behaviors;
 
 namespace SpellboundVR.Spells.Executor
@@ -19,7 +18,7 @@ namespace SpellboundVR.Spells.Executor
 
         public void Execute(in SpellCastRequest request, Team casterTeam)
         {
-            int worldColumn = TeamUtil.ToWorldColumn(casterTeam, request.TargetColumn);
+            int worldColumn = _world.Arena.ResolveLane(casterTeam, request.TargetColumn);
             float focus = SpellDamage.DamageFocus(_def, _world.CastFocus);
             switch (_def.Behavior)
             {

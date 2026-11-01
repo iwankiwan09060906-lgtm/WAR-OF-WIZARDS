@@ -65,7 +65,7 @@ namespace SpellboundVR.Input
                 if (r.Valid) _last = r;
             }
             if (markerView != null && _last.Valid)
-                markerView.UpdateMarker(_last.MarkerPosition, _session.Arena, _last.WorldColumn, progress);
+                markerView.UpdateMarker(_last.MarkerPosition, _session.Arena, _session.Events.LocalTeam, _last.WorldColumn, progress);
         }
 
         public void End()

@@ -354,7 +354,26 @@ def ffa_checks(admin_tok):
             check("3명 보고 → 아직 PLAYING", r["match"]["status"] == "PLAYING")
     check("4명 보고 → ENDED, 등수로 레이팅 (+16 · +5 · -5 · -16)", r["match"]["status"] == "ENDED" and deltas == [16, 5, -5, -16], str(deltas))
 
+    # 매칭된 뒤 30초(match.join_timeout) 안에 게임에 안 들어온 자리는 AI 가 대신하고 경기가 시작된다
     call("PUT", "/api/admin/configs/matchmaking.bot_timeout", {"value": "1"}, admin_tok)
+    call("PUT", "/api/admin/configs/match.join_timeout", {"value": "3"}, admin_tok)
+    for t in tk[:2]:
+        call("POST", "/api/matchmaking/queue", {"players": 4}, t)
+    time.sleep(1.2)
+    n0 = call("GET", "/api/matchmaking/status", token=tk[0])[1]
+    n1 = call("GET", "/api/matchmaking/status", token=tk[1])[1]
+    check("4인전에 2명뿐이면 시간 초과 뒤 빈자리 2개를 AI 로", n0["state"] == "matched" and n1["matchId"] == n0["matchId"]
+          and sum(1 for x in n0["opponents"] if x["bot"]) == 2)
+    call("POST", f"/api/match/{n0['matchId']}/join", {}, tk[0])
+    r = call("GET", "/api/match/current", token=tk[0])[1]["match"]
+    check("한 명만 들어오면 시간 전에는 MATCHED", r["status"] == "MATCHED", r["status"])
+    time.sleep(3.5)
+    r = call("GET", "/api/match/current", token=tk[0])[1]["match"]
+    check("시간이 지나면 안 들어온 자리를 AI 가 대신하고 PLAYING", r["status"] == "PLAYING", r["status"])
+    call("POST", f"/api/match/{n0['matchId']}/leave", {}, tk[0])
+    call("POST", f"/api/match/{n0['matchId']}/leave", {}, tk[1])
+    call("PUT", "/api/admin/configs/match.join_timeout", {"value": "30"}, admin_tok)
+
     for t in tk[:2]:
         call("POST", "/api/matchmaking/queue", {"players": 3}, t)
     time.sleep(1.2)
@@ -599,6 +618,20 @@ def unity_link_checks():
     r = post("/api/ai/strategy", {"state": hybrid, "botId": "a1b2c3d4-Home", "gameId": "bot-a1b2c3d4-1", "record": False, "brief": True})
     check("하이브리드: VLM 없으면 Unity 두뇌 1순위가 한 수 · 작전에 먼저 쓸 스킬로", r["cast"]["spellId"] == "S11" and r["botHinted"]
           and r["orders"]["prefer"][:1] == ["S11"] and r["orders"]["lane"] == 0, str(r["cast"]) + str(r["orders"]))
+    ffa = dict(state, players=4, opponents=[
+        {"nickname": "2번", "seat": 2, "hp": 0, "column": 0, "towerAlive": False, "nexusAlive": False, "bot": True},
+        {"nickname": "3번", "seat": 3, "hp": 700, "column": 1, "towerAlive": True, "nexusAlive": True, "bot": True},
+        {"nickname": "4번", "seat": 4, "hp": 300, "column": 2, "towerAlive": False, "nexusAlive": True, "bot": True}])
+    r = post("/api/ai/strategy", {"state": ffa, "botId": "a1b2c3d4-Seat2", "gameId": "bot-a1b2c3d4-2", "record": False, "brief": True})
+    check("4인 개인전: 타워가 무너진 상대를 노리고 (focusColumn), 탈락한 상대의 레인은 쓰지 않는다",
+          r["orders"]["focusColumn"] == 2 and r["orders"]["lane"] != 0 and r["cast"]["column"] != 0, str(r["orders"]) + str(r["cast"]))
+    import wow_ai, wow_board
+    wow_skills = [(0, c, c, "", "Normal", 0, "Column", 0, 0, 0, 0, "") for c in ffa["deck"]]
+    norm = wow_ai.normalize_state(ffa, wow_skills)
+    png = wow_board.render(norm)
+    check("4인 개인전 전장 지도 그림 (레인마다 상대 진영)", png[:8] == b"\x89PNG\r\n\x1a\n" and png != wow_board.render(wow_ai.normalize_state(state, wow_skills)))
+    fix = wow_ai.clean_orders({"lane": 0, "focusColumn": 0, "stance": "push", "prefer": [], "hold": [], "seconds": 8}, norm, {"stance": "push", "seconds": 8, "focusColumn": 1})
+    check("VLM 이 탈락한 상대를 찍으면 힌트의 상대로 · 닫힌 레인은 지운다", fix["focusColumn"] == 1 and fix["lane"] == -1, str(fix))
     steps = [{"state": state, "action": {"spellId": "S11", "slot": 4, "column": 0, "depth": 0.2, "move": 0, "followedAdvice": False}, "reward": 0},
              {"state": state, "action": {"spellId": "", "slot": -1, "column": -1, "depth": 0, "move": -1, "followedAdvice": False}, "reward": 0}]
     r = post("/api/ai/experience", {"gameId": "bot-a1b2c3d4-1", "botId": "a1b2c3d4-Home", "source": "unity-bot", "steps": steps})

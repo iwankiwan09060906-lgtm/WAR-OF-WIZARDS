@@ -13,6 +13,7 @@
 
 using Fusion;
 using SpellboundVR.Arena;
+using SpellboundVR.Backend;
 using SpellboundVR.Bot;
 using SpellboundVR.Combat;
 using SpellboundVR.Contracts;
@@ -43,6 +44,8 @@ namespace SpellboundVR.Core
         Auto,
         HandTracking,
         Keyboard,
+        /// <summary>웹캠 + MediaPipe 손 추적기 (PC, GestureTools/MediaPipe)</summary>
+        MediaPipe,
     }
 
     [DefaultExecutionOrder(-100)]
@@ -83,6 +86,10 @@ namespace SpellboundVR.Core
         [Tooltip("키보드(데스크톱) 모드에서 시점을 아래로 기울이는 각도 — 헤드셋에서는 사용 안 함")]
         public float desktopViewPitch = 28f;
 
+        [Header("경기 종류")]
+        [Tooltip("서버 빌드가 여는 경기 — 메타 UI 경기는 C02 에서 고른 인원을 따른다. 명령줄 -duel 이면 1:1")]
+        public ArenaMode serverArenaMode = ArenaMode.Ffa4;
+
         [Header("로컬 모드")]
         public Team localTeam = Team.Home;
         [Tooltip("false면 로컬 모드에서 AFK 기권을 끈다 (에디터 개발 편의)")]
@@ -112,6 +119,9 @@ namespace SpellboundVR.Core
         private CastStateMachine _cast;
         private bool _allowAllRunes;
         private bool _battleOnline;
+        private ArenaMode _arenaMode = ArenaMode.Duel;
+        /// <summary>이번 경기에 쓰는 규칙 (개인전이면 값을 바꾼 사본)</summary>
+        private MatchRuleConfig _matchRules;
 
         public BootMode ResolvedMode => _resolvedMode;
 
@@ -119,6 +129,9 @@ namespace SpellboundVR.Core
 
         /// <summary>지금 경기가 PC 서버(Fusion)에 접속한 경기인지 (false = 이 기기 안의 로컬 봇전)</summary>
         public bool IsOnlineBattle => _battleOnline;
+
+        /// <summary>자리 표시 이름 (메타 UI 가 넣는다)</summary>
+        public string LocalPlayerName { get; set; } = "";
 
         private void Awake()
         {
@@ -161,13 +174,28 @@ namespace SpellboundVR.Core
         /// online: PC 서버(Fusion) 경기 (FusionClient 빌드의 랭킹전 · 친선전) / false: 이 기기 안에서 봇과 (봇 연습 · 스킬 테스트).
         /// allowAllRunes: 덱 밖 룬 19종도 시전 (스킬 테스트 전용 — 로컬 경기에서만 동작).
         /// </summary>
-        public void BeginBattle(int[] deck, bool online, bool allowAllRunes)
+        public void BeginBattle(int[] deck, bool online, bool allowAllRunes, ArenaMode mode = ArenaMode.Duel)
         {
             if (_session != null) return;
             if (deck != null && deck.Length == localDeck.Length) localDeck = deck;
             _allowAllRunes = allowAllRunes && !online;
+            SetArenaMode(mode);
             StartClient(networked: online);
         }
+
+        /// <summary>전장 · 규칙을 경기 종류에 맞춘다 — 시뮬레이션을 만들기 전에 부른다</summary>
+        private void SetArenaMode(ArenaMode mode)
+        {
+            _arenaMode = mode;
+            arenaLayout.SetMode(mode);
+            _matchRules = rules;
+            if (mode == ArenaMode.Duel) return;
+            _matchRules = Instantiate(rules); // 에셋 원본을 바꾸지 않도록 사본 사용
+            _matchRules.ApplyFfaRules();
+        }
+
+        /// <summary>경기 종류별 Fusion 세션 — 서버 하나가 한 종류만 연다 (RunServer.bat · RunServer1v1.bat)</summary>
+        private string SessionFor(ArenaMode mode) => mode == ArenaMode.Duel ? sessionName : sessionName + "-ffa";
 
         /// <summary>경기 중 메뉴를 여는 동안 룬 그리기 · 조준 · 이동 입력을 멈춘다 (경기 자체는 계속된다)</summary>
         public void SetBattleInputEnabled(bool enabled)
@@ -186,7 +214,7 @@ namespace SpellboundVR.Core
             if (_localHost != null && _localHost.Simulation != null)
             {
                 if (_localHost.Simulation.Phase != MatchPhase.Playing) return false;
-                _localHost.Simulation.NotifyDisconnected(localTeam);
+                _localHost.Simulation.Forfeit(localTeam);
                 return true;
             }
             if (_clientConnector != null && _session != null)
@@ -216,6 +244,7 @@ namespace SpellboundVR.Core
         private void ResolveData()
         {
             if (rules == null) rules = MatchRuleConfig.CreateDefault();
+            _matchRules = rules;
             if (spellCatalog == null) spellCatalog = SpellCatalog.CreateDefault();
             if (runeLibrary == null) runeLibrary = RuneTemplateLibrary.CreateDefault();
             if (botConfig == null) botConfig = BotConfig.CreateDefault();
@@ -270,6 +299,8 @@ namespace SpellboundVR.Core
                 if (args[i] == "-server" || args[i] == "-spellboundServer") return BootMode.DedicatedServer;
                 if (args[i] == "-client" || args[i] == "-spellboundClient") return BootMode.FusionClient;
                 if (args[i] == "-session" && i + 1 < args.Length) sessionName = args[i + 1];
+                if (args[i] == "-duel") serverArenaMode = ArenaMode.Duel;
+                if (args[i] == "-ffa") serverArenaMode = ArenaMode.Ffa4;
             }
             return BootMode.LocalVsBot;
 #endif
@@ -277,10 +308,10 @@ namespace SpellboundVR.Core
 
         private MatchSimulation CreateSimulation(bool localMode)
         {
-            var effectiveRules = rules;
+            var effectiveRules = _matchRules;
             if (localMode && (!localAfkEnabled || metaUi))
             {
-                effectiveRules = Instantiate(rules); // 에셋 원본을 바꾸지 않도록 사본 사용
+                effectiveRules = Instantiate(_matchRules); // 에셋 원본을 바꾸지 않도록 사본 사용
                 if (!localAfkEnabled)
                 {
                     effectiveRules.AfkForfeitSeconds = 1e9f;
@@ -303,7 +334,7 @@ namespace SpellboundVR.Core
         {
             var events = new NetworkGameEventPublisher(arenaLayout.Geometry);
             var deck = new DeckData(localDeck);
-            _session = new ClientSession(rules, spellCatalog, runeLibrary, arenaLayout, events, deck);
+            _session = new ClientSession(_matchRules, spellCatalog, runeLibrary, arenaLayout, events, deck);
             _deckManager = new EightSlotDeckManager(deck, events);
 
             ISpellInputSource input = CreateInput();
@@ -335,6 +366,7 @@ namespace SpellboundVR.Core
             lineGo.AddComponent<MagicLineRenderer>().Initialize(input, cast, input is KeyboardInput ? 0.004f : 0.006f);
             gameObject.AddComponent<RuneReadyDisplay>().Initialize(cast, input, head, runeLibrary);
             var presentation = new GameObject("[Presentation]");
+            if (_arenaMode == ArenaMode.Ffa4) presentation.AddComponent<FfaArenaView>().Initialize(_session); // 구조물 · 팀 아트를 쓰기 전에
             presentation.AddComponent<VFXPlayer>().Initialize(_session, vfxCatalog);
             presentation.AddComponent<ArenaStateView>().Initialize(_session, vfxCatalog, head);
             presentation.AddComponent<DamageTextView>().Initialize(_session, head);
@@ -350,13 +382,15 @@ namespace SpellboundVR.Core
             }
             hud.localPosition += head.parent != null ? head.localPosition : Vector3.zero; // 시작 시 머리 높이 기준
             hud.Initialize(_session, head.parent != null ? head.parent : playerRig);
+            gameObject.AddComponent<BattleCoach>().Initialize(_session, hud);
+            if (input is MediaPipeHandInput tracker) tracker.Bind(hud, deck.ToArray());
 
             platform.SetTeam(localTeam, 1);
 
             if (networked)
             {
                 _clientConnector = gameObject.AddComponent<ClientConnector>();
-                _clientConnector.Connect(sessionName, _session, deck.ToArray());
+                _clientConnector.Connect(SessionFor(_arenaMode), _session, deck.ToArray(), LocalPlayerName);
                 if (showDebugPanels)
                 {
                     var overlay = gameObject.AddComponent<DebugOverlay>();
@@ -370,7 +404,7 @@ namespace SpellboundVR.Core
                 var sim = CreateSimulation(localMode: true);
                 sim.ConfigureBotManualKeys(true, botConfig.RequireAltInLocalMode);
                 _localHost = gameObject.AddComponent<LocalMatchHost>();
-                _localHost.Initialize(sim, events, localTeam, deck.ToArray(), fillOpponentWithBot: true);
+                _localHost.Initialize(sim, events, localTeam, deck.ToArray(), fillOpponentWithBot: true, LocalPlayerName);
                 _session.BindClient(_localHost);
 
                 if (showDebugPanels)
@@ -378,10 +412,16 @@ namespace SpellboundVR.Core
                     gameObject.AddComponent<ServerDebugPanel>().Initialize(() => _localHost.Simulation, () => "Mode: LocalVsBot  Input: " + input.GetType().Name, true);
                     gameObject.AddComponent<ServerTestScenarios>().Initialize(() => _localHost.Simulation);
                     var overlay = gameObject.AddComponent<DebugOverlay>();
-                    overlay.Initialize(() => AliveUnitLimiter.CountAlive(sim, Team.Home) + AliveUnitLimiter.CountAlive(sim, Team.Away),
-                                       () => sim.MatchTime, null);
+                    overlay.Initialize(() => CountAllUnits(sim), () => sim.MatchTime, null);
                 }
             }
+        }
+
+        private static int CountAllUnits(MatchSimulation sim)
+        {
+            int n = 0;
+            for (int t = 0; t < sim.Arena.TeamCount; t++) n += AliveUnitLimiter.CountAlive(sim, (Team)t);
+            return n;
         }
 
         private ISpellInputSource CreateInput()
@@ -390,6 +430,14 @@ namespace SpellboundVR.Core
 
             var inputGo = new GameObject("[Input]");
             inputGo.transform.SetParent(transform, false);
+            // 헤드셋 없는 PC + 환경설정 "웹캠 손 입력": MediaPipe 손 추적기(GestureTools/MediaPipe)의 UDP 를 입력으로
+            if (!useHands && (inputMode == InputMode.MediaPipe || (inputMode != InputMode.Keyboard && SpellboundVR.UI.MetaState.Settings.webcamHands)))
+            {
+                var tracker = inputGo.AddComponent<MediaPipeHandInput>();
+                tracker.viewCamera = head != null ? head.GetComponent<Camera>() : null;
+                Debug.Log("[GameBootstrap] 입력: MediaPipeHandInput (웹캠 손 추적)");
+                return tracker;
+            }
             if (useHands && leftHandAnchor != null && rightHandAnchor != null)
             {
                 var left = HandJointProvider.EnsureForAnchor(leftHandAnchor, false);
@@ -413,14 +461,16 @@ namespace SpellboundVR.Core
             Application.targetFrameRate = 60;
             Application.runInBackground = true;
 
+            SetArenaMode(serverArenaMode);
             _serverSim = CreateSimulation(localMode: false);
             _serverSim.ConfigureBotManualKeys(true, false);
 
             // 서버 창 표시용 (Home 시점) — 판정과 무관
             var view = new NetworkGameEventPublisher(arenaLayout.Geometry);
-            _session = new ClientSession(rules, spellCatalog, runeLibrary, arenaLayout, view, new DeckData(localDeck));
+            _session = new ClientSession(_matchRules, spellCatalog, runeLibrary, arenaLayout, view, new DeckData(localDeck));
             view.SetLocalTeam(Team.Home);
             var presentation = new GameObject("[Server View]");
+            if (_arenaMode == ArenaMode.Ffa4) presentation.AddComponent<FfaArenaView>().Initialize(_session);
             presentation.AddComponent<VFXPlayer>().Initialize(_session, vfxCatalog);
             presentation.AddComponent<ArenaStateView>().Initialize(_session, vfxCatalog, head);
             presentation.AddComponent<DamageTextView>().Initialize(_session, head);
@@ -429,14 +479,13 @@ namespace SpellboundVR.Core
             gameObject.AddComponent<ServerSpectatorCamera>().Initialize(arenaLayout.Geometry, playerRig, head, view);
 
             _serverLauncher = gameObject.AddComponent<FusionServerLauncher>();
-            _serverLauncher.StartServer(sessionName, serverPort, matchStatePrefab, playerPrefab, _serverSim, view);
+            _serverLauncher.StartServer(SessionFor(_arenaMode), serverPort, matchStatePrefab, playerPrefab, _serverSim, view);
 
             gameObject.AddComponent<ServerDebugPanel>().Initialize(() => _serverSim,
                 () => _serverLauncher.Status + "  players " + _serverLauncher.ConnectedPlayers, false);
             gameObject.AddComponent<ServerTestScenarios>().Initialize(() => _serverSim);
             gameObject.AddComponent<DebugOverlay>().Initialize(
-                () => AliveUnitLimiter.CountAlive(_serverSim, Team.Home) + AliveUnitLimiter.CountAlive(_serverSim, Team.Away),
-                () => _serverSim.MatchTime, null);
+                () => CountAllUnits(_serverSim), () => _serverSim.MatchTime, null);
         }
     }
 }

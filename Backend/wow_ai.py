@@ -78,12 +78,13 @@ STRATEGY_SCHEMA = {
             "description": "작전 — Unity 두뇌가 seconds 동안 0.25초마다 적용한다",
             "properties": {
                 "lane": {"type": "integer", "description": "집중할 레인 0 왼쪽 · 1 가운데 · 2 오른쪽, 없으면 -1"},
+                "focusColumn": {"type": "integer", "description": "개인전: 노릴 상대가 있는 열 0 · 1 · 2, 1:1 · 없으면 -1"},
                 "stance": {"type": "string", "enum": ["defend", "balanced", "push"]},
                 "prefer": {"type": "array", "items": {"type": "string"}, "description": "먼저 쓸 스킬 코드 0~3개"},
                 "hold": {"type": "array", "items": {"type": "string"}, "description": "아껴 둘 스킬 코드 0~3개"},
                 "seconds": {"type": "number", "description": "작전 유지 시간 3~15초"},
             },
-            "required": ["lane", "stance", "prefer", "hold", "seconds"],
+            "required": ["lane", "focusColumn", "stance", "prefer", "hold", "seconds"],
             "additionalProperties": False,
         },
     },
@@ -108,7 +109,12 @@ RULES_TEXT = """\
 - 상대 타워 파괴 시 내 모든 공격 +20%, 넥서스 파괴 시 +40% (영구). 5분마다 모두 강화.
 - 쿨타임: 일반 5초(소환 S11 · S12 는 8초), 고위력 20초. 고위력 스킬은 경기당 스킬별 3회까지. 덱 8장(고위력 최대 2장).
 - 투사체 · 레이저 · 장판은 다른 칸으로 피하면 맞지 않는다. 30초 동안 아무것도 안 하면 기권패.
-- 열 번호는 모두 이 플레이어 자신의 시점: 0 = 왼쪽, 1 = 가운데, 2 = 오른쪽."""
+- 열 번호는 모두 이 플레이어 자신의 시점: 0 = 왼쪽, 1 = 가운데, 2 = 오른쪽.
+- 4인 개인전: 발판 4개가 마름모로 놓이고 모든 쌍이 레인 하나로 이어진다. 내 왼쪽 · 가운데 · 오른쪽 레인이 곧 왼쪽 이웃 · 맞은편 · 오른쪽 이웃이다.
+  스킬을 쏠 열 = 공격할 상대 (opponents[].column). 투사체는 그 상대가 지금 선 칸으로 날아가고, 칸을 옮기면 피한다.
+  개인전에서는 타워가 살아 있어도 스킬 피해가 40% 들어가고, 구조물 공격 보너스는 구조물을 잃은 그 상대에게만 붙는다.
+  한 명씩 탈락하고 마지막까지 살아남으면 승리. 탈락한 상대(hp 0)의 레인은 닫혀 쓸 수 없다.
+  3분 30초부터 마나 폭풍이 모두의 구조물과 HP 를 깎으므로 시간을 끌수록 HP 가 낮은 쪽이 불리하다."""
 
 SYSTEM_PROMPT = f"""너는 War of Wizards 의 전략 담당이다. 그림과 상황 JSON 을 보고 작전(orders)과 지금 할 한 수(cast · move)를 정한다.
 
@@ -121,6 +127,7 @@ SYSTEM_PROMPT = f"""너는 War of Wizards 의 전략 담당이다. 그림과 상
 - 그림: 게임 화면 사진이거나 상황으로 그린 전장 지도다. 지도는 위 = 상대 진영(빨강) · 아래 = 내 진영(파랑) · 세로 세 줄 = 레인(내 시점 왼쪽 · 가운데 · 오른쪽),
   파랑 점 = 우리 유닛 · 빨강 점 = 적 유닛(아래로 올수록 내 타워에 가깝다), 노란 마름모 = 내 칸으로 오는 투사체, 작은 네모 = 타워 · 큰 네모 = 넥서스(회색 X = 무너짐),
   세모 = 플레이어, 맨 아래 8칸 = 덱 슬롯(초록 = 쓸 수 있음 · 금색 테두리 = 고위력), 맨 위 · 맨 아래 막대 = HP.
+  4인 개인전 지도: 세 레인의 맨 위가 각각 그 상대의 진영이다 (레인마다 그 상대의 HP · 타워 · 넥서스 · 세모, 회색 X 레인 = 탈락).
 
 판단 원칙:
 - 쓸 수 있는 스킬은 상황 JSON 의 slots 중 ready 가 true 인 것뿐이다. cast.slot 은 그 슬롯 번호, cast.spellId 는 그 슬롯의 코드.
@@ -128,7 +135,7 @@ SYSTEM_PROMPT = f"""너는 War of Wizards 의 전략 담당이다. 그림과 상
 - 상대 타워가 살아 있으면 상대 플레이어를 때리는 것보다 레인의 적 유닛을 지우고 우리 유닛을 밀어 주는 쪽이 낫다.
 - 고위력 스킬은 남은 횟수가 적으니 결정적인 순간(적 유닛이 몰렸을 때, 상대 타워가 무너진 뒤)에 쓴다.
 - 3 · 4인 개인전이면 opponents 의 HP · 타워 상태를 보고 노릴 상대를 고른다 (타워가 무너진 상대 → HP 가 낮은 상대).
-  다른 상대끼리 싸우게 두고 힘을 아끼는 것도 전략이다. 고른 상대와 이유를 focus 에 적는다 (1:1 이면 빈 문자열).
+  다른 상대끼리 싸우게 두고 힘을 아끼는 것도 전략이다. 고른 상대와 이유를 focus 에, 그 상대의 column 을 orders.focusColumn 에 적는다 (1:1 이면 빈 문자열 · -1).
 - 그림에서 확실히 보이지 않는 것은 지어내지 않는다. 상황 JSON 과 그림이 다르면 그림을 믿되 observations 에 적는다.
 - hint 는 Unity 두뇌(botHint 1순위) · 규칙 AI · 학습 결과로 만든 제안(orders 포함)이다. 그림을 보고 더 나은 수가 있으면 바꿔도 된다.
 - learned 는 이 게임의 실제 판 결과로 배운 것이다 (같은 상황에서 이긴 스킬 순위 · 이긴 판 예시). 표본(n)이 많을수록 믿는다.
@@ -251,7 +258,7 @@ def normalize_state(raw, skills):
         out = []
         for p in (st.get(key) or [])[:3]:
             p = _lower_keys(p) if isinstance(p, dict) else {}
-            out.append({"nickname": str(p.get("nickname") or p.get("name") or "")[:20],
+            out.append({"nickname": str(p.get("nickname") or p.get("name") or "")[:20], "seat": int(_num(p.get("seat"))),
                         "hp": _num(p.get("hp"), -1), "column": _col(p.get("column")), "bot": bool(p.get("bot")),
                         "towerAlive": p.get("towerAlive", True) is not False, "nexusAlive": p.get("nexusAlive", True) is not False})
         return out
@@ -273,6 +280,7 @@ def normalize_state(raw, skills):
                      "column": _col(st.get("nearestIncomingProjectileColumn", st.get("incomingColumn"))) if incoming else None,
                      "eta": round(_num(st.get("nearestIncomingProjectileEta", st.get("incomingEta")), 9), 2) if incoming else None},
         "slots": slots, "lanes": lanes, "opponents": opponents, "units": units, "botPick": picks,
+        "closed": [o["column"] for o in opponents if o["hp"] == 0 and o["column"] is not None],
     }
 
 
@@ -323,7 +331,8 @@ def rules_strategy(st):
     lanes = st["lanes"]
     enemies = [ln["enemies"] for ln in lanes] if lanes else []
     total_enemies = sum(enemies)
-    busiest = max(range(len(enemies)), key=lambda i: enemies[i]) if enemies else 1
+    open_lanes = [i for i in range(len(lanes)) if i not in st["closed"]]       # 탈락한 상대의 레인은 쓸 수 없다
+    busiest = max(open_lanes, key=lambda i: enemies[i]) if open_lanes else 1
     # 노릴 상대: 개인전이면 타워가 무너진 상대 → HP 가 낮은 상대, 1:1 이면 그 상대
     targets = [o for o in st["opponents"] if o["hp"] != 0] or [
         {"nickname": "", "hp": st["opponentHp"], "column": st["opponentColumn"], "towerAlive": st["opponentTowerAlive"],
@@ -377,9 +386,9 @@ def rules_strategy(st):
 
     # 5) 밀기: 우리 유닛이 많은 레인에 분노 · 소환
     if cast is None:
-        weakest = min(range(len(lanes)), key=lambda i: lanes[i]["allies"] - lanes[i]["enemies"]) if lanes else busiest
-        strongest = max(range(len(lanes)), key=lambda i: lanes[i]["allies"] - lanes[i]["enemies"]) if lanes else 1
-        if lanes and lanes[strongest]["allies"] >= 3:
+        weakest = min(open_lanes, key=lambda i: lanes[i]["allies"] - lanes[i]["enemies"]) if open_lanes else busiest
+        strongest = max(open_lanes, key=lambda i: lanes[i]["allies"] - lanes[i]["enemies"]) if open_lanes else 1
+        if open_lanes and lanes[strongest]["allies"] >= 3:
             s = _pick(st, ["H05"])
             if s:
                 cast = {"slot": s["slot"], "spellId": "H05", "column": strongest, "depth": 0.6,
@@ -419,7 +428,7 @@ def rules_strategy(st):
     else:
         summary = f"내 HP {round(hp * 100)}% · 경기 {int(st['time'] // 60)}분 {int(st['time'] % 60)}초 — 레인 정보 없이 판단"
     return {"summary": summary, "threat": threat, "plan": plan[:4], "cast": cast, "move": move,
-            "focus": focus_text, "observations": []}
+            "focus": focus_text, "focusColumn": opp_col if st["players"] > 2 and opp_col is not None else -1, "observations": []}
 
 
 def bot_hint(st, base):
@@ -444,6 +453,7 @@ def rules_orders(st, hint, adv=None, min_n=5):
     """VLM 없이 정하는 작전 — 레인 상황 · 힌트의 한 수 · 학습 결과(이긴 스킬은 먼저, 진 스킬은 아끼기)"""
     lanes = st["lanes"]
     hp = st["selfHp"] / st["selfMaxHp"]
+    open_lanes = [i for i in range(len(lanes)) if i not in st["closed"]]
     enemies = [ln["enemies"] for ln in lanes]
     allies = [ln["allies"] for ln in lanes]
     near = any(ln["enemies"] and (ln.get("nearBase", 0) > 0 or ln["enemyFront"] < 0.25) for ln in lanes)
@@ -455,10 +465,10 @@ def rules_orders(st, hint, adv=None, min_n=5):
     else:
         stance = "balanced"
     lane = -1
-    if lanes and (stance == "defend" or max(enemies) >= 3):
-        lane = max(range(len(lanes)), key=lambda i: (enemies[i], -lanes[i]["enemyFront"]))
-    elif lanes and stance == "push":
-        lane = max(range(len(lanes)), key=lambda i: allies[i] - enemies[i])
+    if open_lanes and (stance == "defend" or max(enemies) >= 3):
+        lane = max(open_lanes, key=lambda i: (enemies[i], -lanes[i]["enemyFront"]))
+    elif open_lanes and stance == "push":
+        lane = max(open_lanes, key=lambda i: allies[i] - enemies[i])
     # 학습: 같은 상황 평균보다 확실히 나은 스킬은 먼저, 이 상황에서도 전체에서도 못한 스킬은 아낀다 (표본 min_n 이상)
     learned = [x for x in (adv or {}).get("all") or [] if x["n"] >= min_n]
     bad = {x["spellId"] for x in learned if x["advantage"] < -0.3 and x["overall"] < 0}
@@ -468,7 +478,8 @@ def rules_orders(st, hint, adv=None, min_n=5):
     for x in learned:
         if x["advantage"] > 0.2 and x["spellId"] not in prefer:
             prefer.append(x["spellId"])
-    return {"lane": lane, "stance": stance, "prefer": prefer[:3], "hold": [h for h in hold if h not in prefer][:3], "seconds": 8}
+    return {"lane": lane, "focusColumn": hint.get("focusColumn", -1), "stance": stance, "prefer": prefer[:3],
+            "hold": [h for h in hold if h not in prefer][:3], "seconds": 8}
 
 
 def make_hint(st, adv=None, min_n=5):
@@ -493,7 +504,12 @@ def clean_orders(o, st, fallback):
         return out[:3]
     lane = int(_num(o.get("lane"), -1))
     prefer = codes(o.get("prefer"))
-    return {"lane": lane if 0 <= lane <= 2 else -1,
+    # 개인전: 살아 있는 상대의 열만 (아니면 힌트의 상대)
+    alive = [p["column"] for p in st["opponents"] if p["hp"] != 0 and p["column"] is not None]
+    focus = int(_num(o.get("focusColumn"), -1))
+    if focus not in alive:
+        focus = fallback.get("focusColumn", -1)
+    return {"lane": lane if 0 <= lane <= 2 and lane not in st["closed"] else -1, "focusColumn": focus if st["players"] > 2 else -1,
             "stance": o.get("stance") if o.get("stance") in STANCES else fallback["stance"],
             "prefer": prefer, "hold": [h for h in codes(o.get("hold")) if h not in prefer],
             "seconds": round(max(3.0, min(15.0, _num(o.get("seconds"), fallback["seconds"]))), 1)}
@@ -661,6 +677,9 @@ def clean_strategy(out, st, hint):
     s = next((x for x in st["slots"] if x["slot"] == slot), None)
     if slot >= 0 and (s is None or not s["ready"]):
         notes.append(f"AI 가 고른 슬롯 {slot} 은 지금 못 써서 규칙 AI 의 수로 바꿨습니다")
+        res["cast"] = dict(hint["cast"])
+    elif s is not None and s["kind"] in NEEDS_AIM and _col(c.get("column"), -1) in st["closed"]:
+        notes.append("AI 가 고른 레인의 상대는 이미 탈락해 규칙 AI 의 수로 바꿨습니다")
         res["cast"] = dict(hint["cast"])
     elif s is None:
         res["cast"] = {"slot": -1, "spellId": "", "column": -1, "depth": 0.5, "reason": str(c.get("reason") or "")[:160]}

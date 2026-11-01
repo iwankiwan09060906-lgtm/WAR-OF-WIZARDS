@@ -21,6 +21,8 @@ namespace SpellboundVR.Combat
 
         public StructureState Nexus(Team team) => _structures[(int)team * 2 + 1];
 
+        public StructureState Structure(Team team, bool isNexus) => isNexus ? Nexus(team) : Tower(team);
+
         public bool TowerAlive(Team team) => Tower(team).Alive;
 
         public bool NexusAlive(Team team) => Nexus(team).Alive;

@@ -257,7 +257,7 @@ namespace SpellboundVR.EditorTools
             // 앵커 스케일과 상관없이 월드 크기를 맞춘다
             var ls = anchor.lossyScale;
             go.transform.localScale = new Vector3(scale / ls.x, scale / ls.y, scale / ls.z);
-            SetStatic(go);
+            // 정적 배칭 금지: 4인 개인전은 구조물을 옮기고 복제한다 (FfaArenaView · ArenaStateView)
 
             var levels = new LOD[lods.Length];
             for (int i = 0; i < lods.Length; i++)
@@ -267,7 +267,7 @@ namespace SpellboundVR.EditorTools
                 child.GetComponent<MeshFilter>().sharedMesh = lods[i];
                 var r = child.GetComponent<MeshRenderer>();
                 r.sharedMaterial = material;
-                SetStatic(child);
+                // 위와 같은 이유로 정적 배칭하지 않는다
                 levels[i] = new LOD(i < StructureLodHeights.Length ? StructureLodHeights[i] : 0.002f, new Renderer[] { r });
             }
             var group = go.AddComponent<LODGroup>();
@@ -404,7 +404,7 @@ namespace SpellboundVR.EditorTools
             b = SpellboundMinionModelBuilder.RendererBounds(go);
             t.position -= new Vector3(b.center.x - commander.position.x, b.min.y, b.center.z - commander.position.z);
             StripColliders(go);
-            SetStatic(go);
+            // 정적 배칭 금지: 4인 개인전은 발판을 복제한다 (FfaArenaView)
 
             // 서는 면 = 가운데 디스크 윗면 (둘레 장식 바위 · 기둥은 더 높다)
             var disc = go.GetComponentsInChildren<Renderer>(true).FirstOrDefault(r => r.name == "disc_lo");

@@ -1,7 +1,7 @@
 // §25.2 OnSpellFx 구독 → VFX 프리팹 재생 (ㅊㄱㅇ: VFX 연결 코드)
 //   · 프리팹 이름: SpellDefinition.GetVfxPrefabName(part) = VFX_{SkillId}_{Name}_{Part}
 //     (Spellbound > Skills > Build Skill Assets 가 에셋 팩으로 만든다 — 실제 크기로 제작, 코드에서 크기를 바꾸지 않는다)
-//   · 방향: 레인 방향(아레나 forward)으로 정렬, 시전자 쪽에서 상대 쪽을 바라보게 (장판 · 띠 · 빔이 레인을 따라 놓인다)
+//   · 방향: 레인 방향으로 정렬, 시전자 쪽에서 상대 쪽을 바라보게 (장판 · 띠 · 빔이 레인을 따라 놓인다, 4인 개인전은 레인마다 다르다)
 //   · 수명: Field · Loop = 스킬 지속 시간, Telegraph = 예고 시간, 그 외 = oneShotMaxLifetime
 //     수명이 끝나면 파티클 방출만 멈추고 남은 입자가 사라진 뒤 풀로 돌려보낸다 (뚝 끊기지 않게)
 //   · H02 레이저 빔(Field · Telegraph)은 길이 1m(+Z)로 제작 → 전장 길이만큼 Z 스케일
@@ -32,6 +32,8 @@ namespace SpellboundVR.Presentation
         public float fadeOutSeconds = 1.2f;
         public int prewarmPerPrefab = 2;
         public int fallbackPrewarm = 24;
+        [Tooltip("피격 연출 최소 간격 (초)")]
+        public float hitFxInterval = 0.08f;
 
         private ClientSession _session;
         private VFXCatalog _catalog;
@@ -41,6 +43,7 @@ namespace SpellboundVR.Presentation
         private readonly List<MeshRenderer> _meshBuffer = new List<MeshRenderer>(8);
         private ObjectPool _fallbackPool;
         private Transform _root;
+        private float _nextHitFx;
 
         public void Initialize(ClientSession session, VFXCatalog catalog)
         {
@@ -49,14 +52,16 @@ namespace SpellboundVR.Presentation
             _root = new GameObject("[VFX Pool]").transform;
             _root.SetParent(transform, false);
             _fallbackPool = new ObjectPool(CreateFallbackFx, _root, fallbackPrewarm, "FallbackFx");
-            _session.Events.OnSpellFx += HandleSpellFx;
+            _session.Events.OnSpellFxLane += HandleSpellFx;
+            _session.Events.OnHitFeedback += HandleHit;
             _session.Events.OnMatchEnded += HandleMatchEnded;
         }
 
         private void OnDestroy()
         {
             if (_session == null) return;
-            _session.Events.OnSpellFx -= HandleSpellFx;
+            _session.Events.OnSpellFxLane -= HandleSpellFx;
+            _session.Events.OnHitFeedback -= HandleHit;
             _session.Events.OnMatchEnded -= HandleMatchEnded;
         }
 
@@ -81,29 +86,65 @@ namespace SpellboundVR.Presentation
             return true;
         }
 
-        private void HandleSpellFx(int spellId, VfxPart part, Vector3 position, Column column)
+        /// <summary>피격 연출 (이펙트 팩 VFX_S00_hit) — 한꺼번에 맞아도 터지지 않게 간격을 둔다</summary>
+        private void HandleHit(int targetId, Vector3 position, int amount, Network.HitResultKind kind)
+        {
+            if (kind != Network.HitResultKind.Damage || amount <= 0 || Time.time < _nextHitFx) return;
+            _nextHitFx = Time.time + hitFxInterval;
+            PlayNamed("VFX_S00_hit", position, Quaternion.identity, 0.6f);
+        }
+
+        /// <summary>레인 방향으로 눕힌 회전 — 1:1 은 위치가 어느 쪽 절반인지, 개인전은 가까운 발판에서 먼 쪽으로</summary>
+        private Quaternion FacingFor(VfxPart part, Vector3 position, int lane)
+        {
+            var arena = _session.Arena;
+            Vector2 uv = arena.ToArena(position);
+            if (arena.IsDuel)
+            {
+                Vector3 facing = arena.Forward * (uv.y <= arena.FieldLength * 0.5f ? 1f : -1f);
+                if (part != VfxPart.Cast && part != VfxPart.Projectile) facing = arena.Forward;
+                return Quaternion.LookRotation(facing, Vector3.up);
+            }
+            if (part == VfxPart.Cast)
+            {
+                // 시전 연출의 column 은 시전자가 선 칸이라 레인을 모른다 — 가까운 발판이 바라보는 쪽
+                Team nearest = Team.Home;
+                float best = float.MaxValue;
+                for (int t = 0; t < arena.TeamCount; t++)
+                {
+                    float d = (arena.BasePosition((Team)t) - uv).sqrMagnitude;
+                    if (d < best)
+                    {
+                        best = d;
+                        nearest = (Team)t;
+                    }
+                }
+                return arena.FacingRotation(nearest);
+            }
+            var frame = arena.GetLane(Team.Home, lane);
+            Vector2 dir = frame.Along(uv) <= frame.Length * 0.5f ? frame.Dir : -frame.Dir;
+            return Quaternion.LookRotation(arena.ToWorldDirection(dir), Vector3.up);
+        }
+
+        private void HandleSpellFx(int spellId, VfxPart part, Vector3 position, int lane)
         {
             var def = _session.Catalog.Get(spellId);
             Color color = def != null ? def.ThemeColor : Color.white;
             color.a = 0.8f;
             var arena = _session.Arena;
-
-            // 레인 방향 정렬: 위치가 Home 쪽 절반이면 +forward, Away 쪽이면 -forward (시전자 → 상대)
-            Vector2 uv = arena.ToArena(position);
-            Vector3 facing = arena.Forward * (uv.y <= arena.FieldLength * 0.5f ? 1f : -1f);
-            if (part != VfxPart.Cast && part != VfxPart.Projectile) facing = arena.Forward;
-            Quaternion rotation = Quaternion.LookRotation(facing, Vector3.up);
+            Quaternion rotation = FacingFor(part, position, lane);
 
             if (def != null && _catalog != null && _catalog.TryGet(def.GetVfxPrefabName(part), out var prefab))
             {
                 var inst = GetPool(prefab).Get(position, rotation);
                 Vector3 scale = prefab.transform.localScale;
                 if (spellId == SpellIds.H02_Laser && (part == VfxPart.Field || part == VfxPart.Telegraph))
-                    scale = new Vector3(scale.x, scale.y, scale.z * arena.FieldLength);
+                    scale = new Vector3(scale.x, scale.y, scale.z * arena.GetLane(Team.Home, lane).Length);
                 inst.transform.localScale = scale;
                 RestartParticles(inst);
                 bool loop = part == VfxPart.Loop || part == VfxPart.Field;
-                _timed.Add(new TimedFx { Instance = inst, ReleaseTime = Time.time + Lifetime(def, part), IsLoop = loop, SpellId = spellId });
+                float life = loop ? Lifetime(def, part) : Mathf.Min(Lifetime(def, part), PlayLength(inst));
+                _timed.Add(new TimedFx { Instance = inst, ReleaseTime = Time.time + life, IsLoop = loop, SpellId = spellId });
                 return;
             }
 
@@ -111,6 +152,16 @@ namespace SpellboundVR.Presentation
                 ? def.Radius
                 : 0f;
             PlayFallback(def, part, position, color, radius);
+        }
+
+        /// <summary>이펙트 팩의 일회성 연출은 Looping 인 것이 많다 — 한 바퀴만 돌고 멈추도록 파티클 길이까지만</summary>
+        private float PlayLength(GameObject inst)
+        {
+            inst.GetComponentsInChildren(true, _psBuffer);
+            float length = 0f;
+            for (int i = 0; i < _psBuffer.Count; i++)
+                if (_psBuffer[i].main.loop) length = Mathf.Max(length, _psBuffer[i].main.duration);
+            return length > 0f ? length : oneShotMaxLifetime;
         }
 
         private float Lifetime(SpellDefinition def, VfxPart part)

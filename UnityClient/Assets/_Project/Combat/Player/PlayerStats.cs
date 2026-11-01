@@ -39,6 +39,12 @@ namespace SpellboundVR.Combat
         public float BlindUntil = -1f;
         /// <summary>S10 집중 — 다음 스킬에 적용할 배율 (1 = 없음)</summary>
         public float PendingFocus = 1f;
+        /// <summary>이 플레이어가 다른 플레이어에게 입힌 피해 합 (개인전 결과 화면)</summary>
+        public float DamageDealt;
+        /// <summary>4인 개인전: 탈락했는지 (구조물 · 유닛이 사라지고 경기는 계속)</summary>
+        public bool Eliminated;
+        /// <summary>4인 개인전 순위 1 ~ 4 (0 = 아직 결정 안 됨)</summary>
+        public int Place;
 
         public PlayerState(Team team)
         {
@@ -62,6 +68,9 @@ namespace SpellboundVR.Combat
             DeathPending = false;
             BlindUntil = -1f;
             PendingFocus = 1f;
+            Eliminated = false;
+            Place = 0;
+            DamageDealt = 0f;
         }
 
         public bool HasFocus => PendingFocus > 1f;

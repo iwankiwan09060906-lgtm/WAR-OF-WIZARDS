@@ -91,6 +91,25 @@ namespace SpellboundVR.Core
         [Tooltip("설치물 위치: 타워(없으면 넥서스) 앞 이 거리 (m)")]
         public float PlacementOffset = 3f;
 
+        [Header("4인 개인전 — 세 상대에게 힘이 나뉘므로 1:1 보다 빠르게 (BotLab ffa 로 맞춘 값)")]
+        [Tooltip("타워 · 넥서스 최대 HP 배율")]
+        public float FfaStructureHpScale = 0.5f;
+        [Tooltip("강화 단계 간격 (초) — 1:1 의 ScalingInterval 대신")]
+        public float FfaScalingInterval = 120f;
+        [Tooltip("타워가 살아 있어도 상대 스킬 피해가 이만큼 들어온다 (1:1 은 0.2) — 플레이어끼리 직접 때리는 재미")]
+        public float FfaTowerAliveSkillDamageRatio = 0.4f;
+
+        [Header("마나 폭풍 (4인 개인전 후반) — 웨이브끼리 상쇄돼도 경기가 끝나도록 구조물 · 플레이어를 깎는다")]
+        [Tooltip("경기 시작 후 폭풍이 시작되는 시각 (초)")]
+        public float StormStartSeconds = 210f;
+        public float StormInterval = 5f;
+        [Tooltip("간격마다 타워(무너지면 넥서스)가 잃는 HP")]
+        public float StormStructureDamage = 60f;
+        [Tooltip("간격마다 플레이어가 잃는 HP의 시작값")]
+        public float StormPlayerDamage = 6f;
+        [Tooltip("폭풍이 칠 때마다 플레이어 피해가 이만큼 늘어난다")]
+        public float StormPlayerRamp = 1f;
+
         [Header("돌파 (§11.1)")]
         [Tooltip("돌파 지점: 상대 Commander 발판 앞 거리 (m)")]
         public float BreachPointOffset = 1.5f;
@@ -106,6 +125,15 @@ namespace SpellboundVR.Core
             float baseCd = baseOverride > 0f ? baseOverride : GetBaseCooldown(tier);
             float ratio = 1f - ScalingCooldownReductionPerStage * Mathf.Max(0, scalingStage);
             return baseCd * Mathf.Max(MinCooldownRatio, ratio);
+        }
+
+        /// <summary>4인 개인전 값으로 바꾼다 — 에셋 원본이 아니라 사본에 부른다 (GameBootstrap · BotLab)</summary>
+        public void ApplyFfaRules()
+        {
+            TowerMaxHp *= FfaStructureHpScale;
+            NexusMaxHp *= FfaStructureHpScale;
+            ScalingInterval = FfaScalingInterval;
+            TowerAliveSkillDamageRatio = FfaTowerAliveSkillDamageRatio;
         }
 
         public static MatchRuleConfig CreateDefault()

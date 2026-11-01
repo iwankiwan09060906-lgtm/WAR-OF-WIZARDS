@@ -4,14 +4,59 @@
 //   u = Home 플레이어 기준 오른쪽(+) 방향 거리 (m). 열 중심 = (col - 1) * ColumnSpacing
 //   v = Home 발판 → Away 발판 방향 거리 (m). Home 발판 v = 0, Away 발판 v = FieldLength
 // 깊이(Depth 0~1)는 "시전자 자기 진영 → 상대 진영" 방향 정규화 거리다.
+//
+// 경기 종류 (ArenaMode)
+//   Duel : 1:1 — Home · Away 가 마주 보고 평행한 레인 3개를 같이 쓴다. 월드 레인 번호 = 월드 열 (0 ~ 2)
+//   Ffa4 : 4인 개인전 — 발판 4개가 마름모로 놓이고, 모든 쌍이 레인 1개로 이어진다 (완전 그래프, 레인 6개).
+//          각자의 왼쪽 · 가운데 · 오른쪽 열 = 왼쪽 이웃 · 맞은편 · 오른쪽 이웃으로 가는 레인.
+//              1 (Home, v = 0)
+//        4 (Seat4)    2 (Seat2)     레인 0: 1-2 · 1: 2-3 · 2: 3-4 · 3: 4-1 · 4: 1-3 · 5: 2-4
+//              3 (Away, v = FieldLength)
+//
+// 레인 위의 위치 계산은 LaneFrame 으로 한다 (시전자 발판에서 상대 쪽으로 along m, 시전자 오른쪽으로 lateral m).
 
 using SpellboundVR.Contracts;
+using SpellboundVR.Core;
 using UnityEngine;
 
 namespace SpellboundVR.Arena
 {
+    public enum ArenaMode : byte
+    {
+        Duel = 0,
+        Ffa4 = 1,
+    }
+
+    /// <summary>시전자 시점의 레인 좌표계</summary>
+    public readonly struct LaneFrame
+    {
+        public readonly Vector2 Origin;
+        public readonly Vector2 Dir;
+        public readonly Vector2 Right;
+        public readonly float Length;
+
+        public LaneFrame(Vector2 origin, Vector2 dir, float length)
+        {
+            Origin = origin;
+            Dir = dir;
+            Right = new Vector2(dir.y, -dir.x);
+            Length = length;
+        }
+
+        public Vector2 Point(float along, float lateral = 0f) => Origin + Dir * along + Right * lateral;
+
+        public float Along(Vector2 p) => Vector2.Dot(p - Origin, Dir);
+
+        public float Lateral(Vector2 p) => Vector2.Dot(p - Origin, Right);
+
+        public float Depth01(Vector2 p) => Mathf.Clamp01(Along(p) / Length);
+    }
+
     public sealed class ArenaGeometry
     {
+        /// <summary>4인 개인전 레인 번호 → 양 끝 자리 (시계 방향 자리 순서)</summary>
+        private static readonly int[,] s_ffaLanes = { { 0, 1 }, { 1, 2 }, { 2, 3 }, { 3, 0 }, { 0, 2 }, { 1, 3 } };
+
         public Vector3 HomeBase { get; }
         public Vector3 Forward { get; }
         public Vector3 Right { get; }
@@ -21,13 +66,21 @@ namespace SpellboundVR.Arena
         public float NexusDepth { get; }
         public float TowerDepth { get; }
         public float SpawnDepth { get; }
+        public ArenaMode Mode { get; }
+
+        public bool IsDuel => Mode == ArenaMode.Duel;
+        /// <summary>이 경기의 진영 수 — 진영 번호 0 ~ TeamCount-1 만 쓴다</summary>
+        public int TeamCount => IsDuel ? 2 : 4;
+        public int LaneCount => IsDuel ? 3 : 6;
 
         public float LaneHalfWidth => ColumnSpacing * 0.5f;
-        public float MinU => -ColumnSpacing * 1.5f;
-        public float MaxU => ColumnSpacing * 1.5f;
+        public float MinU => IsDuel ? -ColumnSpacing * 1.5f : -FieldLength * 0.5f;
+        public float MaxU => IsDuel ? ColumnSpacing * 1.5f : FieldLength * 0.5f;
+        /// <summary>3열 폭 띠 장판의 반폭 (S02 독 장판 · H05 분노)</summary>
+        public float BandHalfWidth => ColumnSpacing * 1.5f;
 
         public ArenaGeometry(Vector3 homeBase, Vector3 forward, float fieldLength, float columnSpacing,
-                             float nexusDepth, float towerDepth, float spawnDepth)
+                             float nexusDepth, float towerDepth, float spawnDepth, ArenaMode mode = ArenaMode.Duel)
         {
             forward.y = 0f;
             if (forward.sqrMagnitude < 1e-6f) forward = Vector3.forward;
@@ -40,6 +93,7 @@ namespace SpellboundVR.Arena
             NexusDepth = Mathf.Clamp(nexusDepth, 0.5f, FieldLength * 0.5f);
             TowerDepth = Mathf.Clamp(towerDepth, NexusDepth, FieldLength * 0.5f);
             SpawnDepth = Mathf.Clamp(spawnDepth, 0.5f, FieldLength * 0.5f);
+            Mode = mode;
         }
 
         public static ArenaGeometry CreateDefault()
@@ -55,6 +109,9 @@ namespace SpellboundVR.Arena
         }
 
         public Vector3 ToWorld(Vector2 uv, float height = 0f) => ToWorld(uv.x, uv.y, height);
+
+        /// <summary>아레나 평면 방향 → 월드 방향</summary>
+        public Vector3 ToWorldDirection(Vector2 d) => Right * d.x + Forward * d.y;
 
         public Vector2 ToArena(Vector3 world)
         {
@@ -73,48 +130,174 @@ namespace SpellboundVR.Arena
             return Mathf.Clamp(c, 0, 2);
         }
 
-        public float BaseV(Team team) => team == Team.Home ? 0f : FieldLength;
+        // ── 자리 (발판) ───────────────────────────────────────
 
-        /// <summary>그 진영의 "앞쪽"(상대 진영 방향) v 부호</summary>
-        public float ForwardSign(Team team) => team == Team.Home ? 1f : -1f;
+        public bool HasTeam(Team team) => (int)team < TeamCount;
 
-        public float DepthToV(Team caster, float depth01)
+        /// <summary>전장 중심 (4인 개인전 대각선 레인이 만나는 곳)</summary>
+        public Vector2 Center => new Vector2(0f, FieldLength * 0.5f);
+
+        /// <summary>그 진영 발판 중앙</summary>
+        public Vector2 BasePosition(Team team)
         {
-            return BaseV(caster) + ForwardSign(caster) * Mathf.Clamp01(depth01) * FieldLength;
+            switch (team)
+            {
+                case Team.Home: return Vector2.zero;
+                case Team.Away: return new Vector2(0f, FieldLength);
+                case Team.Seat2: return new Vector2(-FieldLength * 0.5f, FieldLength * 0.5f);
+                default: return new Vector2(FieldLength * 0.5f, FieldLength * 0.5f);
+            }
         }
 
-        public float VToDepth(Team caster, float v)
+        /// <summary>그 진영이 바라보는 방향 (전장 중심 쪽)</summary>
+        public Vector2 SeatForward(Team team)
         {
-            return Mathf.Clamp01((v - BaseV(caster)) * ForwardSign(caster) / FieldLength);
+            switch (team)
+            {
+                case Team.Home: return Vector2.up;
+                case Team.Away: return Vector2.down;
+                case Team.Seat2: return Vector2.right;
+                default: return Vector2.left;
+            }
+        }
+
+        public Vector2 SeatRight(Team team)
+        {
+            Vector2 f = SeatForward(team);
+            return new Vector2(f.y, -f.x);
+        }
+
+        /// <summary>월드 열 번호가 커지는 방향 — Home · Away 는 u, 개인전의 2 · 4번 발판은 자기 오른쪽</summary>
+        public Vector2 ColumnAxis(Team team) => team == Team.Home || team == Team.Away ? Vector2.right : SeatRight(team);
+
+        // ── 레인 ──────────────────────────────────────────────
+
+        /// <summary>시전자 시점 열 → 월드 레인 번호</summary>
+        public int ResolveLane(Team caster, Column local)
+        {
+            if (IsDuel) return TeamUtil.ToWorldColumn(caster, local);
+            return LaneBetween(caster, ColumnTarget(caster, local));
+        }
+
+        /// <summary>내 열이 가리키는 상대 (1:1 은 항상 상대, 개인전은 왼쪽 · 맞은편 · 오른쪽)</summary>
+        public Team ColumnTarget(Team caster, Column local)
+        {
+            if (IsDuel) return TeamUtil.Opponent(caster);
+            return TeamUtil.TeamAtClock(TeamUtil.ClockIndex(caster) + (int)local + 1);
+        }
+
+        /// <summary>두 진영을 잇는 레인 (4인 개인전)</summary>
+        public int LaneBetween(Team a, Team b)
+        {
+            int ca = TeamUtil.ClockIndex(a), cb = TeamUtil.ClockIndex(b);
+            for (int lane = 0; lane < s_ffaLanes.GetLength(0); lane++)
+            {
+                int x = s_ffaLanes[lane, 0], y = s_ffaLanes[lane, 1];
+                if ((x == ca && y == cb) || (x == cb && y == ca)) return lane;
+            }
+            return 0;
+        }
+
+        /// <summary>레인을 따라 caster 가 향하는 상대. caster 가 그 레인 끝이 아니면 레인의 첫 끝</summary>
+        public Team LaneTarget(Team caster, int lane)
+        {
+            if (IsDuel) return TeamUtil.Opponent(caster);
+            lane = Mathf.Clamp(lane, 0, LaneCount - 1);
+            int c = TeamUtil.ClockIndex(caster);
+            return TeamUtil.TeamAtClock(s_ffaLanes[lane, 0] == c ? s_ffaLanes[lane, 1] : s_ffaLanes[lane, 0]);
+        }
+
+        public bool TouchesLane(Team team, int lane)
+        {
+            if (IsDuel) return true;
+            lane = Mathf.Clamp(lane, 0, LaneCount - 1);
+            int c = TeamUtil.ClockIndex(team);
+            return s_ffaLanes[lane, 0] == c || s_ffaLanes[lane, 1] == c;
+        }
+
+        /// <summary>레인이 viewer 시점 몇 열인가. 4인 개인전에서 viewer 와 이어지지 않은 레인이면 false</summary>
+        public bool TryLocalColumn(Team viewer, int lane, out Column local)
+        {
+            local = Column.Center;
+            if (IsDuel)
+            {
+                local = TeamUtil.ToLocalColumn(viewer, lane);
+                return true;
+            }
+            if (!TouchesLane(viewer, lane)) return false;
+            int diff = (TeamUtil.ClockIndex(LaneTarget(viewer, lane)) - TeamUtil.ClockIndex(viewer) + 4) % 4;
+            local = (Column)(diff - 1);
+            return true;
+        }
+
+        /// <summary>시전자 시점 레인 좌표계 — 시전자 발판 쪽이 0, 상대 발판 쪽이 Length</summary>
+        public LaneFrame GetLane(Team caster, int lane)
+        {
+            if (IsDuel)
+            {
+                Vector2 dir = caster == Team.Away ? Vector2.down : Vector2.up;
+                float baseV = caster == Team.Away ? FieldLength : 0f;
+                return new LaneFrame(new Vector2(ColumnU(lane), baseV), dir, FieldLength);
+            }
+            Team from = TouchesLane(caster, lane) ? caster : LaneTarget(caster, lane);
+            Vector2 a = BasePosition(from);
+            Vector2 d = BasePosition(LaneTarget(from, lane)) - a;
+            float length = d.magnitude;
+            return new LaneFrame(a, d / length, length);
+        }
+
+        /// <summary>3열 폭 띠 장판의 좌표계 — 1:1 은 전장 가운데 레인, 개인전은 그 레인</summary>
+        public LaneFrame BandFrame(Team caster, int lane) => GetLane(caster, IsDuel ? 1 : lane);
+
+        /// <summary>조준 지점(지면) → 레인 · 깊이. 1:1 은 열 · v, 개인전은 발판에서 그 지점 방향에 가장 가까운 레인</summary>
+        public void ResolveAim(Team team, Vector2 point, out int lane, out Column local, out float depth01)
+        {
+            if (IsDuel)
+            {
+                lane = NearestWorldColumn(point.x);
+                local = TeamUtil.ToLocalColumn(team, lane);
+                depth01 = GetLane(team, lane).Depth01(point);
+                return;
+            }
+            Vector2 to = (point - BasePosition(team)).normalized;
+            float best = float.MinValue;
+            lane = 0;
+            local = Column.Center;
+            for (int c = 0; c < TeamUtil.ColumnCount; c++)
+            {
+                int l = ResolveLane(team, (Column)c);
+                float dot = Vector2.Dot(to, GetLane(team, l).Dir);
+                if (dot > best)
+                {
+                    best = dot;
+                    lane = l;
+                    local = (Column)c;
+                }
+            }
+            depth01 = GetLane(team, lane).Depth01(point);
         }
 
         // ── 주요 지점 ─────────────────────────────────────────
 
         public Vector2 PlayerPosition(Team team, int worldColumn)
         {
-            return new Vector2(ColumnU(worldColumn), BaseV(team));
+            return BasePosition(team) + ColumnAxis(team) * ((Mathf.Clamp(worldColumn, 0, 2) - 1) * ColumnSpacing);
         }
 
         public Vector2 StructurePosition(Team team, bool isNexus)
         {
             float depth = isNexus ? NexusDepth : TowerDepth;
-            return new Vector2(0f, BaseV(team) + ForwardSign(team) * depth);
+            return BasePosition(team) + SeatForward(team) * depth;
         }
 
-        public Vector2 SpawnPosition(Team team, int worldColumn)
-        {
-            return new Vector2(ColumnU(worldColumn), BaseV(team) + ForwardSign(team) * SpawnDepth);
-        }
+        public Vector2 SpawnPosition(Team team, int lane) => GetLane(team, lane).Point(SpawnDepth);
 
-        /// <summary>§11.1 돌파 지점 — 대상 진영 Commander 발판 앞</summary>
-        public Vector2 BreachPoint(Team targetTeam, int worldColumn, float offset)
-        {
-            return new Vector2(ColumnU(worldColumn), BaseV(targetTeam) + ForwardSign(targetTeam) * offset);
-        }
+        /// <summary>§11.1 돌파 지점 — 대상 진영 Commander 발판 앞 (그 레인 위)</summary>
+        public Vector2 BreachPoint(Team targetTeam, int lane, float offset) => GetLane(targetTeam, lane).Point(offset);
 
         public Quaternion FacingRotation(Team team)
         {
-            return Quaternion.LookRotation(Forward * ForwardSign(team), Vector3.up);
+            return Quaternion.LookRotation(ToWorldDirection(SeatForward(team)), Vector3.up);
         }
 
         public Vector2 ClampToField(Vector2 uv)

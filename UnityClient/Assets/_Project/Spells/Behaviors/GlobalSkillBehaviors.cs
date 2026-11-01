@@ -9,7 +9,6 @@
 using System.Collections.Generic;
 using SpellboundVR.Arena;
 using SpellboundVR.Contracts;
-using SpellboundVR.Core;
 using SpellboundVR.Spells.Executor;
 using UnityEngine;
 
@@ -24,24 +23,33 @@ namespace SpellboundVR.Spells.Behaviors
 
         public static void Apply(SpellDefinition def, ISpellWorld world, Team casterTeam, float focus)
         {
-            Team enemy = TeamUtil.Opponent(casterTeam);
             float duration = def.EffectDuration * SpellDamage.DurationFocus(def, focus);
             float dmgFocus = SpellDamage.DamageFocus(def, focus);
             var arena = world.Arena;
 
             world.PublishFx(def.SpellId, VfxPart.Cast, world.GetPlayerPosition(casterTeam), 1.5f, world.GetPlayerWorldColumn(casterTeam));
             for (int c = 0; c < 3; c++)
-                for (int r = 0; r < FieldRows.Length; r++)
-                    world.PublishFx(def.SpellId, VfxPart.Field, new Vector2(arena.ColumnU(c), arena.FieldLength * FieldRows[r]), 0f, c);
-
-            world.CollectTeamUnits(enemy, true, s_buffer);
-            for (int i = 0; i < s_buffer.Count; i++)
             {
-                int id = s_buffer[i];
-                world.FreezeUnit(id, duration);
-                if (def.BaseDamage > 0f) SpellDamage.HitUnit(world, def.SpellId, casterTeam, id, def.BaseDamage, dmgFocus);
+                int lane = arena.ResolveLane(casterTeam, (Column)c);
+                var frame = arena.GetLane(casterTeam, lane);
+                for (int r = 0; r < FieldRows.Length; r++)
+                    world.PublishFx(def.SpellId, VfxPart.Field, frame.Point(frame.Length * FieldRows[r]), 0f, lane);
             }
-            world.FreezeTower(enemy, duration);
+
+            // 개인전: 나를 뺀 모두의 유닛 · 타워
+            for (int t = 0; t < arena.TeamCount; t++)
+            {
+                var enemy = (Team)t;
+                if (enemy == casterTeam) continue;
+                world.CollectTeamUnits(enemy, true, s_buffer);
+                for (int i = 0; i < s_buffer.Count; i++)
+                {
+                    int id = s_buffer[i];
+                    world.FreezeUnit(id, duration);
+                    if (def.BaseDamage > 0f) SpellDamage.HitUnit(world, def.SpellId, casterTeam, id, def.BaseDamage, dmgFocus);
+                }
+                world.FreezeTower(enemy, duration);
+            }
         }
     }
 
@@ -62,16 +70,16 @@ namespace SpellboundVR.Spells.Behaviors
 
         public static void Apply(SpellDefinition def, ISpellWorld world, Team casterTeam, int worldColumn, float focus)
         {
-            Team enemy = TeamUtil.Opponent(casterTeam);
+            Team enemy = world.GetLaneTarget(casterTeam, worldColumn);
             float dmgFocus = SpellDamage.DamageFocus(def, focus);
             world.PublishFx(def.SpellId, VfxPart.Telegraph, world.GetPlayerPosition(casterTeam), 1.5f, world.GetPlayerWorldColumn(casterTeam));
 
             // ① 조준한 레인에 상대 플레이어가 있으면 플레이어에게서
-            if (world.IsPlayerAlive(enemy) && world.GetPlayerWorldColumn(enemy) == worldColumn)
+            if (world.IsPlayerAlive(enemy) && world.GetPlayerWorldColumn(enemy) == world.GetAimColumn(casterTeam, worldColumn))
             {
                 Vector2 enemyPos = world.GetPlayerPosition(enemy);
                 world.PublishFx(def.SpellId, VfxPart.Impact, enemyPos, 1.4f, worldColumn);
-                float applied = SpellDamage.HitEnemyPlayer(world, def.SpellId, casterTeam, def.BaseDamage, dmgFocus);
+                float applied = SpellDamage.HitEnemyPlayer(world, def.SpellId, casterTeam, enemy, def.BaseDamage, dmgFocus);
                 if (applied > 0f)
                 {
                     SendLife(def, world, casterTeam, enemyPos, 1.4f, worldColumn, applied * def.EffectRatio);
@@ -138,8 +146,9 @@ namespace SpellboundVR.Spells.Behaviors
         private readonly SpellDefinition _def;
         private readonly Team _team;
         private readonly float _duration;
-        private readonly float _vMin;
-        private readonly float _vMax;
+        private readonly LaneFrame _band;
+        private readonly float _min;
+        private readonly float _max;
         private float _elapsed;
         private float _refresh;
 
@@ -150,16 +159,18 @@ namespace SpellboundVR.Spells.Behaviors
             return gap > 0.5f ? gap * 0.5f : Mathf.Max(0.5f, def.FieldHalfDepth);
         }
 
-        public RageRoutine(SpellDefinition def, ISpellWorld world, Team team, Vector2 center, float focus)
+        public RageRoutine(SpellDefinition def, ISpellWorld world, Team team, Vector2 center, int worldColumn, float focus)
         {
             _def = def;
             _team = team;
             _duration = def.EffectDuration * SpellDamage.DurationFocus(def, focus);
             float half = HalfDepth(def, world.Arena);
-            _vMin = center.y - half;
-            _vMax = center.y + half;
+            _band = world.Arena.BandFrame(team, worldColumn);
+            float along = _band.Along(center);
+            _min = along - half;
+            _max = along + half;
             world.PublishFx(def.SpellId, VfxPart.Cast, world.GetPlayerPosition(team), 1.5f, world.GetPlayerWorldColumn(team));
-            world.PublishFx(def.SpellId, VfxPart.Field, new Vector2(0f, center.y), 0.02f, 1); // 3열 폭 장판 → 전장 가운데
+            world.PublishFx(def.SpellId, VfxPart.Field, _band.Point(along), 0.02f, world.Arena.IsDuel ? 1 : worldColumn); // 3열 폭 장판
         }
 
         public bool Tick(float deltaTime, ISpellWorld world)
@@ -176,7 +187,8 @@ namespace SpellboundVR.Spells.Behaviors
                     for (int i = 0; i < s_buffer.Count; i++)
                     {
                         if (!world.TryGetUnitInfo(s_buffer[i], out Vector2 pos, out _, out _)) continue;
-                        if (pos.y < _vMin || pos.y > _vMax) continue;
+                        float along = _band.Along(pos);
+                        if (along < _min || along > _max || Mathf.Abs(_band.Lateral(pos)) > world.Arena.BandHalfWidth) continue;
                         // 장판에 들어온 유닛은 장판이 끝날 때까지 강화 (나가도 유지)
                         world.RageUnit(s_buffer[i], remaining, _def.AttackMultiplier, _def.AttackSpeedMultiplier,
                                        _def.MoveSpeedMultiplier, _def.IncomingDamageMultiplier);

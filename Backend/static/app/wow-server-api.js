@@ -210,7 +210,7 @@
       await request('POST', '/api/mails/invite', { friendId: friendId, roomCode: roomCode });
     },
 
-    // ── 랭킹전 매칭 (서버 대기열 · 15초 넘으면 봇) — players 2 = 1:1, 3 · 4 = 개인전 (빈자리는 봇), 없으면 서버 기본(4인) ──
+    // ── 랭킹전 매칭 (서버 대기열 · 30초 넘으면 빈자리는 AI) — players 2 = 1:1, 3 · 4 = 개인전 (빈자리는 봇), 없으면 서버 기본(4인) ──
     async joinQueue(players) { return request('POST', '/api/matchmaking/queue', { players: players || undefined }); },
     async queueStatus() { return request('GET', '/api/matchmaking/status'); },
     async leaveQueue() { return request('DELETE', '/api/matchmaking/queue'); },

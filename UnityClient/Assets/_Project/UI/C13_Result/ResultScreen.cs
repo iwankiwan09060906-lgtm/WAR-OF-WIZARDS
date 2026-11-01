@@ -56,6 +56,7 @@ namespace SpellboundVR.UI
             head.GetComponent<VerticalLayoutGroup>().childForceExpandWidth = false;
             UiKit.Kicker(head, "Battle Complete", UiTheme.PurpleLight, TextAnchor.MiddleCenter, 16);
             string word = win ? "VICTORY" : lose ? "DEFEATED" : m.Result == MatchResult.Void ? "VOID" : "DRAW";
+            if (m.Place > 1) word = m.Place + PlaceSuffix(m.Place) + " PLACE";
             var big = UiKit.Display(head, word, 150, lose ? UiTheme.Enemy : UiTheme.Text, TextAnchor.MiddleCenter, true);
             UiKit.Size(big, -1, 170);
             if (win) UiGradient.Apply(big, UiTheme.PurpleLight, UiTheme.Cyan, UiTheme.PurpleLight, 0.35f);
@@ -73,6 +74,7 @@ namespace SpellboundVR.UI
             Stat(stats, m.Casts.ToString(), "시전 횟수", UiTheme.PurpleLight);
             Stat(stats, m.DamageTaken.ToString(), "받은 피해", UiTheme.CyanLight);
             Stat(stats, MetaState.Mmss(m.DurationSec), "플레이 시간", lose ? UiTheme.Hex(0xf87171) : UiTheme.Green);
+            if (m.Place > 0) Stat(stats, m.Place + " / " + Mathf.Max(m.Players, 4), "순위", UiTheme.Amber);
 
             var actions = UiKit.HBox(col, 24, 0, TextAnchor.MiddleCenter, "Actions");
             actions.GetComponent<HorizontalLayoutGroup>().childForceExpandWidth = false;
@@ -87,6 +89,8 @@ namespace SpellboundVR.UI
             UiKit.Button(actions, "로비로", BtnStyle.Info, () => MetaFlow.Instance.ReturnTo(MetaScreenId.Lobby), 260, 76, UiTheme.FontTitle - 2);
             UiKit.Button(actions, "게임 종료", BtnStyle.Ghost, () => MetaFlow.Instance.QuitGame(), 200, 76, UiTheme.FontBody);
         }
+
+        private static string PlaceSuffix(int place) => place == 2 ? "ND" : place == 3 ? "RD" : "TH";
 
         /// <summary>모서리 강조 상자 — 랭킹전은 레이팅 변화, 나머지는 전적 저장 상태</summary>
         private static void BuildRatingBox(Transform parent, MatchRecord m, Color accent, bool lose)

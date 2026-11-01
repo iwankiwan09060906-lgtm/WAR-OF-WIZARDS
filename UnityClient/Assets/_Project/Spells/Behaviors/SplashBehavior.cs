@@ -31,8 +31,13 @@ namespace SpellboundVR.Spells.Behaviors
             for (int i = 0; i < s_buffer.Count; i++)
                 SpellDamage.HitUnit(world, spellId, casterTeam, s_buffer[i], damage, focus);
 
-            if (SpellDamage.EnemyPlayerInRadius(world, casterTeam, center, radius))
-                SpellDamage.HitEnemyPlayer(world, spellId, casterTeam, damage, focus);
+            // 개인전: 폭발 범위 안의 상대는 누구든 (옆 레인으로 빗맞은 스킬도 맞는다)
+            for (int t = 0; t < world.Arena.TeamCount; t++)
+            {
+                var enemy = (Team)t;
+                if (enemy != casterTeam && SpellDamage.EnemyPlayerInRadius(world, enemy, center, radius))
+                    SpellDamage.HitEnemyPlayer(world, spellId, casterTeam, enemy, damage, focus);
+            }
         }
     }
 

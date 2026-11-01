@@ -21,6 +21,9 @@ internal static class Program
         Console.OutputEncoding = System.Text.Encoding.UTF8;
         if (args.Length > 0 && args[0] == "diag") return Diag(args.Length > 1 ? int.Parse(args[1]) : 200, args.Length > 2 ? float.Parse(args[2]) : 6f);
         if (args.Length > 0 && args[0] == "tune") return Tune(args.Length > 1 ? int.Parse(args[1]) : 400, args.Length > 2 ? int.Parse(args[2]) : 3);
+        if (args.Length > 0 && args[0] == "ffa") return Ffa.Measure(args.Length > 1 ? int.Parse(args[1]) : 200, args.Length > 2 ? float.Parse(args[2]) : 900f);
+        if (args.Length > 0 && args[0] == "ffatest") return Ffa.Test();
+        if (args.Length > 0 && args[0] == "ffatrace") return Ffa.Trace(args.Length > 1 ? uint.Parse(args[1]) : 1u, args.Length > 2 ? float.Parse(args[2]) : 900f);
         if (args.Length > 0 && args[0] == "vlm")
             return Vlm(args.Length > 1 ? int.Parse(args[1]) : 10, args.Length > 2 ? args[2] : "http://127.0.0.1:8080",
                        args.Length > 3 ? args[3] : "wow-server-secret-key-2026");

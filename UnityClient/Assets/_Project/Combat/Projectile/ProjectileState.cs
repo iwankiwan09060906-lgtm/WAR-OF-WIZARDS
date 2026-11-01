@@ -12,7 +12,12 @@ namespace SpellboundVR.Combat
         public int Id;
         public int SpellId;
         public Team Team;
+        /// <summary>날아가는 레인 (Impact 표시 · 1:1 은 조준한 열과 같다)</summary>
         public int WorldColumn;
+        /// <summary>플레이어 대상일 때 그 상대</summary>
+        public Team TargetTeam;
+        /// <summary>플레이어 대상일 때 상대 발판의 어느 칸(월드 열)으로 가나 — 도착 때 그 칸에 없으면 회피</summary>
+        public int AimColumn;
         public Vector2 Position;
         public float Height;
         public float Speed;

@@ -79,6 +79,11 @@ namespace SpellboundVR.UI
 
             var buttons = UiKit.VBox(col, 16, 0, TextAnchor.MiddleCenter, "Buttons");
             buttons.GetComponent<VerticalLayoutGroup>().childForceExpandWidth = false;
+            // 경기 인원: 랭킹전 · 친선전 · 봇 연습전이 모두 따른다
+            var players = UiKit.HBox(buttons, 12, 0, TextAnchor.MiddleCenter, "Players");
+            players.GetComponent<HorizontalLayoutGroup>().childForceExpandWidth = false;
+            PlayerChoice(players, "4인 개인전", 4);
+            PlayerChoice(players, "1:1 대전", 2);
             // 대전 종류를 고르면 덱 선택(C09 대전 준비)을 거쳐 시작한다
             var ranked = UiKit.Button(buttons, "랭킹전 매칭", BtnStyle.Play,
                 () => DeckBuilderScreen.OpenForBattle(Ui, "랭킹전", () => Ui.Go(MetaScreenId.Queue)), 440, 84, UiTheme.FontTitle + 2);
@@ -90,7 +95,7 @@ namespace SpellboundVR.UI
             var friendly = UiKit.Button(pair, "친선전", BtnStyle.Info, () => Ui.Go(MetaScreenId.Room), 212, 68, UiTheme.FontTitle - 2);
             friendly.interactable = !MetaState.Offline;
             UiKit.Button(pair, "봇 연습전", BtnStyle.Info, () => DeckBuilderScreen.OpenForBattle(Ui, "봇 연습전",
-                () => MetaFlow.Instance.StartMatch(new MatchContext { Mode = MatchResultService.ModeBot, OpponentName = "Bot", OpponentRating = MetaState.Rating, OpponentBot = true })),
+                () => MetaFlow.Instance.StartMatch(new MatchContext { Mode = MatchResultService.ModeBot, OpponentName = "Bot", OpponentRating = MetaState.Rating, OpponentBot = true, Players = MetaState.PreferredPlayers })),
                 212, 68, UiTheme.FontTitle - 2);
             UiKit.Button(buttons, "튜토리얼", BtnStyle.Ghost, () => Ui.Go(MetaScreenId.Tutorial), 300, 58, UiTheme.FontBody);
 
@@ -102,6 +107,16 @@ namespace SpellboundVR.UI
                 UiKit.Spacer(col, 0, 10);
                 UiKit.Chip(col, "오프라인 모드 · 봇 연습전만 가능 · 전적 저장 안 함", Tone.Amber, UiTheme.FontSmall - 2);
             }
+        }
+
+        private void PlayerChoice(Transform parent, string label, int players)
+        {
+            bool on = MetaState.PreferredPlayers == players;
+            UiKit.Button(parent, label, on ? BtnStyle.Info : BtnStyle.Ghost, () =>
+            {
+                MetaState.PreferredPlayers = players;
+                Redraw();
+            }, 214, 54, UiTheme.FontBody);
         }
 
         // ── 왼쪽: 내 마법사 · 마법서 ─────────────────────────────

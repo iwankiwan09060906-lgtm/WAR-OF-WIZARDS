@@ -25,6 +25,8 @@ namespace SpellboundVR.Network
         Draw = 2,
         None = 3,
         Void = 4,
+        Seat2 = 5,
+        Seat4 = 6,
     }
 
     public enum UnitVisualState : byte
@@ -75,8 +77,12 @@ namespace SpellboundVR.Network
         public int WaveIndex;
         public float NextWaveIn;
         public byte NextWaveIsBrute;
-        public float HomeAttackMultiplier;
-        public float AwayAttackMultiplier;
+        /// <summary>Arena.ArenaMode (0 = 1:1, 1 = 4인 개인전)</summary>
+        public byte ArenaMode;
+        /// <summary>빈자리를 AI 가 채우기까지 남은 초 (대기 중, 아니면 -1)</summary>
+        public float BotFillIn;
+        /// <summary>마나 폭풍까지 남은 초, 시작했으면 0, 1:1 은 -1</summary>
+        public float StormIn;
         public byte Winner;
         public byte EndReason;
         public float Duration;
@@ -98,8 +104,14 @@ namespace SpellboundVR.Network
         /// <summary>AFK 경고 중이면 남은 초, 아니면 -1 (§10: 20초에 경고)</summary>
         public float AfkSecondsLeft;
         public float Accuracy;
+        /// <summary>진영 공격력 배율 (HUD 표시)</summary>
+        public float AttackMultiplier;
         /// <summary>PlayerFlags 비트</summary>
         public byte Flags;
+        /// <summary>4인 개인전 순위 (0 = 아직 결정 안 됨)</summary>
+        public byte Place;
+        /// <summary>다른 플레이어에게 입힌 피해 합</summary>
+        public int DamageDealt;
     }
 
     public struct SlotSnap : INetworkStruct
@@ -162,12 +174,12 @@ namespace SpellboundVR.Network
     /// <summary>클라이언트 쪽 상태 사본. 배열은 한 번만 할당한다(§33 GC 0).</summary>
     public sealed class MatchSnapshot
     {
-        public const int PlayerCount = 2;
+        public const int PlayerCount = 4;
         public const int SlotsPerPlayer = 8;
-        public const int StructureCount = 4;
-        /// <summary>팀당 생존 상한 40 × 2 + 여유</summary>
-        public const int MaxUnits = 96;
-        public const int MaxProjectiles = 40;
+        public const int StructureCount = PlayerCount * 2;
+        /// <summary>팀당 생존 상한 40 × 4 + 여유 (UnitCount 가 byte 라 255 이하)</summary>
+        public const int MaxUnits = 176;
+        public const int MaxProjectiles = 80;
 
         public MatchHeaderNet Header;
         public readonly PlayerSnap[] Players = new PlayerSnap[PlayerCount];
@@ -175,6 +187,9 @@ namespace SpellboundVR.Network
         public readonly StructureSnap[] Structures = new StructureSnap[StructureCount];
         public readonly UnitSnap[] Units = new UnitSnap[MaxUnits];
         public readonly ProjectileSnap[] Projectiles = new ProjectileSnap[MaxProjectiles];
+
+        /// <summary>자리별 표시 이름 (없으면 빈 문자열 — "1번" · "AI 2번" 은 표시 쪽에서)</summary>
+        public readonly string[] Names = { "", "", "", "" };
 
         public MatchPhase Phase => (MatchPhase)Header.Phase;
         public int UnitCount => Header.UnitCount;
@@ -184,7 +199,7 @@ namespace SpellboundVR.Network
 
         public ref SlotSnap Slot(Contracts.Team team, int slot) => ref Slots[(int)team * SlotsPerPlayer + slot];
 
-        /// <summary>구조물 배열 순서: Home Tower, Home Nexus, Away Tower, Away Nexus</summary>
+        /// <summary>구조물 배열 순서: 진영마다 Tower, Nexus</summary>
         public static int StructureIndex(Contracts.Team team, bool isNexus) => (int)team * 2 + (isNexus ? 1 : 0);
 
         public ref StructureSnap Structure(Contracts.Team team, bool isNexus) => ref Structures[StructureIndex(team, isNexus)];

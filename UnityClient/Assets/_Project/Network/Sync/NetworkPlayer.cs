@@ -13,7 +13,7 @@ namespace SpellboundVR.Network
 {
     public sealed class NetworkPlayer : NetworkBehaviour
     {
-        /// <summary>0 = 미배정(관전), 1 = Home, 2 = Away</summary>
+        /// <summary>0 = 미배정(관전), 그 외 = 진영 번호 + 1</summary>
         [Networked] public byte TeamPlusOne { get; set; }
 
         public static NetworkPlayer Local { get; private set; }
@@ -22,7 +22,7 @@ namespace SpellboundVR.Network
 
         public bool HasTeam => TeamPlusOne != 0;
 
-        public Team Team => TeamPlusOne == 2 ? Team.Away : Team.Home;
+        public Team Team => TeamPlusOne == 0 ? Team.Home : (Team)(TeamPlusOne - 1);
 
         public override void Spawned()
         {
@@ -53,6 +53,14 @@ namespace SpellboundVR.Network
             if (state == null) return;
             var deck = new int[DeckData.SlotCount] { s0, s1, s2, s3, s4, s5, s6, s7 };
             state.ServerSubmitDeck(Object.InputAuthority, deck);
+        }
+
+        /// <summary>자리 표시 이름 (대기 화면 · HUD)</summary>
+        [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
+        public void RPC_SetName(NetworkString<_16> name)
+        {
+            var state = NetworkMatchState.Instance;
+            if (state != null) state.ServerSetName(Object.InputAuthority, name.Value);
         }
 
         [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]

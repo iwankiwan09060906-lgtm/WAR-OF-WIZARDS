@@ -1,7 +1,6 @@
 // §14.2 BeamExecutor — 조준: 열 (레인 전체) / 스킬: S05 토네이도, H02 레이저 빔, H03 흡혈
 
 using SpellboundVR.Contracts;
-using SpellboundVR.Core;
 using SpellboundVR.Spells.Behaviors;
 
 namespace SpellboundVR.Spells.Executor
@@ -19,7 +18,7 @@ namespace SpellboundVR.Spells.Executor
 
         public void Execute(in SpellCastRequest request, Team casterTeam)
         {
-            int worldColumn = TeamUtil.ToWorldColumn(casterTeam, request.TargetColumn);
+            int worldColumn = _world.Arena.ResolveLane(casterTeam, request.TargetColumn);
             float focus = _world.CastFocus;
             switch (_def.Behavior)
             {

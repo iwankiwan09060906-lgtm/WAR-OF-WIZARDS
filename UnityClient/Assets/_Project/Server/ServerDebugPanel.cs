@@ -91,7 +91,7 @@ namespace SpellboundVR.Server
                 _sb.Append(p.IsBot ? "BOT" : "HUMAN").Append(p.Connected ? "" : "(DC)")
                    .Append("  HP ").Append(Mathf.CeilToInt(p.Hp)).Append('/').Append(Mathf.CeilToInt(p.MaxHp))
                    .Append("  col ").Append(p.WorldColumn)
-                   .Append("  ATK x").Append(sim.GetAttackMultiplier(team).ToString("0.00"))
+                   .Append("  ATK x").Append(sim.GetDisplayAttackMultiplier(team).ToString("0.00"))
                    .Append("  units ").Append(AliveUnitLimiter.CountAlive(sim, team)).Append('\n');
                 _sb.Append("   T ").Append(sim.Defense.TowerAlive(team) ? Mathf.CeilToInt(sim.Defense.Tower(team).Hp).ToString() : "X")
                    .Append("  N ").Append(sim.Defense.NexusAlive(team) ? Mathf.CeilToInt(sim.Defense.Nexus(team).Hp).ToString() : "X")

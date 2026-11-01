@@ -2,6 +2,7 @@
 //   방이 없을 때: 룸 만들기 / 코드로 입장
 //   방장: 코드 · 복사 · 닫기, 자리(HOST 나 vs GUEST), 봇으로 채우기 · 내보내기 · 대전 시작, 접속 중 친구 초대
 //   게스트: 코드 · 나가기, 자리(HOST 상대 vs GUEST 나), 준비 완료 → 방장이 시작하면 C11
+//   4인 개인전 방: 자리 네 칸, 게스트가 모두 준비하면 방장이 시작, 빈자리는 AI (방을 만들 때 로비에서 고른 인원을 쓴다)
 //   친선전은 레이팅에 반영되지 않는다 (전적만 저장).
 
 using System.Collections.Generic;
@@ -19,6 +20,11 @@ namespace SpellboundVR.UI
         public override string Title => "친선전 룸";
 
         private bool InRoom => _session != null && _session.Kind == BackendSessionService.SessionKind.FriendlyRoom;
+
+        /// <summary>이 방의 경기 인원 — 서버 값, 오프라인 방은 로비에서 고른 값</summary>
+        private int RoomPlayers => _session != null && _session.Room != null && _session.Room.maxPlayers > 0 ? _session.Room.maxPlayers : MetaState.PreferredPlayers;
+
+        private bool FfaRoom => RoomPlayers > 2;
 
         protected override void OnOpen()
         {
@@ -82,6 +88,8 @@ namespace SpellboundVR.UI
                 OpponentRating = rating,
                 OpponentBot = bot,
                 RoomCode = _session.RoomCode,
+                MatchId = _session.Room != null ? _session.Room.matchId : 0,
+                Players = RoomPlayers,
             });
         }
 
@@ -110,7 +118,7 @@ namespace SpellboundVR.UI
             UiKit.Heading(make, "룸 만들기");
             UiKit.Label(make, "방을 만들면 6자리 코드가 발급됩니다. 친구를 초대하거나 봇으로 빈 자리를 채울 수 있어요.", UiTheme.FontBody, UiTheme.Text2);
             UiKit.Spacer(make);
-            UiKit.Button(make, "룸 생성", BtnStyle.Play, () => { _session.CreateFriendlyRoom(); Redraw(); }, -1, 66, UiTheme.FontTitle - 2);
+            UiKit.Button(make, MetaState.PreferredPlayers > 2 ? "4인 개인전 룸 생성" : "1:1 룸 생성", BtnStyle.Play, () => { _session.CreateFriendlyRoom(MetaState.PreferredPlayers); Redraw(); }, -1, 66, UiTheme.FontTitle - 2);
 
             var join = UiKit.Card(two, 32, 18, "Join");
             UiKit.Size(join, -1, 360, 1);
@@ -175,9 +183,32 @@ namespace SpellboundVR.UI
             UiKit.Chip(chipRow, state, readyChip ? Tone.Cyan : Tone.Neutral);
         }
 
+        /// <summary>개인전 방 자리 표 (자리 번호 · 이름 · 준비 상태)</summary>
+        private void FfaSeats(Transform col)
+        {
+            var room = _session.Room;
+            var seats = UiKit.Card(col, 22, 8, "Seats");
+            UiKit.Heading(seats, "4인 개인전 자리", (room != null && room.members != null ? room.members.Length : 1) + " / " + RoomPlayers);
+            for (int i = 0; i < RoomPlayers; i++)
+            {
+                RoomMemberDto m = room != null && room.members != null && i < room.members.Length ? room.members[i] : null;
+                var r = UiKit.HBox(seats, 14, 0, TextAnchor.MiddleLeft, "Row");
+                UiKit.Size(r, -1, 52);
+                UiKit.Label(r, (i + 1) + "번", UiTheme.FontBody, UiTheme.Text3, true);
+                var n = UiKit.Label(r, m != null ? m.nickname : "빈자리 — 시작하면 AI 가 앉습니다", UiTheme.FontBody, m != null ? UiTheme.Text : UiTheme.Text3, m != null);
+                UiKit.Size(n, -1, -1, 1);
+                if (m != null) UiKit.Chip(r, m.host ? "방장" : m.bot ? "AI" : m.ready ? "준비 완료" : "입장 완료", m.host || m.ready ? Tone.Cyan : Tone.Neutral);
+            }
+        }
+
         private void BuildHost(Transform col)
         {
             CodeCard(col, "룸 코드", true);
+            if (FfaRoom)
+            {
+                BuildFfaHost(col);
+                return;
+            }
             var room = _session.Room;
             bool bot = _session.OpponentIsBot;
             bool hasGuest = room != null && room.HasGuest;
@@ -225,15 +256,36 @@ namespace SpellboundVR.UI
             }
         }
 
+        private void BuildFfaHost(Transform col)
+        {
+            FfaSeats(col);
+            var room = _session.Room;
+            bool allReady = true;
+            if (room != null && room.members != null)
+                foreach (var m in room.members)
+                    if (!m.host && !m.bot && !m.ready) allReady = false;
+            string problem = MetaState.DeckProblem();
+            var actions = UiKit.HBox(col, 12, 0, TextAnchor.MiddleLeft, "Actions");
+            UiKit.Spacer(actions);
+            var start = UiKit.Button(actions, "▶  대전 시작", BtnStyle.Play, () => _session.StartFriendlyMatch(), 280, 66, UiTheme.FontTitle - 2);
+            start.interactable = problem == null && allReady;
+            if (problem != null) UiKit.Note(col, problem + " 마법서에서 덱을 편성해주세요.", Tone.Amber);
+            else if (!allReady) UiKit.Note(col, "모든 게스트가 준비를 마치면 시작할 수 있습니다.", Tone.Cyan);
+        }
+
         private void BuildGuest(Transform col)
         {
             CodeCard(col, "입장한 룸", false);
+            if (FfaRoom) FfaSeats(col);
             var room = _session.Room;
-            var seats = UiKit.HBox(col, 24, 0, TextAnchor.MiddleCenter, "Seats");
-            seats.GetComponent<HorizontalLayoutGroup>().childForceExpandWidth = true;
-            Seat(seats, false, "HOST", room != null ? room.hostNickname : "호스트", room != null ? room.hostRating : 0, "대기 중", false);
-            UiKit.Label(seats, "VS", UiTheme.FontHeadline, UiTheme.Text3, true, TextAnchor.MiddleCenter).horizontalOverflow = HorizontalWrapMode.Overflow;
-            Seat(seats, true, "GUEST", MetaState.Nickname, MetaState.Rating, _session.IsReady ? "준비 완료" : "준비 전", _session.IsReady);
+            if (!FfaRoom)
+            {
+                var seats = UiKit.HBox(col, 24, 0, TextAnchor.MiddleCenter, "Seats");
+                seats.GetComponent<HorizontalLayoutGroup>().childForceExpandWidth = true;
+                Seat(seats, false, "HOST", room != null ? room.hostNickname : "호스트", room != null ? room.hostRating : 0, "대기 중", false);
+                UiKit.Label(seats, "VS", UiTheme.FontHeadline, UiTheme.Text3, true, TextAnchor.MiddleCenter).horizontalOverflow = HorizontalWrapMode.Overflow;
+                Seat(seats, true, "GUEST", MetaState.Nickname, MetaState.Rating, _session.IsReady ? "준비 완료" : "준비 전", _session.IsReady);
+            }
 
             string problem = MetaState.DeckProblem();
             if (problem != null) UiKit.Note(col, problem + " 마법서에서 덱을 편성해주세요.", Tone.Amber);

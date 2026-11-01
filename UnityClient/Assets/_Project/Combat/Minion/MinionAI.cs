@@ -56,8 +56,6 @@ namespace SpellboundVR.Combat
                 u.TargetId = MinionTargeting.Acquire(sim, u);
             }
 
-            Team enemy = TeamUtil.Opponent(u.Team);
-
             if (u.TargetId != 0 && sim.TryGetTargetBody(u, u.TargetId, out Vector2 targetPos, out float targetRadius))
             {
                 bool targetIsPlayer = TeamUtil.IsPlayerId(u.TargetId);
@@ -78,17 +76,17 @@ namespace SpellboundVR.Combat
                     if (u.AttackTimer <= 0f)
                     {
                         u.AttackTimer += Mathf.Max(0.1f, def.AttackInterval);
-                        Attack(sim, u, enemy, targetIsPlayer, targetPos);
+                        Attack(sim, u, targetIsPlayer, targetPos);
                     }
                 }
             }
             else
             {
                 // 전진: 상대 진영 방향 + 레인 중심 복귀
-                float forward = sim.Arena.ForwardSign(u.Team);
-                float laneU = sim.Arena.ColumnU(u.Lane);
-                u.Position.y += forward * def.MoveSpeed * moveMul * dt;
-                u.Position.x = Mathf.MoveTowards(u.Position.x, laneU, def.MoveSpeed * 0.5f * dt);
+                var lane = sim.Arena.GetLane(u.Team, u.Lane);
+                float along = lane.Along(u.Position) + def.MoveSpeed * moveMul * dt;
+                float lateral = Mathf.MoveTowards(lane.Lateral(u.Position), 0f, def.MoveSpeed * 0.5f * dt);
+                u.Position = lane.Point(Mathf.Min(along, lane.Length), lateral);
                 u.State = UnitVisualState.Moving;
                 u.AttackTimer = Mathf.Min(u.AttackTimer, def.AttackInterval * 0.5f);
             }
@@ -108,7 +106,7 @@ namespace SpellboundVR.Combat
                     u.SpawnTimer += def.SpawnInterval;
                     if (AliveUnitLimiter.CanSpawn(sim, u.Team))
                     {
-                        Vector2 pos = u.Position + new Vector2(0f, sim.Arena.ForwardSign(u.Team) * (def.BodyRadius + 0.8f));
+                        Vector2 pos = u.Position + sim.Arena.GetLane(u.Team, u.Lane).Dir * (def.BodyRadius + 0.8f);
                         if (sim.SpawnUnit(u.Team, sim.GetMinionDefinition(def.SpawnKind), u.Lane, pos))
                             u.AttackCount++; // 표시: 소환 연출
                     }
@@ -170,14 +168,13 @@ namespace SpellboundVR.Combat
         /// <summary>§11 터렛: 적 미니언 · 소환수만 (설치물 · 구조물 · 플레이어 ✕), 가장 가까운 대상</summary>
         private static int AcquireTurretTarget(MatchSimulation sim, UnitState turret)
         {
-            Team enemy = TeamUtil.Opponent(turret.Team);
             int best = 0;
             float bestSq = float.MaxValue;
             var units = sim.Units;
             for (int i = 0; i < units.Length; i++)
             {
                 var o = units[i];
-                if (!o.Active || o.Dead || o.Team != enemy || o.IsStructure) continue;
+                if (!o.Active || o.Dead || o.Team == turret.Team || o.IsStructure) continue;
                 float r = turret.Def.AttackRange + turret.Def.BodyRadius + o.Def.BodyRadius;
                 float sq = (o.Position - turret.Position).sqrMagnitude;
                 if (sq <= r * r && sq < bestSq)
@@ -189,7 +186,7 @@ namespace SpellboundVR.Combat
             return best;
         }
 
-        private static void Attack(MatchSimulation sim, UnitState u, Team enemy, bool targetIsPlayer, Vector2 targetPos)
+        private static void Attack(MatchSimulation sim, UnitState u, bool targetIsPlayer, Vector2 targetPos)
         {
             TargetKind kind;
             if (targetIsPlayer) kind = TargetKind.Player;
@@ -225,7 +222,7 @@ namespace SpellboundVR.Combat
             for (int i = 0; i < units.Length; i++)
             {
                 var o = units[i];
-                if (!o.Active || o.Dead || o.Team != enemy || o.Id == u.TargetId) continue;
+                if (!o.Active || o.Dead || o.Team == u.Team || o.Id == u.TargetId) continue;
                 float r = u.Def.SplashRadius + o.Def.BodyRadius;
                 if ((o.Position - targetPos).sqrMagnitude > r * r) continue;
                 ctx.TargetId = o.Id;

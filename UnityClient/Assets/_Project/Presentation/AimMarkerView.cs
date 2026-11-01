@@ -69,14 +69,15 @@ namespace SpellboundVR.Presentation
             _marker.gameObject.SetActive(!rect);
         }
 
-        public void UpdateMarker(Vector3 position, ArenaGeometry arena, int worldColumn, float progress)
+        public void UpdateMarker(Vector3 position, ArenaGeometry arena, Contracts.Team team, int worldColumn, float progress)
         {
-            if (_spanAllLanes)
+            var frame = arena.GetLane(team, worldColumn);
+            if (_spanAllLanes && arena.IsDuel)
             {
                 Vector2 uv = arena.ToArena(position);
                 position = arena.ToWorld(0f, uv.y, position.y - arena.GroundY);
             }
-            var facing = Quaternion.LookRotation(arena.Forward, Vector3.up);
+            var facing = Quaternion.LookRotation(arena.ToWorldDirection(frame.Dir), Vector3.up);
             if (_halfExtents.x > 0f)
             {
                 _rect.SetPositionAndRotation(position, facing);
@@ -92,10 +93,9 @@ namespace SpellboundVR.Presentation
             float p = Mathf.Clamp01(progress) * _radius * 2f;
             _progress.localScale = new Vector3(p, 0.012f, p);
 
-            Vector3 laneCenter = arena.ToWorld(arena.ColumnU(worldColumn), arena.FieldLength * 0.5f, 0.02f);
-            _lane.position = laneCenter;
-            _lane.rotation = Quaternion.LookRotation(arena.Forward, Vector3.up);
-            _lane.localScale = new Vector3(arena.ColumnSpacing * 0.95f, 0.01f, arena.FieldLength);
+            _lane.position = arena.ToWorld(frame.Point(frame.Length * 0.5f), 0.02f);
+            _lane.rotation = facing;
+            _lane.localScale = new Vector3(arena.ColumnSpacing * 0.95f, 0.01f, frame.Length);
         }
 
         public void Hide()

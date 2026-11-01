@@ -16,6 +16,8 @@ namespace SpellboundVR.Network
         InvalidTarget,
         UnitCapReached,
         QueueFull,
+        /// <summary>4인 개인전: 그 레인의 상대가 이미 탈락</summary>
+        LaneClosed,
     }
 
     public static class CastRejectReasonText
@@ -35,6 +37,7 @@ namespace SpellboundVR.Network
                 case CastRejectReason.InvalidTarget: return "Invalid target";
                 case CastRejectReason.UnitCapReached: return "Unit limit reached";
                 case CastRejectReason.QueueFull: return "Server busy";
+                case CastRejectReason.LaneClosed: return "That wizard is out";
                 default: return "Rejected";
             }
         }

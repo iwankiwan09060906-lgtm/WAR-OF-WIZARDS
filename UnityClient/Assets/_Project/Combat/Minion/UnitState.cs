@@ -40,8 +40,8 @@ namespace SpellboundVR.Combat
         /// <summary>설치물 소환 타이머 (H06)</summary>
         public float SpawnTimer;
 
-        /// <summary>적 타워 사거리에 처음 들어온 시각 (§18 Target Priority: 먼저 진입한 유닛), 미진입 = -1</summary>
-        public float EnteredEnemyTowerRangeTime = -1f;
+        /// <summary>진영별 적 타워 사거리에 처음 들어온 시각 (§18 Target Priority: 먼저 진입한 유닛), 미진입 = -1</summary>
+        public readonly float[] EnteredTowerRangeTime = new float[Core.TeamUtil.TeamCount];
 
         public bool IsStructure => TargetKindSelf == TargetKind.Structure;
 
@@ -72,7 +72,7 @@ namespace SpellboundVR.Combat
             AttackMultiplier = 1f;
             AttackCount = 0;
             SpawnTimer = def.SpawnInterval > 0f ? def.SpawnInterval * 0.5f : 0f;
-            EnteredEnemyTowerRangeTime = -1f;
+            for (int t = 0; t < EnteredTowerRangeTime.Length; t++) EnteredTowerRangeTime[t] = -1f;
         }
 
         public void Deactivate()

@@ -11,6 +11,9 @@ War of Wizards — 전장 지도 그림 (VLM 이 보는 그림)
     노란 마름모: 내 칸으로 날아오는 투사체 (아래로 갈수록 곧 닿는다)
     네모: 작은 것 = 타워 · 큰 것 = 넥서스 (무너지면 회색 + X) · 세모: 플레이어 (내 것은 아래, 상대는 위)
     맨 아래 8칸: 덱 슬롯 (초록 = 지금 쓸 수 있음 · 회색 = 쿨타임 · 금색 테두리 = 고위력) · 맨 위 · 맨 아래 막대: HP
+
+4인 개인전: 세 레인이 곧 세 상대다 — 레인 맨 위가 그 상대의 진영 (왼쪽 레인 = 왼쪽 이웃 · 가운데 = 맞은편 · 오른쪽 = 오른쪽 이웃).
+    각 레인 위에 그 상대의 타워 · 넥서스 · 플레이어 · HP 막대를 그리고, 탈락한 상대의 레인은 회색 X 로 닫는다.
 """
 
 import base64
@@ -132,6 +135,28 @@ def _units_from_lanes(st):
     return out
 
 
+def _ffa_tops(cv, opps, max_hp):
+    """개인전: 레인마다 맨 위에 그 상대의 진영 (column = 그 상대로 가는 내 열)"""
+    for i, o in enumerate(opps[:3]):
+        c = o.get("column")
+        if c is None:
+            continue
+        x, color = _lane_x(c), FOE_SHADES[c % 3]
+        hp = o.get("hp", -1)
+        if hp == 0:                                         # 탈락 — 레인이 닫혔다
+            cv.rect(LANE_W * c + 2, FIELD_TOP, LANE_W * (c + 1) - 2, FIELD_BOTTOM, DEAD)
+            cv.cross(LANE_W * c + 8, FIELD_TOP + 8, LANE_W * (c + 1) - 8, FIELD_BOTTOM - 8, WHITE, 3)
+            continue
+        frac = (hp / (max_hp or 1000)) if hp >= 0 else 1.0
+        cv.rect(LANE_W * c + 4, 2, LANE_W * c + 4 + (LANE_W - 8) * min(1.0, max(0.0, frac)), 8, color)
+        for (x0, y0, x1, y1, alive) in ((x - 18, 64, x + 18, 82, o.get("towerAlive", True)),
+                                        (x - 30, 38, x + 30, 58, o.get("nexusAlive", True))):
+            cv.rect(x0, y0, x1, y1, color if alive else DEAD)
+            if not alive:
+                cv.cross(x0 + 3, y0 + 2, x1 - 3, y1 - 2, WHITE)
+        cv.triangle(x, 34, 18, False, color)
+
+
 def render(st):
     """normalize_state 결과 → PNG bytes"""
     cv = Canvas(W, H, BG)
@@ -143,7 +168,11 @@ def render(st):
 
     # 진영 · 구조물
     opps = st.get("opponents") or []
-    _base(cv, 64, 38, st.get("opponentTowerAlive", True), st.get("opponentNexusAlive", True), ENEMY_DARK)
+    ffa = st.get("players", 2) > 2 and any(o.get("column") is not None for o in opps)
+    if ffa:
+        _ffa_tops(cv, opps, st.get("opponentMaxHp"))
+    else:
+        _base(cv, 64, 38, st.get("opponentTowerAlive", True), st.get("opponentNexusAlive", True), ENEMY_DARK)
     _base(cv, 410, 432, st.get("selfTowerAlive", True), st.get("selfNexusAlive", True), ALLY_DARK)
 
     # 유닛 (같은 칸 · 같은 깊이에 겹치면 옆으로 벌린다)
@@ -165,7 +194,9 @@ def render(st):
 
     # 플레이어
     cv.triangle(_lane_x(st.get("selfColumn", 1)), 455, 17, True, ALLY)
-    if opps:
+    if ffa:
+        pass                                                # 상대는 레인 위 (_ffa_tops)
+    elif opps:
         for i, o in enumerate(opps[:3]):
             if o.get("column") is not None and o.get("hp", 1) != 0:
                 cv.triangle(_lane_x(o["column"]) + (i - (len(opps) - 1) / 2) * 20, 34, 18, False, FOE_SHADES[i % 3])
@@ -173,7 +204,9 @@ def render(st):
         cv.triangle(_lane_x(st["opponentColumn"]), 34, 22, False, ENEMY)
 
     # HP
-    if opps:
+    if ffa:
+        pass
+    elif opps:
         for i, o in enumerate(opps[:3]):
             hp = o.get("hp", -1)
             frac = (hp / (st.get("opponentMaxHp") or 1000)) if hp >= 0 else 1.0

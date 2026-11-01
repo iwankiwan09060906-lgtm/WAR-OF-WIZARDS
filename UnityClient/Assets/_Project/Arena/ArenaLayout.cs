@@ -25,6 +25,12 @@ namespace SpellboundVR.Arena
         [Tooltip("Commander 발판 윗면 높이 (표시 전용 — 상대 아바타 · 쉴드 링을 이 높이에 올린다)")]
         public float commanderPlatformHeight = 0f;
 
+        [Header("4인 개인전 (발판 4개가 마름모로 놓이는 전장 — 대각선 = fieldLength)")]
+        [Tooltip("넥서스 깊이 — 옆 레인에서도 닿도록 1:1 보다 발판 가까이")]
+        public float ffaNexusDepth = 4f;
+        [Tooltip("타워 깊이")]
+        public float ffaTowerDepth = 9f;
+
         [Header("씬 구조물 비주얼 (선택) — 연결 시 위치에서 깊이를 읽고, 표시용으로 재사용")]
         public Transform homeTowerVisual;
         public Transform homeNexusVisual;
@@ -32,8 +38,18 @@ namespace SpellboundVR.Arena
         public Transform awayNexusVisual;
 
         private ArenaGeometry _geometry;
+        private ArenaMode _mode = ArenaMode.Duel;
 
         public ArenaGeometry Geometry => _geometry ??= Build();
+
+        public ArenaMode Mode => _mode;
+
+        /// <summary>경기 종류를 바꾼다 — 다음 Geometry 부터 적용</summary>
+        public void SetMode(ArenaMode mode)
+        {
+            _mode = mode;
+            _geometry = null;
+        }
 
         public ArenaGeometry Build()
         {
@@ -41,6 +57,12 @@ namespace SpellboundVR.Arena
             Vector3 basePos = anchor.position;
             basePos.y = transform.position.y;
             Vector3 forward = anchor.forward;
+
+            if (_mode == ArenaMode.Ffa4)
+            {
+                _geometry = new ArenaGeometry(basePos, forward, fieldLength, columnSpacing, ffaNexusDepth, ffaTowerDepth, spawnDepth, ArenaMode.Ffa4);
+                return _geometry;
+            }
 
             float nexus = nexusDepth;
             float tower = towerDepth;
@@ -56,7 +78,8 @@ namespace SpellboundVR.Arena
         public Transform GetStructureVisual(Contracts.Team team, bool isNexus)
         {
             if (team == Contracts.Team.Home) return isNexus ? homeNexusVisual : homeTowerVisual;
-            return isNexus ? awayNexusVisual : awayTowerVisual;
+            if (team == Contracts.Team.Away) return isNexus ? awayNexusVisual : awayTowerVisual;
+            return null; // 4인 개인전 2 · 4번 자리는 씬에 없다 — ArenaStateView 가 1번 구조물을 복제한다
         }
 
         private void OnValidate()

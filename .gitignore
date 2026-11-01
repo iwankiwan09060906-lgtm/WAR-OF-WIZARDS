@@ -42,6 +42,9 @@ crashlytics-build.properties
 # Unity Package Manager 캐시(폴더 트리는 유지)
 UnityClient/Packages/*
 !UnityClient/Packages/.keep
+# 패키지 목록은 저장소에 둔다 — 없으면 Unity 가 빈 기본 목록을 만들어 프로젝트가 컴파일되지 않는다
+!UnityClient/Packages/manifest.json
+!UnityClient/Packages/packages-lock.json
 
 ## ---------- 빌드 산출물 ----------
 # §28: Builds/Quest, Builds/Server 폴더 트리는 유지하되 실제 산출물은 커밋하지 않는다

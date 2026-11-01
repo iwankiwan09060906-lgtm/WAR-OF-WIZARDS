@@ -50,6 +50,8 @@ namespace SpellboundVR.Combat
                 p.SpellId = l.SpellId;
                 p.Team = l.CasterTeam;
                 p.WorldColumn = l.WorldColumn;
+                p.TargetTeam = l.TargetTeam;
+                p.AimColumn = l.AimColumn;
                 p.Position = l.From;
                 p.Height = l.Height;
                 p.StartHeight = l.Height;
@@ -81,7 +83,6 @@ namespace SpellboundVR.Combat
                 var p = _pool[i];
                 if (!p.Active) continue;
 
-                Team enemy = TeamUtil.Opponent(p.Team);
                 Vector2 target;
                 switch (p.Mode)
                 {
@@ -95,7 +96,7 @@ namespace SpellboundVR.Combat
                         if (p.TargetsPlayer)
                         {
                             // 회피 가능 탄은 조준한 열로, 회피 불가 탄(반사 등)은 지금 서 있는 열로 따라간다
-                            target = sim.Arena.PlayerPosition(enemy, p.Dodgeable ? p.WorldColumn : sim.GetPlayerWorldColumn(enemy));
+                            target = sim.Arena.PlayerPosition(p.TargetTeam, p.Dodgeable ? p.AimColumn : sim.GetPlayerWorldColumn(p.TargetTeam));
                         }
                         else if (p.TargetUnitId != LostTarget && sim.TryGetUnitInfo(p.TargetUnitId, out Vector2 unitPos, out _, out _))
                         {
@@ -119,7 +120,7 @@ namespace SpellboundVR.Combat
                     p.Position = target;
                     p.Height = p.TargetHeight;
                     p.Active = false;
-                    Arrive(sim, p, enemy);
+                    Arrive(sim, p);
                     p.OnHit = null;
                 }
                 else
@@ -131,7 +132,7 @@ namespace SpellboundVR.Combat
             }
         }
 
-        private static void Arrive(MatchSimulation sim, ProjectileState p, Team enemy)
+        private static void Arrive(MatchSimulation sim, ProjectileState p)
         {
             if (!p.SuppressImpactFx) sim.PublishFx(p.SpellId, VfxPart.Impact, p.Position, p.Height, p.WorldColumn);
 
@@ -139,6 +140,7 @@ namespace SpellboundVR.Combat
             {
                 SpellId = p.SpellId,
                 CasterTeam = p.Team,
+                TargetTeam = p.TargetTeam,
                 WorldColumn = p.WorldColumn,
                 Position = p.Position,
                 Height = p.Height,
@@ -163,14 +165,14 @@ namespace SpellboundVR.Combat
                 IsPlayerSkill = p.IsPlayerSkill,
                 FocusBonusMultiplier = p.FocusBonus,
                 IsDodgeable = p.Dodgeable,
-                AimedWorldColumn = p.WorldColumn,
+                AimedWorldColumn = p.AimColumn,
                 IsReflected = p.IsReflected,
             };
 
             if (p.TargetsPlayer)
             {
                 ctx.TargetKind = TargetKind.Player;
-                ctx.TargetId = TeamUtil.PlayerId(enemy);
+                ctx.TargetId = TeamUtil.PlayerId(p.TargetTeam);
             }
             else
             {
@@ -193,14 +195,14 @@ namespace SpellboundVR.Combat
             for (int i = 0; i < _pool.Length; i++)
             {
                 var p = _pool[i];
-                if (!p.Active || !p.TargetsPlayer || p.Team == team || !p.Dodgeable) continue;
+                if (!p.Active || !p.TargetsPlayer || p.TargetTeam != team || !p.Dodgeable) continue;
                 n++;
-                Vector2 target = sim.Arena.PlayerPosition(team, p.WorldColumn);
+                Vector2 target = sim.Arena.PlayerPosition(team, p.AimColumn);
                 float eta = Vector2.Distance(target, p.Position) / Mathf.Max(0.01f, p.Speed);
                 if (eta < nearestEta)
                 {
                     nearestEta = eta;
-                    nearestWorldColumn = p.WorldColumn;
+                    nearestWorldColumn = p.AimColumn;
                 }
             }
             return n;

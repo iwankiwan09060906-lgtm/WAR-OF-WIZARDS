@@ -59,7 +59,13 @@ namespace SpellboundVR.Combat
 
         public float GetAccuracy(Team attackerTeam) => Players[(int)attackerTeam].Accuracy;
 
-        public float GetAttackMultiplier(Team team) => TeamAttackMultiplier.Compute(team, Defense, _scaling.Stage, Rules);
+        public float GetAttackMultiplier(Team attacker, Team target) => TeamAttackMultiplier.Compute(target, Defense, _scaling.Stage, Rules);
+
+        /// <summary>HUD 표시용 배율 — 1:1 은 상대 기준, 개인전은 상대마다 달라서 강화 단계만</summary>
+        public float GetDisplayAttackMultiplier(Team team)
+        {
+            return Arena.IsDuel ? GetAttackMultiplier(team, TeamUtil.Opponent(team)) : TeamAttackMultiplier.ScalingOnly(_scaling.Stage, Rules);
+        }
 
         public float GetIncomingDamageMultiplier(int targetId)
         {
@@ -81,7 +87,9 @@ namespace SpellboundVR.Combat
                 float old = p.Hp;
                 p.Hp = Mathf.Clamp(p.Hp + delta, 0f, p.MaxHp);
                 if (p.Hp <= 0f) p.DeathPending = true;
-                return Mathf.Abs(p.Hp - old);
+                float changed = Mathf.Abs(p.Hp - old);
+                if (delta < 0f && sourceTeam != p.Team) Players[(int)sourceTeam].DamageDealt += changed;
+                return changed;
             }
             if (TeamUtil.IsStructureId(targetId))
             {
@@ -112,11 +120,10 @@ namespace SpellboundVR.Combat
         {
             s.Alive = false;
             s.Hp = 0f;
-            Team enemy = TeamUtil.Opponent(s.Team);
             if (s.IsNexus)
-                Debug.Log($"[MatchSimulation] {s.Team} 넥서스 파괴 → {enemy} 공격력 +{Rules.NexusDestroyedAttackBonus * 100f:0}%, {s.Team} 회복 중단, 돌파 시작");
+                Debug.Log($"[MatchSimulation] {s.Team} 넥서스 파괴 → {s.Team} 상대로 공격력 +{Rules.NexusDestroyedAttackBonus * 100f:0}%, 회복 중단, 돌파 시작");
             else
-                Debug.Log($"[MatchSimulation] {s.Team} 타워 파괴 → {enemy} 공격력 +{Rules.TowerDestroyedAttackBonus * 100f:0}%, {s.Team} 받는 스킬 피해 100%");
+                Debug.Log($"[MatchSimulation] {s.Team} 타워 파괴 → {s.Team} 상대로 공격력 +{Rules.TowerDestroyedAttackBonus * 100f:0}%, 받는 스킬 피해 100%");
 
             // §14.4 S09 타워 버프: 타워 파괴 후 슬롯 Disabled
             if (!s.IsNexus)
@@ -141,25 +148,35 @@ namespace SpellboundVR.Combat
 
         public int GetPlayerId(Team team) => TeamUtil.PlayerId(team);
 
-        public bool IsPlayerAlive(Team team) => Players[(int)team].Alive;
+        public bool IsPlayerAlive(Team team)
+        {
+            var p = Players[(int)team];
+            return p.Alive && !p.Eliminated && Arena.HasTeam(team);
+        }
 
         public Vector2 GetPlayerPosition(Team team) => Arena.PlayerPosition(team, Players[(int)team].WorldColumn);
+
+        public Team GetLaneTarget(Team caster, int lane) => Arena.LaneTarget(caster, lane);
+
+        public int GetAimColumn(Team caster, int lane) => Arena.IsDuel ? lane : Players[(int)Arena.LaneTarget(caster, lane)].WorldColumn;
+
+        /// <summary>그 레인의 상대가 살아 있는가 (1:1 은 항상)</summary>
+        public bool IsLaneOpen(Team caster, int lane) => Arena.IsDuel || IsPlayerAlive(Arena.LaneTarget(caster, lane));
 
         public int CollectEnemyUnitsInColumn(Team casterTeam, int worldColumn, List<int> results)
         {
             results.Clear();
-            Team enemy = TeamUtil.Opponent(casterTeam);
-            float laneU = Arena.ColumnU(worldColumn);
+            var lane = Arena.GetLane(casterTeam, worldColumn);
             float half = Arena.LaneHalfWidth;
-            float baseV = Arena.BaseV(casterTeam);
 
             for (int i = 0; i < Units.Length; i++)
             {
                 var u = Units[i];
-                if (!u.Active || u.Dead || u.Team != enemy) continue; // 지상 · 공중 유닛 · 설치물 전부
-                if (Mathf.Abs(u.Position.x - laneU) > half) continue;
+                if (!u.Active || u.Dead || u.Team == casterTeam) continue; // 지상 · 공중 유닛 · 설치물 전부
+                if (Mathf.Abs(lane.Lateral(u.Position)) > half) continue;
                 // 거리순 삽입 정렬 (시전자 발판에서 가까운 순)
-                float key = Mathf.Abs(u.Position.y - baseV);
+                float key = lane.Along(u.Position);
+                if (key < -half || key > lane.Length + half) continue;
                 int idx = results.Count;
                 results.Add(u.Id);
                 s_sortKeys[idx] = key;
@@ -178,28 +195,27 @@ namespace SpellboundVR.Combat
         public int CollectEnemyUnitsInRadius(Team casterTeam, Vector2 center, float radius, List<int> results)
         {
             results.Clear();
-            Team enemy = TeamUtil.Opponent(casterTeam);
             for (int i = 0; i < Units.Length; i++)
             {
                 var u = Units[i];
-                if (!u.Active || u.Dead || u.Team != enemy) continue; // 지상 · 공중 유닛 · 설치물 전부
+                if (!u.Active || u.Dead || u.Team == casterTeam) continue; // 지상 · 공중 유닛 · 설치물 전부
                 float r = radius + u.Def.BodyRadius;
                 if ((u.Position - center).sqrMagnitude <= r * r) results.Add(u.Id);
             }
             return results.Count;
         }
 
-        public int CollectEnemyUnitsInRect(Team casterTeam, float uMin, float uMax, float vMin, float vMax, List<int> results)
+        public int CollectEnemyUnitsInLaneRect(Team casterTeam, in LaneFrame lane, float alongMin, float alongMax, float lateralHalf, List<int> results)
         {
             results.Clear();
-            Team enemy = TeamUtil.Opponent(casterTeam);
             for (int i = 0; i < Units.Length; i++)
             {
                 var u = Units[i];
-                if (!u.Active || u.Dead || u.Team != enemy) continue; // 지상 · 공중 유닛 · 설치물 전부
+                if (!u.Active || u.Dead || u.Team == casterTeam) continue; // 지상 · 공중 유닛 · 설치물 전부
                 float r = u.Def.BodyRadius;
-                if (u.Position.x < uMin - r || u.Position.x > uMax + r) continue;
-                if (u.Position.y < vMin - r || u.Position.y > vMax + r) continue;
+                if (Mathf.Abs(lane.Lateral(u.Position)) > lateralHalf + r) continue;
+                float along = lane.Along(u.Position);
+                if (along < alongMin - r || along > alongMax + r) continue;
                 results.Add(u.Id);
             }
             return results.Count;
@@ -355,7 +371,7 @@ namespace SpellboundVR.Combat
         public Vector2 GetPlacementPosition(Team team, int worldColumn)
         {
             float depth = (Defense.TowerAlive(team) ? Arena.TowerDepth : Arena.NexusDepth) + Rules.PlacementOffset;
-            return new Vector2(Arena.ColumnU(worldColumn), Arena.BaseV(team) + Arena.ForwardSign(team) * depth);
+            return Arena.GetLane(team, worldColumn).Point(depth);
         }
     }
 }

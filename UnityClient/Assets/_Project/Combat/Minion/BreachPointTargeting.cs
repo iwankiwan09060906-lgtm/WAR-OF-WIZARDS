@@ -10,7 +10,7 @@ namespace SpellboundVR.Combat
     {
         public const float BreachPointRadius = 0.4f;
 
-        /// <summary>유닛 자신의 레인 앞 돌파 지점</summary>
+        /// <summary>유닛 자신의 레인 끝 돌파 지점</summary>
         public static Vector2 GetBreachPoint(MatchSimulation sim, UnitState unit, Team targetTeam)
         {
             return sim.Arena.BreachPoint(targetTeam, unit.Lane, sim.Rules.BreachPointOffset);

@@ -52,6 +52,10 @@ namespace SpellboundVR.Network
         public event Action<int, Vector3, int, HitResultKind> OnHitFeedback;
         /// <summary>로컬 팀이 확정됨</summary>
         public event Action<Team> OnLocalTeamAssigned;
+        /// <summary>VFX 재생 트리거 (월드 레인 번호 포함 — 4인 개인전은 열로 레인을 알 수 없다)</summary>
+        public event Action<int, VfxPart, Vector3, int> OnSpellFxLane;
+        /// <summary>4인 개인전 탈락: 진영, 순위</summary>
+        public event Action<Team, int> OnPlayerEliminated;
 
         private readonly MatchSnapshot _prev = new MatchSnapshot();
         private ArenaGeometry _arena;
@@ -60,6 +64,8 @@ namespace SpellboundVR.Network
         private int _lastWaveSecond = -1;
         private int _lastAfkSecond = int.MinValue;
         private int _lastCountdownSecond = -1;
+        /// <summary>내 경기가 이 기기에서 이미 끝남 (개인전 탈락 · 기권) — 경기 종료를 또 알리지 않는다</summary>
+        private bool _localEnded;
 
         public NetworkGameEventPublisher(ArenaGeometry arena)
         {
@@ -74,6 +80,24 @@ namespace SpellboundVR.Network
         public MatchSnapshot Latest { get; private set; }
 
         public ArenaGeometry Arena => _arena;
+
+        /// <summary>내 순위 — 개인전: 결정됐으면 그 순위, 아직이면 지금 살아 있는 사람 수(지금 나가면 받을 순위). 1:1 은 0</summary>
+        public int LocalPlace
+        {
+            get
+            {
+                if (_arena.IsDuel || Latest == null) return 0;
+                int place = Latest.Players[(int)LocalTeam].Place;
+                if (place > 0) return place;
+                int alive = 0;
+                for (int t = 0; t < _arena.TeamCount; t++)
+                    if (Latest.Players[t].Present != 0 && Latest.Players[t].Alive != 0) alive++;
+                return alive;
+            }
+        }
+
+        /// <summary>이 경기에서 내가 다른 플레이어에게 입힌 피해</summary>
+        public int LocalDamageDealt => Latest != null ? Latest.Players[(int)LocalTeam].DamageDealt : 0;
 
         public void SetLocalTeam(Team team)
         {
@@ -99,6 +123,7 @@ namespace SpellboundVR.Network
             bool full = !_hasPrev || _prev.Header.MatchSerial != s.Header.MatchSerial;
             var phase = (MatchPhase)s.Header.Phase;
             var prevPhase = full ? (MatchPhase)255 : (MatchPhase)_prev.Header.Phase;
+            if (full) _localEnded = false;
 
             // 단계
             if (phase != prevPhase)
@@ -107,11 +132,11 @@ namespace SpellboundVR.Network
                 _lastCountdownSecond = -1;
                 if (phase == MatchPhase.Playing)
                 {
-                    var opp = s.Players[(int)TeamUtil.Opponent(LocalTeam)];
-                    OnMatchStarted?.Invoke(opp.IsBot != 0 ? OpponentType.Bot : OpponentType.Human);
+                    OnMatchStarted?.Invoke(AnyHumanOpponent(s) ? OpponentType.Human : OpponentType.Bot);
                 }
-                else if (phase == MatchPhase.Ended)
+                else if (phase == MatchPhase.Ended && !_localEnded)
                 {
+                    _localEnded = true;
                     OnMatchEnded?.Invoke(MatchResultResolver.ToLocalResult((MatchWinner)s.Header.Winner, LocalTeam),
                                          (MatchEndReason)s.Header.EndReason, s.Header.Duration);
                 }
@@ -127,11 +152,15 @@ namespace SpellboundVR.Network
             }
 
             // 플레이어
-            for (int t = 0; t < TeamUtil.TeamCount; t++)
+            int teamCount = _arena.TeamCount;
+            for (int t = 0; t < teamCount; t++)
             {
                 var team = (Team)t;
                 ref var p = ref s.Players[t];
                 ref var pp = ref _prev.Players[t];
+                if (!full && p.Place != 0 && pp.Place == 0 && !_arena.IsDuel && phase == MatchPhase.Playing)
+                    OnPlayerEliminated?.Invoke(team, p.Place);
+                if (full || Mathf.Abs(p.AttackMultiplier - pp.AttackMultiplier) > 0.001f) OnAttackMultiplierChanged?.Invoke(team, p.AttackMultiplier);
                 if (full || p.Hp != pp.Hp || p.MaxHp != pp.MaxHp) OnHpChanged?.Invoke(team, p.Hp, p.MaxHp);
                 if (full || p.WorldColumn != pp.WorldColumn) OnPositionChanged?.Invoke(team, ToLocalColumn(p.WorldColumn));
 
@@ -150,6 +179,13 @@ namespace SpellboundVR.Network
                     PublishFlag(team, p.Flags, pp.Flags, PlayerFlags.Focus, "S10_Focus", full);
                     PublishFlag(team, p.Flags, pp.Flags, PlayerFlags.Reflect, "H04_Reflect", full);
                 }
+            }
+
+            // 개인전: 내가 탈락하면 내 경기는 여기서 끝 (남은 사람은 계속 싸운다)
+            if (!_arena.IsDuel && phase == MatchPhase.Playing && !_localEnded && s.Players[(int)LocalTeam].Place != 0)
+            {
+                _localEnded = true;
+                OnMatchEnded?.Invoke(MatchResult.Lose, MatchEndReason.PlayerDeath, s.Header.MatchTime);
             }
 
             // AFK 경고 (내 것만)
@@ -178,7 +214,7 @@ namespace SpellboundVR.Network
             }
 
             // 구조물 · 방어 계층 · 돌파
-            for (int t = 0; t < TeamUtil.TeamCount; t++)
+            for (int t = 0; t < teamCount; t++)
             {
                 var team = (Team)t;
                 ref var tower = ref s.Structure(team, false);
@@ -187,17 +223,11 @@ namespace SpellboundVR.Network
                 ref var pNexus = ref _prev.Structure(team, true);
                 if (full || tower.Alive != pTower.Alive || nexus.Alive != pNexus.Alive)
                     OnDefenseLayerChanged?.Invoke(team, tower.Alive != 0, nexus.Alive != 0);
-                if (!full && pNexus.Alive != 0 && nexus.Alive == 0)
-                    OnBreachStarted?.Invoke(TeamUtil.Opponent(team));
+                if (!full && pNexus.Alive != 0 && nexus.Alive == 0 && s.Players[t].Place == 0)
+                    OnBreachStarted?.Invoke(team == LocalTeam ? TeamUtil.Opponent(team) : LocalTeam); // 개인전: 남의 넥서스 = 내 쪽 돌파 소식
                 if (full || tower.Hp != pTower.Hp) OnStructureHpChanged?.Invoke(tower.Id, tower.Hp, tower.MaxHp);
                 if (full || nexus.Hp != pNexus.Hp) OnStructureHpChanged?.Invoke(nexus.Id, nexus.Hp, nexus.MaxHp);
             }
-
-            // 진영 배율
-            if (full || Mathf.Abs(s.Header.HomeAttackMultiplier - _prev.Header.HomeAttackMultiplier) > 0.001f)
-                OnAttackMultiplierChanged?.Invoke(Team.Home, s.Header.HomeAttackMultiplier);
-            if (full || Mathf.Abs(s.Header.AwayAttackMultiplier - _prev.Header.AwayAttackMultiplier) > 0.001f)
-                OnAttackMultiplierChanged?.Invoke(Team.Away, s.Header.AwayAttackMultiplier);
 
             // 시간 · 강화 · 웨이브
             int second = Mathf.FloorToInt(s.Header.MatchTime);
@@ -219,6 +249,13 @@ namespace SpellboundVR.Network
             _hasPrev = true;
         }
 
+        private bool AnyHumanOpponent(MatchSnapshot s)
+        {
+            for (int t = 0; t < _arena.TeamCount; t++)
+                if (t != (int)LocalTeam && s.Players[t].Present != 0 && s.Players[t].IsBot == 0) return true;
+            return false;
+        }
+
         private void PublishFlag(Team team, byte flags, byte prevFlags, byte bit, string effectId, bool full)
         {
             bool on = (flags & bit) != 0;
@@ -238,7 +275,9 @@ namespace SpellboundVR.Network
         void IMatchEventSink.OnSpellFx(int spellId, VfxPart part, Vector3 arenaPosition, int worldColumn)
         {
             Vector3 world = _arena.ToWorld(arenaPosition.x, arenaPosition.z, arenaPosition.y);
-            OnSpellFx?.Invoke(spellId, part, world, ToLocalColumn(worldColumn));
+            _arena.TryLocalColumn(LocalTeam, worldColumn, out Column local);
+            OnSpellFx?.Invoke(spellId, part, world, local);
+            OnSpellFxLane?.Invoke(spellId, part, world, worldColumn);
         }
 
         void IMatchEventSink.OnCastAccepted(Team team, int slotIndex, int spellId)
@@ -265,6 +304,7 @@ namespace SpellboundVR.Network
         /// <summary>서버 스냅숏 없이 이 기기에서 경기를 끝낸다 (PC 서버 경기 중 기권 · 접속 포기) — 결과 화면 · 전적 저장이 같은 경로로 처리된다</summary>
         public void RaiseLocalMatchEnd(MatchResult result, MatchEndReason reason, float duration)
         {
+            _localEnded = true;
             OnMatchEnded?.Invoke(result, reason, duration);
         }
 

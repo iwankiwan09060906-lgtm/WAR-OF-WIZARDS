@@ -18,7 +18,8 @@ namespace SpellboundVR.Network
 
         float GetAccuracy(Team attackerTeam);
 
-        float GetAttackMultiplier(Team team);
+        /// <summary>attacker 가 target 을 칠 때의 진영 공격력 배율 (target 의 타워 · 넥서스 파괴 보너스 + 강화)</summary>
+        float GetAttackMultiplier(Team attacker, Team target);
 
         /// <summary>대상 자체의 받는 피해 배율 (S09 타워 버프 · H05 분노 유닛, 기본 1)</summary>
         float GetIncomingDamageMultiplier(int targetId);
