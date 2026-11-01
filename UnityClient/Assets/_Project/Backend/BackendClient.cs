@@ -166,7 +166,7 @@ namespace SpellboundVR.Backend
                 SetServerUrl(found);
                 onFinished?.Invoke(true, found);
             }
-            else onFinished?.Invoke(false, error ?? "같은 Wi-Fi에서 서버를 찾지 못했습니다. PC에서 Backend/run_server.bat 이 켜져 있고 open-firewall.bat 을 실행했는지 확인하세요.");
+            else onFinished?.Invoke(false, error ?? "같은 Wi-Fi에서 서버를 찾지 못했습니다. PC에서 StartServer.bat 이 켜져 있고 Backend/open-firewall.bat 을 실행했는지 확인하세요.");
         }
 
         /// <summary>빌드할 때 넣은 서버 주소 (없으면 null)</summary>

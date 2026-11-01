@@ -1,6 +1,6 @@
 // 빌드 메뉴 (§2.3 테스트 환경: Quest 3 + PC 서버)
 //   Spellbound > Build > ★ Quest APK — VR 전체 흐름 → Builds/Quest/WarOfWizards_VR.apk  (추천: 로그인 → 덱 → 경기 → 결과 저장 → 로비/종료)
-//     경기는 헤드셋 안에서 봇과 (PC 게임 서버 불필요). 로그인 · 덱 · 전적은 이 PC의 웹 백엔드(Backend/run_server.bat)에 저장된다.
+//     경기는 헤드셋 안에서 봇과 (PC 게임 서버 불필요). 로그인 · 덱 · 전적은 이 PC의 웹 백엔드(StartServer.bat)에 저장된다.
 //   Spellbound > Build > Quest APK (Fusion Client)  → Builds/Quest/Spellbound.apk
 //   Spellbound > Build > Quest APK (Offline vs Bot) → Builds/Quest/Spellbound_Offline.apk
 //   Spellbound > Build > Quest APK (Offline vs Bot, Clean Build) → 같은 파일, 빌드 캐시를 비우고 처음부터 (기기에서 시작 직후 꺼질 때)
@@ -103,7 +103,12 @@ namespace SpellboundVR.EditorTools
             string dir = Path.Combine(RepoRoot, "Builds", "Server");
             Directory.CreateDirectory(dir);
             string exe = Path.Combine(dir, "SpellboundServer.exe");
-            if (Build(BuildTarget.StandaloneWindows64, BuildTargetGroup.Standalone, exe, BootMode.DedicatedServer))
+            string building = Path.Combine(dir, ".building");
+            StopRunningServers(building);
+            bool built;
+            try { built = Build(BuildTarget.StandaloneWindows64, BuildTargetGroup.Standalone, exe, BootMode.DedicatedServer); }
+            finally { File.Delete(building); }
+            if (built)
             {
                 // 서버 하나가 한 종류만 연다 — 4인 개인전(기본)과 1:1 은 세션 이름이 다르다 (GameBootstrap.SessionFor)
                 File.WriteAllText(Path.Combine(dir, "RunServer.bat"),
@@ -112,6 +117,14 @@ namespace SpellboundVR.EditorTools
                     "@echo off\r\nstart \"Spellbound Server 1v1\" \"%~dp0SpellboundServer.exe\" -server -duel -screen-fullscreen 0 -screen-width 1280 -screen-height 720 -logFile \"%~dp0server_1v1.log\"\r\n");
                 Debug.Log("[Spellbound Build] 서버 빌드 완료: " + exe + " (RunServer.bat = 4인 개인전, RunServer1v1.bat = 1:1)");
             }
+        }
+
+        /// <summary>StartServer.bat 이 켠 게임 서버가 exe 를 잡고 있으면 빌드가 실패한다 — 끄고, 빌드가 끝날 때까지 다시 켜지 않게 표시한다</summary>
+        private static void StopRunningServers(string buildingMarker)
+        {
+            File.WriteAllText(buildingMarker, "");
+            var info = new System.Diagnostics.ProcessStartInfo("taskkill", "/F /IM SpellboundServer.exe") { CreateNoWindow = true, UseShellExecute = false };
+            using (var process = System.Diagnostics.Process.Start(info)) process.WaitForExit(5000);
         }
 
         private static void BuildQuest(BootMode mode, string fileName, bool clean = false)

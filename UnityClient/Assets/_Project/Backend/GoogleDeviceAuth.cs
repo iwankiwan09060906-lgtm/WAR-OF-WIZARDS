@@ -2,7 +2,7 @@
 //
 //   1. POST https://oauth2.googleapis.com/device/code (client_id, scope)
 //        → device_code · user_code · verification_url(https://www.google.com/device) · expires_in · interval
-//   2. 화면에 "주소 + 코드 + 남은 시간"을 띄운다. 유저는 휴대폰 · PC 브라우저로 주소를 열어 코드를 입력하고 계정을 고른다.
+//   2. 코드가 미리 채워진 주소(PrefilledUrl)를 PC 는 브라우저로 바로 열고, Quest 는 QR 로 띄운다 — 유저는 코드를 치지 않고 계정만 고른다.
 //   3. interval 초마다 POST https://oauth2.googleapis.com/token (grant_type = device_code) 을 폴링
 //        authorization_pending → 계속 기다림 / slow_down → 간격 +5초 / access_denied · expired_token → 실패
 //   4. 성공하면 access_token · id_token 을 받는다 → AuthService.LoginWithGoogle 로 게임 서버(/api/auth/google)에 넘겨 게임 토큰으로 바꾼다.
@@ -84,6 +84,9 @@ namespace SpellboundVR.Backend
 
             public string Url => !string.IsNullOrEmpty(verification_url) ? verification_url
                                : !string.IsNullOrEmpty(verification_uri) ? verification_uri : "https://www.google.com/device";
+
+            /// <summary>코드가 미리 채워진 주소 — 열면 코드를 칠 필요 없이 계정만 고르면 된다</summary>
+            public string PrefilledUrl => Url + "?user_code=" + UnityWebRequest.EscapeURL(user_code);
         }
 
         [Serializable]

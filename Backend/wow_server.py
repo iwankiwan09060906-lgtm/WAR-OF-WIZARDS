@@ -36,6 +36,7 @@ import random
 import socket
 import hashlib
 import sqlite3
+import subprocess
 import threading
 import traceback
 import urllib.error
@@ -56,7 +57,7 @@ STATIC_ROOT = os.path.realpath(STATIC_DIR)
 DB_FILE = os.environ.get("WOW_DB_FILE") or os.path.join(SERVER_DIR, "wow_database.sqlite")   # 시험용 DB 는 WOW_DB_FILE 로
 JWT_SECRET = os.environ.get("JWT_SECRET", "wow-secret-key-super-safe-32chars-min-length-2026")
 SERVER_KEY = os.environ.get("WOW_SERVER_KEY", "wow-server-secret-key-2026")
-TOKEN_EXPIRY_HOURS = 24
+TOKEN_EXPIRY_HOURS = 24 * 30   # 한 달 — 게임을 켤 때마다 자동 로그인으로 다시 늘어난다 (Google 로그인을 자주 하지 않게)
 
 # Google 로그인: 클라이언트 ID 는 환경변수 GOOGLE_CLIENT_ID → 이 파일 첫 줄 → 관리자 설정 auth.google_client_id 순서로 찾는다
 GOOGLE_CLIENT_ID_FILE = os.path.join(SERVER_DIR, "google_client_id.txt")
@@ -2825,6 +2826,70 @@ def lan_addresses():
     return sorted(ips)
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# 게임 서버 (Unity 서버 빌드) — StartServer.bat 이 --game-servers 로 켜면 창 없이 같이 띄우고 돌본다
+# ─────────────────────────────────────────────────────────────────────────────
+GAME_SERVER_DIR = os.path.join(os.path.dirname(SERVER_DIR), "Builds", "Server")
+GAME_SERVER_EXE = "SpellboundServer.exe"
+GAME_SERVER_MODES = (("-ffa", "server.log"), ("-duel", "server_1v1.log"))   # 서버 하나가 한 종류만 연다
+
+
+def _job_that_ends_with_me():
+    """이 프로세스가 어떻게 끝나든(창 닫기 포함) 넣어 둔 자식도 같이 끝나는 Windows 작업 개체."""
+    import ctypes
+    from ctypes import wintypes
+
+    class Basic(ctypes.Structure):
+        _fields_ = [("user_time", ctypes.c_int64), ("job_time", ctypes.c_int64), ("flags", wintypes.DWORD),
+                    ("min_set", ctypes.c_size_t), ("max_set", ctypes.c_size_t), ("processes", wintypes.DWORD),
+                    ("affinity", ctypes.c_size_t), ("priority", wintypes.DWORD), ("scheduling", wintypes.DWORD)]
+
+    class Extended(ctypes.Structure):
+        _fields_ = [("basic", Basic), ("io", ctypes.c_uint64 * 6), ("process_memory", ctypes.c_size_t),
+                    ("job_memory", ctypes.c_size_t), ("peak_process", ctypes.c_size_t), ("peak_job", ctypes.c_size_t)]
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.CreateJobObjectW.restype = wintypes.HANDLE
+    kernel32.SetInformationJobObject.argtypes = (wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p, wintypes.DWORD)
+    kernel32.AssignProcessToJobObject.argtypes = (wintypes.HANDLE, wintypes.HANDLE)
+    job = kernel32.CreateJobObjectW(None, None)
+    info = Extended()
+    info.basic.flags = 0x2000   # JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+    kernel32.SetInformationJobObject(job, 9, ctypes.byref(info), ctypes.sizeof(info))
+    return lambda process: kernel32.AssignProcessToJobObject(job, int(process._handle))
+
+
+def _keep_game_server(exe, mode, log, adopt):
+    """게임 서버 하나를 띄우고, 꺼지면 다시 켠다. 서버 빌드 중(.building)에는 기다린다."""
+    while True:
+        if os.path.exists(os.path.join(GAME_SERVER_DIR, ".building")):
+            time.sleep(3)
+            continue
+        started = time.time()
+        process = subprocess.Popen([exe, "-server", mode, "-batchmode", "-nographics", "-logFile", os.path.join(GAME_SERVER_DIR, log)],
+                                   cwd=GAME_SERVER_DIR, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        adopt(process)
+        process.wait()
+        crashed = time.time() - started < 10
+        print(f"[*] 게임 서버 {mode} 가 꺼졌습니다 — {'30' if crashed else '3'}초 뒤 다시 켭니다 (로그: {log})")
+        time.sleep(30 if crashed else 3)
+
+
+def start_game_servers():
+    exe = os.path.join(GAME_SERVER_DIR, GAME_SERVER_EXE)
+    if not os.path.exists(exe):
+        print("    - 게임 서버: 서버 빌드가 없습니다 (Unity 메뉴 Spellbound > Build > PC Server). 봇 연습만 됩니다.")
+        return
+    running = subprocess.run(["tasklist", "/FI", f"IMAGENAME eq {GAME_SERVER_EXE}", "/NH"], capture_output=True, text=True, errors="replace").stdout
+    if GAME_SERVER_EXE.lower() in running.lower():
+        print("    - 게임 서버: 이미 켜져 있어 그대로 둡니다")
+        return
+    adopt = _job_that_ends_with_me()
+    for mode, log in GAME_SERVER_MODES:
+        threading.Thread(target=_keep_game_server, args=(exe, mode, log, adopt), daemon=True).start()
+    print("    - 게임 서버: 4인 개인전 · 1:1 을 창 없이 켰습니다 (이 창을 닫으면 같이 꺼집니다)")
+
+
 def main():
     try:
         if hasattr(sys.stdout, "reconfigure"):
@@ -2874,6 +2939,8 @@ def main():
              else f"랜드마크만 — 카메라 프레임 끔: {hands['image']['reason']}"))
 
     start_discovery_responder(port)
+    if "--game-servers" in sys.argv:
+        start_game_servers()
     server = ThreadingHTTPServer(("0.0.0.0", port), WowHttpHandler)
     server.daemon_threads = True      # SSE 연결이 남아 있어도 Ctrl+C 로 바로 종료
     try:

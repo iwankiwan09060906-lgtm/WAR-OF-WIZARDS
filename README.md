@@ -33,7 +33,7 @@ Quest 3 핸드트래킹으로 룬을 그려 마법을 쓰는 1:1 VR 대전 게�
 
 ## 빠르게 실행
 
-1. Unity Hub에서 `UnityClient/`를 열고 `04_Battle` 씬에서 Play — 로컬 봇전이 시작된다 (헤드셋 없이 키보드 · 마우스로 조작).
-2. 웹 서버: `Backend/run_server.bat`.
+1. Unity Hub에서 `UnityClient/`를 열고 `04_Battle` 씬에서 Play — 서버가 꺼져 있으면 게임이 켠다. 헤드셋 없는 PC 는 웹캠 손동작으로 조작한다 (환경설정에서 끄면 키보드 · 마우스).
+2. 서버만 켜려면 `StartServer.bat` (웹 서버 + 4인 · 1:1 게임 서버). PC 를 켤 때 저절로 켜지게 하려면 `ServerAutostart.bat` 을 한 번 실행한다.
 
 자세한 순서는 `MANUAL_TODO.md` 1장.

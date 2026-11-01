@@ -4,10 +4,11 @@
 // 계약서 IPlayerInput(§6.6) 이벤트로 바꿔 준다. KeyboardInput 대신 이 컴포넌트를 쓰면
 // 시전 상태 머신(§6.2)은 그대로 둔 채 웹캠 손동작으로 플레이할 수 있다.
 //
-// 쓰는 법  : 헤드셋 없는 PC 에서 환경설정 > "웹캠 손 입력" 을 켜고 GestureTools/MediaPipe/run_hand_tracker.bat 을 실행한다.
-//            GameBootstrap.CreateInput 이 키보드 대신 이 입력을 만들고, 쓸 수 있는 슬롯의 룬을 추적기에 알려 준다
-//            (추적기가 그 룬들 중에서만 인식 — §9 "사용 가능한 슬롯만 후보").
+// 쓰는 법  : 헤드셋 없는 PC 의 기본 입력이다 (환경설정 > "웹캠 손 입력"). GameBootstrap.CreateInput 이 키보드 대신 이 입력을 만들고,
+//            전투가 시작되면 추적기를 창 없이 직접 켠다 (WebcamTracker). 내 모습은 화면 오른쪽 아래에 나온다 (WebcamHandPanel).
+//            기본 입력 = 손 모양: 오른손 모양을 유지하면 그 스킬을 고른다 (CastStateMachine.SelectSpell), 왼손 휘두르기 = 이동.
 //            조준은 오른손 커서(0~1)를 화면 좌표로 본 레이다 — 마우스와 같은 경로로 열 · 깊이 · 개인전 레인이 정해진다.
+//            추적기가 없거나 카메라가 안 열리면 1~8 · A/D · 마우스 조준으로 계속 플레이할 수 있다.
 // 메시지 형식: Docs/Input/MediaPipeHandInput.md
 
 using System;
@@ -18,9 +19,12 @@ using System.Net.Sockets;
 using System.Text;
 using System.Threading;
 using SpellboundVR.Contracts;
+using SpellboundVR.Deck;
 using SpellboundVR.Spells;
 using SpellboundVR.UI;
+using SpellboundVR.Utils;
 using UnityEngine;
+using UnityEngine.InputSystem;
 
 namespace SpellboundVR.Input
 {
@@ -35,12 +39,18 @@ namespace SpellboundVR.Input
         private readonly Vector3[] _drawPoints = new Vector3[MaxDrawPoints];
         private int _drawCount;
         private BattleHudView _hud;
+        private CastStateMachine _cast;
         private bool _shownConnected;
+        private bool _drawRunes;
+        private int _holdFrames;
+        private bool _bound;
 
         [Header("UDP")]
         [SerializeField] private int listenPort = 5065;
         [SerializeField] private string trackerHost = "127.0.0.1";
         [SerializeField] private int trackerPort = 5066;
+        [Tooltip("내 모습(JPEG)을 받는 포트")]
+        [SerializeField] private int previewPort = 5068;
 
         [Tooltip("이 시간(초) 동안 추적기 메시지가 없으면 양손 추적이 끊긴 것으로 본다")]
         [SerializeField] private float trackerTimeout = 1.0f;
@@ -54,9 +64,7 @@ namespace SpellboundVR.Input
         public event Action OnPointDetected;
         public event Action OnPalmOpenDetected;
         public event Action<sbyte> OnMoveGesture;
-#pragma warning disable 0067   // 룬 없이 슬롯을 바로 쓰는 입력은 키보드 전용
         public event Action<int> OnDirectSlotCast;
-#pragma warning restore 0067
 
         public Vector3[] DrawPoints => _drawPoints;
         public int DrawPointCount => _drawCount;
@@ -75,7 +83,8 @@ namespace SpellboundVR.Input
                 ray = default;
                 return false;
             }
-            ray = cam.ViewportPointToRay(new Vector3(RightCursor.x, RightCursor.y, 0f));
+            if (IsTrackerConnected) ray = cam.ViewportPointToRay(new Vector3(RightCursor.x, RightCursor.y, 0f));
+            else ray = cam.ScreenPointToRay(KeyInput.MousePosition()); // 추적기가 없으면 마우스로 조준
             return true;
         }
 
@@ -90,14 +99,20 @@ namespace SpellboundVR.Input
             return true;
         }
 
-        /// <summary>전투 시작: 덱의 룬을 추적기 후보로 보내고, 추적기가 없으면 HUD 에 알린다</summary>
-        public void Bind(BattleHudView hud, int[] deck)
+        /// <summary>전투 시작: 추적기를 켜고 덱의 룬을 후보로 보낸다. holdFrames = 손 모양을 유지할 프레임 수</summary>
+        public void Bind(BattleHudView hud, EightSlotDeckManager slots, int[] deck, CastStateMachine cast, bool drawRunes, int holdFrames)
         {
             _hud = hud;
+            _cast = cast;
+            _drawRunes = drawRunes;
+            _holdFrames = holdFrames;
+            _bound = true;
             var codes = new List<string>(deck.Length);
             for (int i = 0; i < deck.Length; i++)
                 if (deck[i] > 0) codes.Add(SpellCode(deck[i]));
             SendCandidates(codes);
+            WebcamTracker.EnsureRunning(drawRunes, holdFrames);
+            gameObject.AddComponent<WebcamHandPanel>().Initialize(this, slots, deck, cast, drawRunes);
         }
 
         private void TrackDrawing()
@@ -111,11 +126,12 @@ namespace SpellboundVR.Input
         {
             if (_hud == null || _shownConnected == IsTrackerConnected) return;
             _shownConnected = IsTrackerConnected;
-            _hud.ShowInputStatus(_shownConnected ? "웹캠 손 추적 연결됨" : "손 추적기를 기다리는 중 — GestureTools/MediaPipe/run_hand_tracker.bat");
+            _hud.ShowInputStatus(_shownConnected ? "웹캠 손 추적 연결됨" : "손 추적기를 기다리는 중…");
         }
 
-        public bool IsRightHandTracked { get; private set; }
-        public bool IsLeftHandTracked { get; private set; }
+        /// <summary>추적기가 없으면 손이 있는 것으로 친다 — 키보드 · 마우스로 시전하다 "손을 놓쳤다"고 취소되지 않게</summary>
+        public bool IsRightHandTracked => _rightTracked || !IsTrackerConnected;
+        public bool IsLeftHandTracked => _leftTracked || !IsTrackerConnected;
 
         // ── 계약서 밖 추가 정보 (조준 · HUD 표시용) ───────────────────────────
         /// <summary>pinch_end 와 함께 추적기가 인식한 룬. OnPinchEnded 보다 먼저 호출된다.</summary>
@@ -133,10 +149,25 @@ namespace SpellboundVR.Input
         public Vector3[] LeftLandmarks { get; } = new Vector3[21];
         public bool IsTrackerConnected => Time.unscaledTime - lastMessageTime < trackerTimeout;
 
+        /// <summary>손 모양 표: "01110" → "S03" (추적기가 보내 준다)</summary>
+        public Dictionary<string, string> ShapeSpells { get; } = new Dictionary<string, string>();
+        /// <summary>지금 오른손 모양 (패턴 · 그 스킬 · 고르기까지 진행률 0~1)</summary>
+        public string ShapePattern { get; private set; } = "";
+        public string ShapeSpell { get; private set; } = "";
+        public float ShapeProgress { get; private set; }
+        /// <summary>추적기가 켜졌지만 카메라를 열지 못했다</summary>
+        public bool CameraFailed { get; private set; }
+
+        /// <summary>새로 도착한 내 모습 JPEG (없으면 null, 한 번 꺼내면 비워진다)</summary>
+        public byte[] TakePreview() => Interlocked.Exchange(ref preview, null);
+
+        private bool _rightTracked;
+        private bool _leftTracked;
         private UdpClient receiver;
+        private UdpClient previewReceiver;
         private UdpClient sender;
-        private Thread thread;
         private volatile bool running;
+        private byte[] preview;
         private readonly ConcurrentQueue<string> inbox = new ConcurrentQueue<string>();
         private float lastMessageTime = -999f;
         private float nextHello;
@@ -147,6 +178,7 @@ namespace SpellboundVR.Input
             try
             {
                 receiver = new UdpClient(listenPort);
+                previewReceiver = new UdpClient(previewPort);
                 sender = new UdpClient();
             }
             catch (SocketException e)
@@ -156,29 +188,38 @@ namespace SpellboundVR.Input
                 return;
             }
             running = true;
-            thread = new Thread(ReceiveLoop) { IsBackground = true, Name = "MediaPipeUdp" };
-            thread.Start();
+            StartReceiver(receiver, "MediaPipeUdp", data => inbox.Enqueue(Encoding.UTF8.GetString(data)));
+            StartReceiver(previewReceiver, "MediaPipePreview", data => Interlocked.Exchange(ref preview, data)); // 항상 최신 장만
+            if (_bound) WebcamTracker.EnsureRunning(_drawRunes, _holdFrames); // 메뉴가 길어 추적기가 스스로 꺼졌을 수 있다
         }
 
         private void OnDisable()
         {
             running = false;
             receiver?.Close();
+            previewReceiver?.Close();
             sender?.Close();
             receiver = null;
+            previewReceiver = null;
             sender = null;
-            IsRightHandTracked = IsLeftHandTracked = false;
+            _rightTracked = _leftTracked = false;
         }
 
-        private void ReceiveLoop()
+        private void OnDestroy() => WebcamTracker.Quit(trackerHost, trackerPort);
+
+        private void StartReceiver(UdpClient socket, string threadName, Action<byte[]> onData)
+        {
+            new Thread(() => ReceiveLoop(socket, onData)) { IsBackground = true, Name = threadName }.Start();
+        }
+
+        private void ReceiveLoop(UdpClient socket, Action<byte[]> onData)
         {
             var any = new IPEndPoint(IPAddress.Any, 0);
             while (running)
             {
                 try
                 {
-                    byte[] data = receiver.Receive(ref any);
-                    inbox.Enqueue(Encoding.UTF8.GetString(data));
+                    onData(socket.Receive(ref any));
                 }
                 catch (SocketException)
                 {
@@ -199,19 +240,30 @@ namespace SpellboundVR.Input
                 Handle(json);
             }
 
-            if (!IsTrackerConnected && (IsRightHandTracked || IsLeftHandTracked))
+            if (!IsTrackerConnected && (_rightTracked || _leftTracked))
             {
-                IsRightHandTracked = IsLeftHandTracked = false;   // 추적기가 꺼짐 → 손 추적 끊김(§6.4 즉시 취소)
+                _rightTracked = _leftTracked = false;   // 추적기가 꺼짐 → 손 추적 끊김(§6.4 즉시 취소)
                 IsDrawing = false;
             }
             TrackDrawing();
             TrackConnection();
+            ReadKeys();
 
             if (Time.unscaledTime >= nextHello)          // 추적기 미리보기 창에 "Unity 연결됨" 표시 + 후보 재전송
             {
                 nextHello = Time.unscaledTime + 2f;
                 Send(candidatesJson ?? "{\"type\":\"hello\"}");
             }
+        }
+
+        /// <summary>손이 안 닿을 때를 위한 키 — 1~8 슬롯 · A/D 이동 (Alt 조합은 봇 수동 조종 전용)</summary>
+        private void ReadKeys()
+        {
+            if (KeyInput.AltHeld()) return;
+            int slot = KeyInput.SlotKeyDown();
+            if (slot >= 0) OnDirectSlotCast?.Invoke(slot);
+            if (KeyInput.Down(Key.A)) OnMoveGesture?.Invoke(-1);
+            if (KeyInput.Down(Key.D)) OnMoveGesture?.Invoke(1);
         }
 
         /// <summary>쿨타임이 끝난(Ready) 슬롯의 룬 코드 목록을 추적기에 알린다. 예: "S03", "H02"</summary>
@@ -254,15 +306,27 @@ namespace SpellboundVR.Input
             if (head == null) return;
             if (head.type == "frame") HandleFrame(JsonUtility.FromJson<FrameMsg>(json));
             else if (head.type == "event") HandleEvent(JsonUtility.FromJson<EventMsg>(json));
+            else if (head.type == "shapes") HandleShapes(JsonUtility.FromJson<ShapesMsg>(json));
+            else if (head.type == "status") CameraFailed = JsonUtility.FromJson<StatusMsg>(json).state == "no_camera";
+        }
+
+        private void HandleShapes(ShapesMsg m)
+        {
+            if (m.patterns == null || m.spells == null) return;
+            for (int i = 0; i < m.patterns.Length && i < m.spells.Length; i++) ShapeSpells[m.patterns[i]] = m.spells[i];
         }
 
         private void HandleFrame(FrameMsg f)
         {
             if (f.right != null)
             {
-                IsRightHandTracked = f.right.tracked;
+                _rightTracked = f.right.tracked;
                 RightPose = f.right.pose;
                 IsDrawing = f.right.drawing;
+                bool shaped = f.right.tracked && f.right.shape != null;
+                ShapePattern = shaped ? f.right.shape.pattern : "";
+                ShapeSpell = shaped ? f.right.shape.spell : "";
+                ShapeProgress = shaped ? f.right.shape.progress : 0f;
                 if (f.right.cursor != null && f.right.cursor.Length >= 2) RightCursor = new Vector2(f.right.cursor[0], f.right.cursor[1]);
                 if (f.right.pose == "point")
                 {
@@ -273,7 +337,7 @@ namespace SpellboundVR.Input
             }
             if (f.left != null)
             {
-                IsLeftHandTracked = f.left.tracked;
+                _leftTracked = f.left.tracked;
                 LeftPose = f.left.pose;
                 CopyLandmarks(f.left.landmarks, LeftLandmarks);
             }
@@ -287,7 +351,10 @@ namespace SpellboundVR.Input
             switch (e.name)
             {
                 case "tracking":
-                    if (right) IsRightHandTracked = e.tracked; else IsLeftHandTracked = e.tracked;
+                    if (right) _rightTracked = e.tracked; else _leftTracked = e.tracked;
+                    break;
+                case "shape":
+                    if (right && _cast != null) _cast.SelectSpell(SpellNumber(e.spell));
                     break;
                 case "pinch_start":
                     if (right) { IsDrawing = true; _drawCount = 0; OnPinchStarted?.Invoke(); }
@@ -332,6 +399,10 @@ namespace SpellboundVR.Input
 #pragma warning disable 0649   // JsonUtility 가 리플렉션으로 채우는 필드
         [Serializable] private class Header { public string type; }
 
+        [Serializable] private class ShapeDto { public string pattern; public string spell; public float progress; }
+        [Serializable] private class ShapesMsg { public string[] patterns; public string[] spells; }
+        [Serializable] private class StatusMsg { public string state; }
+
         [Serializable]
         private class HandDto
         {
@@ -344,6 +415,7 @@ namespace SpellboundVR.Input
             public float pinch;
             public float[] landmarks;
             public float[] palm;
+            public ShapeDto shape;
         }
 
         [Serializable]
@@ -384,6 +456,7 @@ namespace SpellboundVR.Input
             public int direction;
             public bool tracked;
             public bool tooShort;
+            public string spell;
             public PointDto[] points;
             public RuneResult rune;
             public string reason;

@@ -10,6 +10,7 @@ rem     (Unity 봇 · BotLab 봇의 작전 · 한 수, 웹 AI 코치). 꺼져 �
 rem   - 봇 3개(4인 개인전)까지 동시에 답한다: --parallel 3
 rem  다른 곳에 받았으면: set WOW_LLAMA_DIR=llama.cpp 폴더 · set WOW_VLM_DIR=GGUF 폴더 후 실행
 rem  받는 법 · 구조: Docs/Backend/AiLearning.md 4-1, Docs/Bot/AiStrategyBot.md "하이브리드 봇"
+rem  인자는 wow_server.py 로 넘긴다 (StartServer.bat 이 --game-servers 를 준다)
 rem ================================================================
 if "%WOW_LLAMA_DIR%"=="" set "WOW_LLAMA_DIR=%USERPROFILE%\models\llama.cpp-b11642"
 if "%WOW_VLM_DIR%"=="" set "WOW_VLM_DIR=%USERPROFILE%\models\Qwen2.5-VL-3B-Instruct-GGUF"
@@ -54,5 +55,5 @@ echo ==============================================================
 echo [*] 웹 브라우저 접속: http://localhost:8080/
 echo [*] 종료: 이 창에서 Ctrl+C - 로컬 VLM 창은 따로 닫으세요
 echo.
-"%PY%" wow_server.py 8080
-if errorlevel 1 pause
+"%PY%" wow_server.py 8080 %*
+if errorlevel 1 if not defined WOW_NO_PAUSE pause

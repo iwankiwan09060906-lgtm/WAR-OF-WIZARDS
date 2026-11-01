@@ -30,6 +30,10 @@ namespace SpellboundVR.Arena
         public float ffaNexusDepth = 4f;
         [Tooltip("타워 깊이")]
         public float ffaTowerDepth = 9f;
+        [Tooltip("시야를 1:1 보다 이만큼 높인다 (m) — 세 레인이 한눈에 들어오게")]
+        public float ffaViewLift = 3.5f;
+        [Tooltip("타워 · 넥서스 · 상대 아바타 크기 배율 (표시 전용, 판정과 무관). 1:1 보다 가까이 있어 그대로 두면 커 보인다")]
+        public float ffaModelScale = 0.65f;
 
         [Header("씬 구조물 비주얼 (선택) — 연결 시 위치에서 깊이를 읽고, 표시용으로 재사용")]
         public Transform homeTowerVisual;

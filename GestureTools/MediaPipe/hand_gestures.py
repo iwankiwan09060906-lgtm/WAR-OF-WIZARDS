@@ -13,6 +13,9 @@ MediaPipe 와 카메라에 의존하지 않는 순수 로직이라 가짜 랜드
     왼손    손바닥 편 채 좌/우 휘두르기 → move (-1 / +1)  (IPlayerInput.OnMoveGesture)
     양손    추적 시작/끊김        → tracking      (IsRightHandTracked / IsLeftHandTracked)
 
+웹캠 기본 입력은 룬 그리기 대신 손 모양이다 (ShapeHand):
+    오른손  손 모양을 유지         → shape         (SKILL_SHAPES 의 스킬을 고른다, 손 위치 = 조준 커서)
+
 좌표: 랜드마크는 MediaPipe 그대로(x 오른쪽, y 아래, 0~1, 거울 모드 화면 기준).
       밖으로 내보내는 좌표(궤적 · 조준점)는 y 를 뒤집어 "y 위쪽 +" 로 보낸다 (Unity Vector2 와 같은 방향).
 """
@@ -29,6 +32,29 @@ FINGERS = {             # (MCP, PIP, DIP, TIP)
     "pinky": (17, 18, 19, 20),
 }
 PALM_POINTS = (0, 5, 9, 13, 17)
+
+# 손 모양 → 스킬. 패턴은 (엄지, 검지, 중지, 약지, 새끼) 순서로 1 = 폄, 0 = 접음
+SKILL_SHAPES = {
+    "00000": "S01",  # 연막
+    "01000": "S02",  # 독 장판
+    "01110": "S03",  # 파이어볼
+    "01111": "S04",  # 화살 세례
+    "11111": "S05",  # 토네이도
+    "10000": "S06",  # 번개
+    "11100": "S07",  # 총난사
+    "11001": "S08",  # 방어 쉴드
+    "00100": "S09",  # 타워 버프
+    "10100": "S10",  # 집중
+    "00111": "S11",  # 도끼 전사
+    "00110": "S12",  # 드래곤
+    "11110": "S13",  # 터렛
+    "01100": "H01",  # 프리즈
+    "10001": "H02",  # 레이저 빔
+    "11000": "H03",  # 흡혈
+    "01001": "H04",  # 반사 결계
+    "00001": "H05",  # 분노
+    "00011": "H06",  # 소환탑
+}
 
 
 class Settings:
@@ -52,6 +78,9 @@ class Settings:
     swipe_cooldown = 0.70    # 연타 방지
     aim_mode = "position"    # "position" = 검지 끝이 화면 좌/중/우 어디에 있나, "angle" = 검지가 기운 방향
     aim_angle = 18.0         # angle 모드에서 좌/우로 판정하는 기울기(도)
+    shape_hold_frames = 15   # 손 모양을 이 프레임 수만큼 유지해야 스킬을 고른다 (환경설정 "유지 시간")
+    shape_cooldown = 0.8     # 같은 스킬을 다시 고를 수 있는 최소 간격(초)
+    cursor_margin = 0.15     # 조준 커서: 화면 가장자리의 이 비율은 쓰지 않는다 (손이 화면 밖으로 나가지 않고 끝까지 닿게)
 
 
 def _xyz(lm, i, aspect):
@@ -96,6 +125,17 @@ def classify_pose(lm, aspect=4 / 3, pinching=False, s=Settings):
     if all(ext.values()):          # 핀치는 위에서 걸렀으므로 엄지 위치는 보지 않는다
         return "open", f
     return "other", f
+
+
+def finger_pattern(lm, aspect=4 / 3):
+    """손가락 5개의 폄/접음을 '01100' 같은 문자열로 (손 방향과 상관없음)."""
+    def d(a, b):
+        return math.hypot((lm[a][0] - lm[b][0]) * aspect, lm[a][1] - lm[b][1])
+    # 엄지: 새끼 뿌리에서 엄지 끝이 엄지 관절보다 멀면 폄 / 나머지: 손목에서 손끝이 둘째 마디보다 멀면 폄
+    bits = ["1" if d(4, 17) > d(3, 17) * 1.05 else "0"]
+    for tip, pip in ((8, 6), (12, 10), (16, 14), (20, 18)):
+        bits.append("1" if d(tip, WRIST) > d(pip, WRIST) else "0")
+    return "".join(bits)
 
 
 def palm_center(lm):
@@ -224,6 +264,83 @@ class RightHand:
         elif self.pose == "open":
             if t - self._pinch_end_t >= s.palm_grace_sec:
                 events.append({"name": "palm_open"})
+        return events
+
+
+class ShapeHand:
+    """오른손: 손 모양을 유지하면 그 스킬을 고른다. 손 위치가 조준 커서다. RightHand 와 같은 속성을 쓴다."""
+
+    def __init__(self, s=Settings, hold_frames=0):
+        self.s = s
+        self.hold_frames = hold_frames or s.shape_hold_frames
+        self.tracked = False
+        self.last_seen = -1e9
+        self.pose = "none"
+        self.drawing = False       # 이 입력은 그리지 않는다
+        self.trail = []
+        self.aim = (1, 0.5)
+        self.cursor = None
+        self.features = None
+        self.pattern = ""          # 지금 보이는 손 모양
+        self._count = 0            # 그 모양이 연속으로 나온 프레임 수
+        self._current = ""         # 마지막으로 확정한 모양 — 손을 바꾸기 전에는 다시 고르지 않는다
+        self._picked = {}          # 스킬별 마지막으로 고른 시각
+        self._smooth = None
+
+    @property
+    def spell(self):
+        return SKILL_SHAPES.get(self.pattern)
+
+    @property
+    def progress(self):
+        """고르기까지 진행률 0~1 (이미 고른 모양 · 표에 없는 모양은 0)."""
+        if self.spell is None or self.pattern == self._current:
+            return 0.0
+        return round(min(1.0, self._count / self.hold_frames), 3)
+
+    def _track_cursor(self, lm):
+        s = self.s
+        x, y = palm_center(lm)
+        if self._smooth is None:
+            self._smooth = (x, y)
+        else:
+            a = s.smooth
+            self._smooth = (self._smooth[0] * a + x * (1 - a), self._smooth[1] * a + y * (1 - a))
+        span = 1 - 2 * s.cursor_margin
+        self.cursor = to_up(tuple(min(1.0, max(0.0, (v - s.cursor_margin) / span)) for v in self._smooth))
+
+    def update(self, lm, t, aspect=4 / 3):
+        s = self.s
+        events = []
+        if lm is None:
+            if self.tracked and t - self.last_seen > s.lost_sec:
+                self.tracked = False
+                self.pose = "none"
+                self.pattern, self._current, self._count = "", "", 0   # 손을 다시 들면 같은 모양도 또 고른다
+                self._smooth = None
+                events.append({"name": "tracking", "tracked": False})
+            return events
+
+        self.last_seen = t
+        if not self.tracked:
+            self.tracked = True
+            events.append({"name": "tracking", "tracked": True})
+
+        self.pose, self.features = classify_pose(lm, aspect, s=s)
+        self._track_cursor(lm)
+
+        pattern = finger_pattern(lm, aspect)
+        if pattern == self.pattern:
+            self._count += 1
+        else:
+            self.pattern, self._count = pattern, 1
+
+        if self._count == self.hold_frames and pattern != self._current:
+            self._current = pattern
+            spell = SKILL_SHAPES.get(pattern)
+            if spell and t - self._picked.get(spell, -1e9) > s.shape_cooldown:
+                self._picked[spell] = t
+                events.append({"name": "shape", "spell": spell, "pattern": pattern})
         return events
 
 

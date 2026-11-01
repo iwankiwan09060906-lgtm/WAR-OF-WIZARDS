@@ -141,6 +141,11 @@ namespace SpellboundVR.Presentation
         private int _frame;
         private int _lastMatchSerial = -1;
 
+        /// <summary>구조물 · 아바타 크기 배율 (개인전은 구조물이 가까워서 줄인다)</summary>
+        private float ArtScale => _arena.IsDuel || _session.Layout == null ? 1f : _session.Layout.ffaModelScale;
+
+        private float AvatarScale => playerScale * ArtScale;
+
         /// <summary>Commander 발판 윗면 높이 (ArenaLayout.commanderPlatformHeight)</summary>
         private float PlatformHeight => _session.Layout != null ? _session.Layout.commanderPlatformHeight : 0f;
 
@@ -455,6 +460,7 @@ namespace SpellboundVR.Presentation
                 go.transform.SetPositionAndRotation(pos, _arena.FacingRotation(team));
                 visual = go.transform;
             }
+            if (!_arena.IsDuel) visual.localScale = Vector3.one * ArtScale; // 1번 구조물을 복제하므로 곱하지 않고 값을 정한다
             // HP바는 비주얼의 스케일을 상속하지 않도록 별도 홀더에 붙인다
             var holder = new GameObject("StructureHp_" + team + (isNexus ? "_Nexus" : "_Tower_" + column)).transform;
             holder.SetParent(transform, false);
@@ -463,7 +469,7 @@ namespace SpellboundVR.Presentation
             var view = new StructureView
             {
                 Root = visual,
-                HpFill = AttachHpBar(holder, isNexus ? 3.2f : 5.4f, 1.6f), // 아트 높이: 넥서스 2.4m · 타워 4.8m
+                HpFill = AttachHpBar(holder, (isNexus ? 3.2f : 5.4f) * ArtScale, 1.6f), // 아트 높이: 넥서스 2.4m · 타워 4.8m
                 Team = team,
                 MuzzleHeight = size.y * 0.8f,
                 Size = size,
@@ -531,7 +537,13 @@ namespace SpellboundVR.Presentation
         private AvatarView BuildAvatar(Team team)
         {
             GameObject go;
-            if (_catalog != null && _catalog.TryGet("MDL_Avatar_Wizard", out var prefab)) go = Instantiate(prefab);
+            if (_catalog != null && _catalog.TryGet("MDL_Avatar_Wizard", out var prefab))
+            {
+                go = Instantiate(prefab);
+                var hand = FindDeep(go.transform, "PT_Right_Hand_Weapon_slot");
+                if (hand != null && _catalog.TryGet("MDL_Avatar_Staff", out var staff)) Instantiate(staff, hand, false);
+                ApplyTint(go.GetComponentsInChildren<Renderer>(true), Color.Lerp(Color.white, FallbackVisuals.TeamColor(team), 0.3f));
+            }
             else
             {
                 go = new GameObject("OpponentAvatar");
@@ -545,7 +557,7 @@ namespace SpellboundVR.Presentation
                 hat.transform.localScale = new Vector3(0.5f, 0.25f, 0.5f);
             }
             go.transform.SetParent(transform, false);
-            go.transform.localScale = Vector3.one * playerScale;
+            go.transform.localScale = Vector3.one * AvatarScale;
             go.transform.position = _arena.ToWorld(_arena.PlayerPosition(team, 1), PlatformHeight);
             go.SetActive(false);
             var avatar = new AvatarView { Team = team, Root = go.transform };
@@ -571,6 +583,13 @@ namespace SpellboundVR.Presentation
             avatar.Blind = CreateStatusFx("VFX_S01_Smoke_Loop", avatar.Root);
             if (avatar.Blind != null) avatar.Blind.transform.localPosition = new Vector3(0f, 2.0f, 0f);
             return avatar;
+        }
+
+        private static Transform FindDeep(Transform root, string name)
+        {
+            foreach (var t in root.GetComponentsInChildren<Transform>(true))
+                if (t.name == name) return t;
+            return null;
         }
 
         private void BuildSelfStatusVisuals()
@@ -979,7 +998,7 @@ namespace SpellboundVR.Presentation
                 a.Root.position = Vector3.Lerp(a.Root.position, target, 1f - Mathf.Exp(-20f * Time.deltaTime));
                 a.Root.rotation = _arena.FacingRotation(a.Team);
                 bool dead = o.Alive == 0;
-                a.Root.localScale = dead ? new Vector3(playerScale, playerScale * 0.2f, playerScale) : Vector3.one * playerScale;
+                a.Root.localScale = dead ? new Vector3(AvatarScale, AvatarScale * 0.2f, AvatarScale) : Vector3.one * AvatarScale;
                 SetActive(a.Shield, o.Shield > 0 && !dead);
                 SetActive(a.Reflect, (o.Flags & PlayerFlags.Reflect) != 0 && !dead);
                 SetActive(a.Focus, (o.Flags & PlayerFlags.Focus) != 0 && !dead);

@@ -356,20 +356,21 @@ namespace SpellboundVR.Core
 
         private BootMode ResolveMode()
         {
-#if UNITY_SERVER
-            return BootMode.DedicatedServer;
-#else
-            if (bootMode != BootMode.Auto) return bootMode;
+            // 경기 종류 · 세션은 빌드에 실행 모드가 박혀 있어도 읽는다 (RunServer1v1.bat 의 -duel)
             var args = System.Environment.GetCommandLineArgs();
+            BootMode requested = BootMode.LocalVsBot;
             for (int i = 0; i < args.Length; i++)
             {
-                if (args[i] == "-server" || args[i] == "-spellboundServer") return BootMode.DedicatedServer;
-                if (args[i] == "-client" || args[i] == "-spellboundClient") return BootMode.FusionClient;
+                if (args[i] == "-server" || args[i] == "-spellboundServer") requested = BootMode.DedicatedServer;
+                if (args[i] == "-client" || args[i] == "-spellboundClient") requested = BootMode.FusionClient;
                 if (args[i] == "-session" && i + 1 < args.Length) sessionName = args[i + 1];
                 if (args[i] == "-duel") serverArenaMode = ArenaMode.Duel;
                 if (args[i] == "-ffa") serverArenaMode = ArenaMode.Ffa4;
             }
-            return BootMode.LocalVsBot;
+#if UNITY_SERVER
+            return BootMode.DedicatedServer;
+#else
+            return bootMode != BootMode.Auto ? bootMode : requested;
 #endif
         }
 
@@ -440,7 +441,7 @@ namespace SpellboundVR.Core
             presentation.AddComponent<DamageTextView>().Initialize(_session, head);
             presentation.AddComponent<BlindOverlayView>().Initialize(_session, head);
             var hud = gameObject.AddComponent<BattleHudView>();
-            if (input is KeyboardInput)
+            if (!(input is HandTrackingInput))
             {
                 // 데스크톱 화면(헤드셋 없음): 고개를 숙일 수 없으니 시점을 아래로 기울이고 HUD는 화면 하단에 작게
                 platform.viewPitch = desktopViewPitch;
@@ -451,7 +452,11 @@ namespace SpellboundVR.Core
             hud.localPosition += head.parent != null ? head.localPosition : Vector3.zero; // 시작 시 머리 높이 기준
             hud.Initialize(_session, head.parent != null ? head.parent : playerRig);
             gameObject.AddComponent<BattleCoach>().Initialize(_session, hud);
-            if (input is MediaPipeHandInput tracker) tracker.Bind(hud, deck.ToArray());
+            if (input is MediaPipeHandInput tracker)
+            {
+                var settings = SpellboundVR.UI.MetaState.Settings;
+                tracker.Bind(hud, _deckManager, deck.ToArray(), cast, settings.webcamDrawRunes, settings.holdFrames);
+            }
 
             platform.SetTeam(localTeam, 1);
 
@@ -498,8 +503,9 @@ namespace SpellboundVR.Core
 
             var inputGo = new GameObject("[Input]");
             inputGo.transform.SetParent(transform, false);
-            // 헤드셋 없는 PC + 환경설정 "웹캠 손 입력": MediaPipe 손 추적기(GestureTools/MediaPipe)의 UDP 를 입력으로
-            if (!useHands && (inputMode == InputMode.MediaPipe || (inputMode != InputMode.Keyboard && SpellboundVR.UI.MetaState.Settings.webcamHands)))
+            // 헤드셋 없는 PC 의 기본 입력: 웹캠 + MediaPipe 손 추적기 (환경설정 "웹캠 손 입력"을 끄면 마우스 · 키보드)
+            bool webcam = inputMode == InputMode.MediaPipe || (inputMode != InputMode.Keyboard && SpellboundVR.UI.MetaState.Settings.webcamInput);
+            if (!useHands && webcam && !Application.isBatchMode && WebcamTracker.Available)
             {
                 var tracker = inputGo.AddComponent<MediaPipeHandInput>();
                 tracker.viewCamera = head != null ? head.GetComponent<Camera>() : null;

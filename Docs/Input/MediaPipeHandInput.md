@@ -1,8 +1,45 @@
 # War of Wizards — MediaPipe 손동작 입력 (6단계: AI 손동작 인식)
 
-웹캠으로 손을 찍어 **MediaPipe Hand Landmarker(양손 21점)** 로 손 자세와 룬 그림을 인식하고,
-결과를 **UDP(JSON)** 로 Unity 클라이언트에 보낸다. Unity 쪽은 계약서 `IPlayerInput`(§6.6)
-구현체 하나(`MediaPipeHandInput`)만 바꿔 끼우면 키보드 대신 손으로 플레이할 수 있다.
+웹캠으로 손을 찍어 **MediaPipe Hand Landmarker(양손 21점)** 로 손 모양을 인식하고,
+결과를 **UDP(JSON)** 로 Unity 클라이언트에 보낸다. 헤드셋 없는 PC 의 기본 입력이다.
+
+**쓰는 법: 그냥 게임을 켠다.** 전투가 시작되면 게임이 추적기를 창 없이 직접 띄우고(`WebcamTracker.cs`), 화면 오른쪽 아래에
+내 모습과 내 덱의 손 모양 안내가 나온다(`WebcamHandPanel.cs`). 전투가 끝나면 추적기도 꺼진다. 환경설정 > 제스처 > "웹캠 손 입력"을 끄면 마우스 · 키보드로 돌아간다.
+
+## 0. 손 모양 입력 (기본)
+
+| 손 | 동작 | 결과 |
+| --- | --- | --- |
+| 오른손 | 아래 표의 손 모양을 약 0.5초 유지 (환경설정 "유지 시간") | 그 스킬을 고른다. 자기 · 타워 · 전역 스킬은 바로 시전 |
+| 오른손 | 고른 뒤 손을 움직인다 | 손바닥 위치가 조준점 — 2초 뒤 시전 (이때 손 모양을 바꿔도 스킬은 그대로) |
+| 오른손 | 화면 밖으로 뺀다 | 시전 취소 |
+| 왼손 | 손바닥 편 채 좌/우로 휘두른다 | 한 칸 이동 |
+
+키보드도 같이 된다: `A` · `D` 이동, `1`~`8` 슬롯. 추적기가 없거나 웹캠을 열 수 없으면 마우스가 조준을 맡는다.
+
+패턴은 (엄지, 검지, 중지, 약지, 새끼) 순서, 1 = 폄, 0 = 접음. 표는 `hand_gestures.SKILL_SHAPES` 한 곳에만 있고 게임 안내판도 이 표를 받아 쓴다.
+
+| 패턴 | 스킬 | 패턴 | 스킬 |
+| --- | --- | --- | --- |
+| `00000` 주먹 | S01 연막 | `00111` | S11 도끼 전사 |
+| `01000` | S02 독 장판 | `00110` | S12 드래곤 |
+| `01110` | S03 파이어볼 | `11110` | S13 터렛 |
+| `01111` | S04 화살 세례 | `01100` 브이 | H01 프리즈 |
+| `11111` 손바닥 | S05 토네이도 | `10001` | H02 레이저 빔 |
+| `10000` 엄지 척 | S06 번개 | `11000` | H03 흡혈 |
+| `11100` | S07 총난사 | `01001` | H04 반사 결계 |
+| `11001` | S08 방어 쉴드 | `00001` | H05 분노 |
+| `00100` | S09 타워 버프 | `00011` | H06 소환탑 |
+| `10100` | S10 집중 | | |
+
+- 잘 잡히려면: 손바닥이 카메라를 향하게, 카메라에서 30~50cm, 밝은 곳에서.
+- 표에 없는 모양과 손을 바꾸는 도중의 모양은 고르지 않는다. 같은 모양을 계속 들고 있어도 한 번만 고른다.
+- 덱에 없는 스킬은 "이 스킬은 덱에 없습니다"가 뜬다 (스킬 테스트 모드에서는 시전된다).
+- 허공에 룬을 그리고 싶으면 환경설정 > "웹캠으로 룬 그리기" (아래 2장의 흐름).
+
+---
+
+아래는 추적기 내부와 룬 그리기 방식이다.
 
 ```text
  웹캠 ──▶ wow_hand_tracker.py ──UDP 5065──▶ Unity: MediaPipeHandInput : IPlayerInput
@@ -27,10 +64,12 @@
 ## 1. 실행
 
 ```bat
-AI\MediaPipe\run_hand_tracker.bat
+GestureTools\MediaPipe\run_hand_tracker.bat
 ```
 
-- 처음 실행하면 `GestureTools/MediaPipe/.venv` 가상환경을 만들고 MediaPipe 를 설치한다 (1~3분, 인터넷 필요).
+게임이 알아서 켜므로 직접 실행할 일은 없다. 미리보기 창으로 손 인식을 따로 점검할 때만 쓴다.
+
+- 처음 실행하면 `GestureTools/MediaPipe/.venv` 가상환경을 만들고 MediaPipe 를 설치한다 (1~3분, 인터넷 필요). 게임이 켤 때는 화면 오른쪽 아래에 설치 중이라고 나온다.
   **전역 파이썬에 직접 설치하지 않는다** — MediaPipe 가 numpy 를 2.x 로 올려 다른 도구(aider, scipy 등)와 충돌한다.
 - 손 모델 `models/hand_landmarker.task`(구글 공식, 7.8MB)가 없으면 처음 실행할 때 자동으로 받는다.
 - 미리보기 창 단축키: `q` 종료 · `h` 왼손/오른손 바꾸기 · `a` 조준 방식(위치/기울기) · `r` 룬 안내 켜기/끄기
@@ -40,6 +79,10 @@ Unity 없이 확인하려면 다른 창에서 `run_unity_simulator.bat` 를 켜�
 | 옵션 | 뜻 |
 |---|---|
 | `--camera 1` | 다른 카메라 사용 |
+| `--input rune` | 손 모양 대신 핀치로 룬 그리기 (기본 `shape`) |
+| `--hold-frames 15` | 손 모양을 유지할 프레임 수 |
+| `--preview-port 5068` | Unity 로 내 모습(JPEG)을 보낼 UDP 포트, 0 = 끔 |
+| `--exit-idle 30` | Unity 메시지가 이 시간(초) 없으면 종료 (게임이 켤 때 쓴다) |
 | `--deck S03,S06,S07,S08,S11,S13,H01,H02` | 룬 후보 고정 (Unity 가 후보를 보내면 그것으로 바뀜) |
 | `--host 192.168.0.10` | Unity 가 다른 PC 에 있을 때 (그 PC 방화벽에서 UDP 5065 허용) |
 | `--recognizer server --server http://localhost:8080` | 룬 인식을 백엔드 6단계 API 로 (서버가 꺼져 있으면 자동으로 로컬 인식) |
@@ -127,6 +170,7 @@ Unity `JsonUtility` 로 바로 읽을 수 있게 중첩 배열을 쓰지 않는�
 
 | name | 추가 필드 |
 |---|---|
+| `shape` | `spell`(룬 코드), `pattern` — 손 모양 입력에서 스킬을 골랐다 |
 | `pinch_start` | — |
 | `pinch_end` | `points`, `length`, `tooShort`, `rune` |
 | `pinch_cancel` | `reason` |
@@ -138,11 +182,22 @@ Unity `JsonUtility` 로 바로 읽을 수 있게 중첩 배열을 쓰지 않는�
 `rune.reason`: `ok` · `low_score`(모양이 다름) · `ambiguous`(두 룬과 비슷) · `too_short` · `no_candidates`
 `rune.spellNumber` 는 계약서 `SpellCastRequest.SpellId` 값이다 (S01~S13 → 1~13, H01~H06 → 101~106).
 
+### 그 밖의 추적기 → Unity 메시지
+
+```json
+{"type":"shapes","patterns":["00000","01000"],"spells":["S01","S02"]}
+{"type":"status","state":"no_camera"}
+```
+
+손 모양 입력의 `frame.right` 에는 `"shape":{"pattern":"01110","spell":"S03","progress":0.6}` 가 붙는다. `cursor` 는 손바닥 중심이다 (화면 가장자리 15% 는 쓰지 않아 손이 화면 밖으로 나가지 않고 끝까지 닿는다).
+UDP `5068` 로는 내 모습 JPEG 를 보낸다 (320px, 약 15장/초, 장당 약 6KB, 데이터그램 하나 = 한 장).
+
 ### Unity → 추적기 (`127.0.0.1:5066`)
 
 ```json
 {"type":"candidates","spells":["S03","S06","H02"]}
 {"type":"hello"}
+{"type":"quit"}
 ```
 
 `MediaPipeHandInput` 은 2초마다 마지막 후보(없으면 hello)를 다시 보낸다 → 추적기 창에 "Unity 응답: 연결됨" 표시.

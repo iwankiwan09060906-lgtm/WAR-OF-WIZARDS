@@ -34,6 +34,7 @@ namespace SpellboundVR.Arena
             if (playerRig != null && rigHeight < 0f)
                 rigHeight = playerRig.position.y - layout.Geometry.GroundY;
             if (rigHeight < 0f) rigHeight = 0f;
+            if (layout.Mode == ArenaMode.Ffa4) rigHeight += layout.ffaViewLift;
         }
 
         public void SetTeam(Team team, int worldColumn)

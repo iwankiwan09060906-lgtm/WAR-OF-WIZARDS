@@ -1,11 +1,12 @@
 // C01 로그인 · 회원가입 — VR UI 프로토타입(Figma Make, 이식 후 삭제)의 LoginScreen.tsx · SignUpScreen.tsx 를 Unity로 옮김
 //   가운데 카드 하나: 작은 머리말("VR MAGIC BATTLE" / "JOIN THE REALM") · Cinzel 제목(그라데이션) · 마름모 구분선 · 입력칸 · 보라 버튼
 //   · "또는" · 아래 전환 링크. 회원가입은 배경이 청록으로 바뀌고 비밀번호 강도 막대(약함~매우 강함)가 붙는다.
-//   "Google 계정으로 계속하기" = 기기 로그인(Device Flow, Backend/GoogleDeviceAuth): Quest에는 Google 로그인 창이 없으니
-//   카드에 주소(google.com/device) · 코드 · 남은 시간을 띄우고, 유저가 휴대폰 · PC에서 승인할 때까지 기다렸다가 게임 서버 토큰으로 바꾼다.
+//   "Google 계정으로 계속하기" = 기기 로그인(Device Flow, Backend/GoogleDeviceAuth): 코드가 미리 채워진 주소를
+//   PC 는 브라우저로 바로 열고, Quest 는 QR 로 띄운다 (휴대폰으로 찍으면 끝). 유저가 계정을 고르면 게임 서버 토큰으로 바꾼다.
 //   그 아래 게스트 입장(이름만으로 바로).
 //   덧붙인 것: 데모 계정 · 서버 없이 오프라인 시작 · 서버 주소 바꾸기(Quest는 서버 PC의 IP가 필요) · 비밀번호 재설정 요청.
 
+using System.Collections;
 using System.Text.RegularExpressions;
 using SpellboundVR.Backend;
 using UnityEngine;
@@ -29,6 +30,8 @@ namespace SpellboundVR.UI
         private GoogleDeviceAuth _google;
         private string _googleStatus = "";
         private bool _googleBusy;
+        private Texture2D _qr;
+        private string _qrUrl;
 
         public LoginScreen(bool signup) => _signup = signup;
 
@@ -72,9 +75,38 @@ namespace SpellboundVR.UI
             {
                 _serverOk = false;
                 Redraw();
+                // 이 PC 의 서버가 꺼져 있으면 직접 켠다
+                if (LocalServer.TryStart(BackendClient.Instance.ServerUrl))
+                {
+                    BackendClient.Instance.StartCoroutine(WaitForLocalServer());
+                    return;
+                }
                 // 서버에 못 붙으면 앱을 켠 뒤 한 번 자동으로 찾아 본다
                 if (!s_autoDiscovered && !_discovering) { s_autoDiscovered = true; Discover(); }
             });
+        }
+
+        private IEnumerator WaitForLocalServer()
+        {
+            _discoverNote = "이 PC 의 서버를 켜는 중…";
+            Redraw();
+            for (int i = 0; i < 30 && IsOpen && _serverOk != true; i++)
+            {
+                yield return new WaitForSecondsRealtime(1f);
+                BackendClient.Instance.Get<HealthDto>("/api/health", _ => HandleLocalServerUp(), _ => { });
+            }
+            if (_serverOk == true) yield break;
+            _discoverNote = "서버를 켜지 못했습니다. StartServer.bat 을 직접 실행해 보세요.";
+            if (IsOpen) Redraw();
+        }
+
+        private void HandleLocalServerUp()
+        {
+            if (_serverOk == true) return;
+            _serverOk = true;
+            _discoverNote = "";
+            if (IsOpen) Redraw();
+            if (BackendClient.Instance.HasToken) AuthService.RestoreSession(_ => Enter(null), _ => { }); // 시작할 때 서버가 없어 못 한 자동 로그인
         }
 
         protected override void Build(RectTransform body)
@@ -195,7 +227,11 @@ namespace SpellboundVR.UI
             {
                 _google = new GameObject("[GoogleDeviceAuth]").AddComponent<GoogleDeviceAuth>();
                 _google.OnStatus += m => { _googleStatus = m; };
-                _google.OnCodeIssued += _ => Redraw();
+                _google.OnCodeIssued += code =>
+                {
+                    if (!Application.isMobilePlatform) Application.OpenURL(code.PrefilledUrl); // PC: 코드가 채워진 브라우저를 바로 연다
+                    Redraw();
+                };
                 _google.OnFailed += m => { _googleStatus = m; Redraw(); };
                 _google.OnSucceeded += HandleGoogleTokens;
             }
@@ -209,6 +245,9 @@ namespace SpellboundVR.UI
             _googleBusy = false;
             if (_google != null) Object.Destroy(_google.gameObject);
             _google = null;
+            if (_qr != null) Object.Destroy(_qr);
+            _qr = null;
+            _qrUrl = null;
         }
 
         private void HandleGoogleTokens(GoogleDeviceAuth.GoogleTokens tokens)
@@ -235,17 +274,20 @@ namespace SpellboundVR.UI
         {
             var dc = _google != null ? _google.Current : null;
             bool waiting = dc != null && _google.IsRunning;
+            bool pc = !Application.isMobilePlatform;
 
             var box = UiKit.Card(card, 26, 10, "Device", new Color(0f, 0f, 0f, 0.35f), UiTheme.Alpha(UiTheme.Cyan, 0.4f));
             box.GetComponent<VerticalLayoutGroup>().childAlignment = TextAnchor.UpperCenter;
-            UiKit.Kicker(box, "Google Device Login", UiTheme.CyanLight, TextAnchor.MiddleCenter, 14);
-            UiKit.Label(box, "1. 휴대폰이나 PC 브라우저에서 이 주소를 여세요", UiTheme.FontSmall, UiTheme.Text2, false, TextAnchor.MiddleCenter);
-            var url = UiKit.Label(box, dc != null ? dc.Url : "…", UiTheme.FontTitle, UiTheme.CyanLight, true, TextAnchor.MiddleCenter);
-            url.horizontalOverflow = HorizontalWrapMode.Overflow;
+            UiKit.Kicker(box, "Google Login", UiTheme.CyanLight, TextAnchor.MiddleCenter, 14);
+            UiKit.Label(box, pc ? "열린 브라우저에서 Google 계정을 고르면 바로 로그인됩니다" : "휴대폰 카메라로 QR 을 찍고 Google 계정을 고르세요",
+                        UiTheme.FontSmall, UiTheme.Text2, false, TextAnchor.MiddleCenter);
+            if (!pc && dc != null) BuildQr(box, dc.PrefilledUrl);
             UiKit.Spacer(box, 0, 6);
-            UiKit.Label(box, "2. 아래 코드를 입력하고 Google 계정을 고르세요", UiTheme.FontSmall, UiTheme.Text2, false, TextAnchor.MiddleCenter);
-            var code = UiKit.Display(box, dc != null ? dc.user_code : "- - - -", 64, UiTheme.Text, TextAnchor.MiddleCenter, true);
-            UiKit.Size(code, -1, 84);
+            UiKit.Label(box, "코드를 직접 넣을 때", UiTheme.FontSmall - 4, UiTheme.Text3, false, TextAnchor.MiddleCenter);
+            var url = UiKit.Label(box, dc != null ? dc.Url : "…", UiTheme.FontSmall, UiTheme.CyanLight, true, TextAnchor.MiddleCenter);
+            url.horizontalOverflow = HorizontalWrapMode.Overflow;
+            var code = UiKit.Display(box, dc != null ? dc.user_code : "- - - -", 36, UiTheme.Text, TextAnchor.MiddleCenter, true);
+            UiKit.Size(code, -1, 50);
             var expiry = UiKit.Label(box, waiting ? GoogleDeviceAuth.FormatExpiry(Mathf.CeilToInt(_google.SecondsLeft)) : " ",
                                      UiTheme.FontSmall, UiTheme.Amber, true, TextAnchor.MiddleCenter);
 
@@ -264,10 +306,42 @@ namespace SpellboundVR.UI
             row.GetComponent<HorizontalLayoutGroup>().childForceExpandWidth = true;
             if (!waiting && !_googleBusy)
                 UiKit.Size(UiKit.Button(row, "새 코드 받기", BtnStyle.Info, StartGoogle, -1, 58), -1, -1, 1);
-            if (waiting && !Application.isMobilePlatform)
-                UiKit.Size(UiKit.Button(row, "이 PC에서 브라우저 열기", BtnStyle.Info, () => Application.OpenURL(dc.Url), -1, 58), -1, -1, 1);
+            if (waiting && pc)
+                UiKit.Size(UiKit.Button(row, "브라우저 다시 열기", BtnStyle.Info, () => Application.OpenURL(dc.PrefilledUrl), -1, 58), -1, -1, 1);
             UiKit.Size(UiKit.Button(row, "취소", BtnStyle.Ghost, () => { StopGoogle(); Redraw(); }, -1, 58), -1, -1, 1);
             UiKit.Label(card, "처음 로그인하는 Google 계정은 마법사 계정이 자동으로 만들어집니다.", UiTheme.FontSmall - 4, UiTheme.Text3, false, TextAnchor.MiddleCenter);
+        }
+
+        /// <summary>코드가 채워진 로그인 주소의 QR — 흰 여백 4칸 (스캐너가 요구한다)</summary>
+        private void BuildQr(Transform parent, string url)
+        {
+            const int Margin = 4;
+            if (_qrUrl != url)
+            {
+                bool[,] modules = QrCode.Encode(url);
+                int n = modules.GetLength(0);
+                if (_qr != null) Object.Destroy(_qr);
+                _qr = new Texture2D(n + Margin * 2, n + Margin * 2, TextureFormat.RGB24, false) { filterMode = FilterMode.Point, wrapMode = TextureWrapMode.Clamp };
+                var pixels = new Color32[_qr.width * _qr.height];
+                for (int y = 0; y < _qr.height; y++)
+                    for (int x = 0; x < _qr.width; x++)
+                    {
+                        int mx = x - Margin, my = n - 1 - (y - Margin); // 텍스처는 아래가 0
+                        bool dark = mx >= 0 && my >= 0 && mx < n && my < n && modules[my, mx];
+                        pixels[y * _qr.width + x] = dark ? new Color32(0, 0, 0, 255) : new Color32(255, 255, 255, 255);
+                    }
+                _qr.SetPixels32(pixels);
+                _qr.Apply(false);
+                _qrUrl = url;
+            }
+            var row = UiKit.HBox(parent, 0, 0, TextAnchor.MiddleCenter, "Qr");
+            row.GetComponent<HorizontalLayoutGroup>().childForceExpandWidth = false;
+            var go = new GameObject("Code", typeof(RectTransform), typeof(RawImage));
+            go.transform.SetParent(row, false);
+            var image = go.GetComponent<RawImage>();
+            image.texture = _qr;
+            image.raycastTarget = false;
+            UiKit.Size(image, 240, 240);
         }
 
         // ── 회원가입 ───────────────────────────────────────────
@@ -368,7 +442,7 @@ namespace SpellboundVR.UI
             SmallLink(status, "주소 변경", UiTheme.CyanLight, () => { _editServer = !_editServer; Redraw(); });
             if (!string.IsNullOrEmpty(_discoverNote)) UiKit.Label(card, _discoverNote, UiTheme.FontSmall - 4, _discovering ? UiTheme.Amber : UiTheme.Text2, false, TextAnchor.MiddleCenter);
             if (_serverOk == false)
-                UiKit.Label(card, "PC에서 Backend/run_server.bat 을 켜고 Quest와 같은 Wi-Fi인지 확인하세요.\n(처음 한 번 open-firewall.bat 을 관리자 권한으로 실행)", UiTheme.FontSmall - 4, UiTheme.Text3, false, TextAnchor.MiddleCenter);
+                UiKit.Label(card, "PC에서 StartServer.bat 을 켜고 Quest와 같은 Wi-Fi인지 확인하세요.\n(처음 한 번 Backend/open-firewall.bat 을 관리자 권한으로 실행)", UiTheme.FontSmall - 4, UiTheme.Text3, false, TextAnchor.MiddleCenter);
             if (!_editServer) return;
             var r = UiKit.HBox(card, 10, 0, TextAnchor.MiddleLeft, "ServerUrl");
             var url = UiKit.Input(r, "서버 PC IP (예: 192.168.0.10)", false, 80, 52);

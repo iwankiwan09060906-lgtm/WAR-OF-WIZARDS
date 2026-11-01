@@ -8,6 +8,9 @@ War of Wizards — MediaPipe 손 추적기 (6단계: AI 손동작 인식)
     python wow_hand_tracker.py --deck S03,S06,S07,S08,S11,S13,H01,H02
     python wow_hand_tracker.py --recognizer server --server http://localhost:8080
     python wow_hand_tracker.py --video 손영상.mp4   # 카메라 대신 영상 파일
+    python wow_hand_tracker.py --input rune         # 손 모양 대신 허공에 룬 그리기
+
+게임을 켜면 Unity 가 이 프로그램을 창 없이 직접 띄운다 (WebcamTracker.cs).
 
 미리보기 창 단축키: q/Esc 종료 · h 왼손/오른손 바꾸기 · a 조준 방식(위치/기울기) · r 룬 안내 켜기/끄기
 
@@ -44,7 +47,10 @@ POSE_KO = {"pinch": "핀치(그리기)", "fist": "주먹", "point": "가리키�
 COLUMN_KO = ["왼쪽", "가운데", "오른쪽"]
 EVENT_KO = {"pinch_start": "핀치 시작 → 그리기", "pinch_end": "핀치 끝", "pinch_cancel": "그리기 취소",
             "fist": "주먹 → 스킬 준비", "point": "가리키기 → 조준", "palm_open": "손바닥 → 취소",
-            "move": "이동", "tracking": "추적"}
+            "move": "이동", "tracking": "추적", "shape": "손 모양"}
+PREVIEW_WIDTH = 320    # Unity 화면 오른쪽 아래에 띄울 내 모습 (가로 픽셀)
+PREVIEW_QUALITY = 60
+PREVIEW_EVERY = 2      # 이 프레임마다 한 장 (약 15장/초)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -132,8 +138,9 @@ def recognize_rune(points, candidates, args):
 class Link:
     """Unity 로 보내는 소켓 + Unity 에서 오는 제어 메시지(후보 룬 목록 등)를 받는 소켓."""
 
-    def __init__(self, host, port, listen_port):
+    def __init__(self, host, port, listen_port, preview_port=0):
         self.target = (host, port)
+        self.preview_target = (host, preview_port) if preview_port else None
         self.out = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.inp = None
         if listen_port:
@@ -153,6 +160,15 @@ class Link:
             self.sent += 1
         except OSError:
             pass  # 받는 쪽이 없으면 Windows 가 오류를 돌려줄 수 있다 — 무시
+
+    def send_preview(self, jpeg):
+        """미리보기는 JPEG 한 장 = 데이터그램 하나. 큰 장은 버린다 (UDP 한계)."""
+        if self.preview_target is None or len(jpeg) > 60000:
+            return
+        try:
+            self.out.sendto(jpeg, self.preview_target)
+        except OSError:
+            pass
 
     def poll(self):
         msgs = []
@@ -186,6 +202,11 @@ def rune_json(r):
     return r
 
 
+def shapes_json():
+    """손 모양 표 — Unity 안내판이 이 표를 쓴다 (표는 hand_gestures.SKILL_SHAPES 한 곳에만 둔다)."""
+    return {"type": "shapes", "patterns": list(hg.SKILL_SHAPES), "spells": list(hg.SKILL_SHAPES.values())}
+
+
 def hand_packet(tracker, lm, aspect):
     if lm is None or not tracker.tracked:
         return {"tracked": False, "pose": "none"}
@@ -193,7 +214,9 @@ def hand_packet(tracker, lm, aspect):
     for p in lm:
         flat += [round(p[0], 4), round(1 - p[1], 4), round(p[2], 4)]
     pkt = {"tracked": True, "pose": tracker.pose, "landmarks": flat}
-    if isinstance(tracker, hg.RightHand):
+    if isinstance(tracker, hg.ShapeHand):
+        pkt["shape"] = {"pattern": tracker.pattern, "spell": tracker.spell or "", "progress": tracker.progress}
+    if isinstance(tracker, (hg.RightHand, hg.ShapeHand)):
         pkt.update({"drawing": tracker.drawing, "cursor": list(tracker.cursor or (0, 0)),
                     "column": tracker.aim[0], "depth": tracker.aim[1],
                     "pinch": round(tracker.features["pinch"], 3) if tracker.features else 0.0})
@@ -263,6 +286,19 @@ def draw_rune_icon(img, code, x, y, size, color):
     poly = np.array([(int(x + size / 2 + (a - mx) * k), int(y + size / 2 - (b - my) * k)) for a, b in pts], np.int32)
     cv2.polylines(img, [poly], False, color, 2, cv2.LINE_AA)
     cv2.circle(img, tuple(poly[0]), 3, (90, 230, 90), -1)
+
+
+def preview_jpeg(frame, st):
+    """Unity 로 보낼 작은 내 모습 (손 뼈대 포함)."""
+    h, w = frame.shape[:2]
+    pw, ph = PREVIEW_WIDTH, PREVIEW_WIDTH * h // w
+    small = cv2.resize(frame, (pw, ph), interpolation=cv2.INTER_AREA)
+    if st["lm_right"] is not None:
+        draw_hand(small, st["lm_right"], (40, 200, 255), pw, ph)
+    if st["lm_left"] is not None:
+        draw_hand(small, st["lm_left"], (255, 200, 60), pw, ph)
+    ok, jpeg = cv2.imencode(".jpg", small, [cv2.IMWRITE_JPEG_QUALITY, PREVIEW_QUALITY])
+    return jpeg.tobytes() if ok else None
 
 
 def render(frame, ov, st, args):
@@ -336,8 +372,9 @@ def render(frame, ov, st, args):
             ov.text((x0 - 96, yy + 18), f"{code} {wow_runes.SPELLS[code][0]}", (230, 230, 230), 14)
 
     cv2.rectangle(img, (0, h - 44), (w, h), (20, 20, 20), -1)
-    ov.text((10, h - 42), "오른손: 핀치한 채 룬 그리기 → 떼기 → 주먹 → 검지로 가리키기 1초 · 손바닥 = 취소"
-                          "   |   왼손: 손바닥 펴고 좌/우로 휘두르기 = 이동", (200, 200, 200), 14)
+    guide = ("오른손: 손 모양을 유지 → 스킬 선택 · 손을 움직여 조준 · 화면 밖으로 빼면 취소" if args.input == "shape"
+             else "오른손: 핀치한 채 룬 그리기 → 떼기 → 주먹 → 검지로 가리키기 1초 · 손바닥 = 취소")
+    ov.text((10, h - 42), guide + "   |   왼손: 손바닥 펴고 좌/우로 휘두르기 = 이동", (200, 200, 200), 14)
     ov.text((10, h - 22), "q 종료 · h 왼손/오른손 바꾸기 · a 조준 방식(위치/기울기) · r 룬 안내 켜기/끄기", (160, 160, 160), 14)
     return ov.flush(img)
 
@@ -354,6 +391,11 @@ def parse_args(argv=None):
     p.add_argument("--host", default="127.0.0.1", help="Unity 가 실행 중인 PC (기본 같은 PC)")
     p.add_argument("--port", type=int, default=5065, help="Unity 가 받는 UDP 포트")
     p.add_argument("--listen", type=int, default=5066, help="Unity → 추적기 제어 메시지 포트 (0 = 끔)")
+    p.add_argument("--preview-port", type=int, default=5068, help="Unity 로 내 모습(JPEG)을 보낼 UDP 포트 (0 = 끔)")
+    p.add_argument("--input", choices=["shape", "rune"], default="shape",
+                   help="shape = 손 모양으로 스킬 고르기, rune = 핀치로 허공에 룬 그리기")
+    p.add_argument("--hold-frames", type=int, default=0, help="손 모양을 유지할 프레임 수 (0 = 기본값)")
+    p.add_argument("--exit-idle", type=float, default=0, help="Unity 메시지가 이 시간(초) 없으면 종료 (0 = 끔, Unity 가 띄울 때 쓴다)")
     p.add_argument("--deck", default="", help="룬 후보 (예: S03,S06,S07,S08,S11,S13,H01,H02). 비우면 19종 전체")
     p.add_argument("--recognizer", choices=["local", "server"], default="local",
                    help="local = 이 프로그램에서 인식, server = 백엔드 /api/stage6/ai/recognize 호출")
@@ -379,13 +421,15 @@ def main(argv=None):
         sys.exit(f"알 수 없는 룬 코드: {bad} (S01~S13, H01~H06)")
 
     import mediapipe as mp
+    link = Link(args.host, args.port, args.listen, args.preview_port)
     landmarker = create_landmarker(load_model(args.model))
     cap = open_capture(args)
     if not cap.isOpened():
+        link.send({"type": "status", "state": "no_camera"})
         sys.exit(f"카메라 {args.camera} 을(를) 열 수 없습니다. 다른 프로그램이 쓰고 있는지 확인하거나 --camera 1 로 바꿔 보세요.")
 
-    link = Link(args.host, args.port, args.listen)
-    st = {"right": hg.RightHand(), "left": hg.LeftHand(), "lm_right": None, "lm_left": None, "link": link,
+    right = hg.ShapeHand(hold_frames=args.hold_frames) if args.input == "shape" else hg.RightHand()
+    st = {"right": right, "left": hg.LeftHand(), "lm_right": None, "lm_left": None, "link": link,
           "fps": 0.0, "log": deque(maxlen=20), "last_rune": None, "candidates": candidates,
           "show_runes": True, "swap": args.swap_hands}
     print(f"[MediaPipe] 손 추적 시작 — UDP {args.host}:{args.port} 로 송출, 제어 포트 {args.listen}")
@@ -423,7 +467,12 @@ def main(argv=None):
             st["lm_right"], st["lm_left"] = lm_r, lm_l
 
             # Unity → 추적기: {"type":"candidates","spells":["S03",...]}  (쿨타임 끝난 슬롯 목록)
-            for m in link.poll():
+            msgs = link.poll()
+            if msgs and args.input == "shape":
+                link.send(shapes_json())
+            if any(m.get("type") == "quit" for m in msgs):
+                break
+            for m in msgs:
                 if m.get("type") == "candidates":
                     cs = [c for c in m.get("spells", []) if c in wow_runes.SPELLS]
                     if cs != st["candidates"]:
@@ -458,6 +507,11 @@ def main(argv=None):
                 frame_msg["left"].pop("landmarks", None)
             link.send(frame_msg)
 
+            if frames % PREVIEW_EVERY == 0 and args.preview_port:
+                jpeg = preview_jpeg(frame, st)
+                if jpeg:
+                    link.send_preview(jpeg)
+
             frames += 1
             fps_n += 1
             wall = time.monotonic()
@@ -481,6 +535,9 @@ def main(argv=None):
                     break
             if args.max_frames and frames >= args.max_frames:
                 break
+            if args.exit_idle and wall - max(link.last_peer, t_start) > args.exit_idle:
+                print(f"[MediaPipe] Unity 가 {args.exit_idle:.0f}초 동안 응답이 없어 종료합니다.")
+                break
     finally:
         cap.release()
         landmarker.close()
@@ -500,6 +557,8 @@ def describe(hand, ev):
              ("인식 성공" if r.get("recognized") else f"실패: {r.get('reason')}")
     elif name == "point":
         s += f" ({COLUMN_KO[ev['column']]}, 깊이 {ev['depth']:.2f})"
+    elif name == "shape":
+        s += f" {ev['pattern']} → {ev['spell']} {wow_runes.SPELLS[ev['spell']][0]}"
     elif name == "move":
         s += " ← 왼쪽" if ev["direction"] < 0 else " → 오른쪽"
     elif name == "tracking":

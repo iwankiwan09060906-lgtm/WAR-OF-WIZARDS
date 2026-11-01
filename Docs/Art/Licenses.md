@@ -22,5 +22,6 @@
 | StoneKeep | 확인 필요 (Unity Asset Store로 추정) | 확인 필요 | S13 터렛 돌탑 `Tower_c` |
 | Nora Squad (Archer) | 확인 필요 (Unity Asset Store로 추정) | 확인 필요 | S13 터렛 꼭대기 궁수 |
 | ZNS3D Medieval 3D Game Pack | 확인 필요 (Unity Asset Store로 추정) | 확인 필요 | H06 소환탑 오두막(벽 · 지붕 · 문 · 소품) · S04 화살 |
+| Polytope Studio (Lowpoly Characters · Weapons) | 확인 필요 (Unity Asset Store로 추정) | 확인 필요 | 플레이어 아바타 `MDL_Avatar_Wizard`(사제) · `MDL_Avatar_Staff`(지팡이) |
 | Noto Sans KR (Regular · Bold) | Google Fonts, https://fonts.google.com/noto/specimen/Noto+Sans+KR | SIL OFL 1.1 (`UI/Resources/Fonts/OFL-NotoSansKR.txt`) | 메타 UI(C01~C13 · 튜토리얼) 한글 글자 |
 | Cinzel | Google Fonts, https://fonts.google.com/specimen/Cinzel (Natanael Gama) | SIL OFL 1.1 (`UI/Resources/Fonts/OFL-Cinzel.txt`) | 메타 UI 영문 제목 (VR UI 프로토타입 display 글꼴) |

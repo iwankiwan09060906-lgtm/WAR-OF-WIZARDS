@@ -11,6 +11,7 @@
 //     └──────────── 손바닥 펴기 · 5초 무입력 · 트래킹 손실 → 취소 (쿨타임 미소모, §6.4)
 //
 // 키보드 대체 입력(§6.6)은 슬롯 번호로 RuneReady를 건너뛰고 바로 Aiming(또는 즉시 시전)으로 간다.
+// 웹캠 손 모양(SelectSpell)도 같은 길로 간다 — 룬을 그리지 않고 스킬을 바로 고른다.
 // 룬 인식 테스트(recognizeAllRunes): 덱에 없는 룬도 후보로 인식해 손 옆 아이콘 · 조준까지 진행하고, SlotIndex = -1 테스트 시전을 보낸다
 //   (로컬 봇전 서버만 받아들인다 — 쿨타임 · 횟수 없음). 덱에 있는 룬은 원래대로 시전한다.
 // 클라이언트는 요청만 보낸다 — 시전 가능 여부 · 결과는 서버가 결정한다(Rule 4).
@@ -209,6 +210,32 @@ namespace SpellboundVR.Input
             _session.Client?.ReportActivity();
             OnRuneRecognized?.Invoke(def, slot);
             if (def.RequiresAim) BeginAiming();
+            else CommitCast();
+        }
+
+        /// <summary>
+        /// 웹캠 손 모양으로 스킬을 고른다. 조준 중 손 모양이 바뀌어도 스킬은 그대로다.
+        /// 덱 밖의 스킬은 룬 인식 테스트(recognizeAllRunes)에서만 시전한다.
+        /// </summary>
+        public void SelectSpell(int spellId)
+        {
+            if (State != CastState.Idle) return;
+            int slot = _deck.FindSlot(spellId);
+            if (slot >= 0)
+            {
+                HandleDirectSlot(slot);
+                return;
+            }
+            if (!recognizeAllRunes)
+            {
+                _session.Events.RaiseLocalRejection("Not in deck");
+                return;
+            }
+            _selectedSlot = -1;
+            _selectedSpell = _session.Catalog.Get(spellId) ?? TestSpell(spellId);
+            _session.Client?.ReportActivity();
+            OnRuneRecognized?.Invoke(_selectedSpell, -1);
+            if (_selectedSpell.RequiresAim) BeginAiming();
             else CommitCast();
         }
 

@@ -222,7 +222,7 @@
   HUD · SkillHUD · Targeting → C12 전투 HUD(HP 막대 · 원형 쿨타임 슬롯 · 방어 계층 알약), RuneCasting(룬 그리기 연습)은 전투의 룬 궤적 · 인식 표시와 C09 마법서의 "그리는 룬"이 맡는다.
   프로토타입의 마나 · 킬 수 · 궁극기 충전 · Q/W/E/R 은 이 게임 규칙에 없어서 옮기지 않았고, CharacterSelect(캐릭터 고르기)는 이 게임에 캐릭터가 없어 C09 마법서(덱 8장)로 대신한다.
   프로토타입에 없는 화면(C03 · C05~C11)은 같은 부품(UiKit)으로 같은 색 · 글꼴을 쓴다.
-- **Google 로그인 (C01 "Google 계정으로 계속하기")** = 기기 로그인(OAuth Device Flow, `Backend/GoogleDeviceAuth.cs`): 카드에 `google.com/device` · 코드 · 남은 시간이 뜨고, 휴대폰 · PC에서 코드를 입력해 승인하면 자동으로 로그인된다. 처음 쓰는 Google 계정은 서버가 계정을 만든다.
+- **Google 로그인 (C01 "Google 계정으로 계속하기")** = 기기 로그인(OAuth Device Flow, `Backend/GoogleDeviceAuth.cs`): PC 는 코드가 채워진 브라우저가 바로 열리고, Quest 는 QR 을 휴대폰으로 찍는다. 계정만 고르면 자동으로 로그인된다. 처음 쓰는 Google 계정은 서버가 계정을 만든다.
   - **할 일 (1회):** Google Cloud Console → 사용자 인증 정보 → OAuth 클라이언트 `538311580843-8ikod…`(유형 "TV 및 입력 제한 기기") → **JSON 다운로드** → `UnityClient/Assets/_Project/Backend/Resources/GoogleOAuth/device_client.json`으로 저장 (형식은 같은 폴더 `device_client.example.json`). Google이 이 유형도 토큰 교환에 `client_secret`을 요구한다 — 없으면 버튼을 누르는 즉시 안내가 뜬다. 이 파일은 `.gitignore` 처리되어 있다 (팀원에게는 따로 전달).
   - OAuth 동의 화면이 "테스트" 상태면 **테스트 사용자**에 등록한 Google 계정만 로그인된다.
   - 서버는 관리자 설정 `auth.google_device_client_id`(기본값 = 위 ID)로 발급된 토큰도 받는다 — 웹 UI용 `auth.google_client_id`가 없어도 동작.

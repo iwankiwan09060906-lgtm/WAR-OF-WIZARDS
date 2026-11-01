@@ -9,6 +9,7 @@ MediaPipe 손 입력 파이프라인 자동 검사 (카메라 없이 실행)
 3. 왼손 시나리오: 손바닥 휘두르기 → 이동 +1 / 연타 무시 / -1
 4. 19종 룬 인식 정확도 (흔든 가짜 손그림)
 5. UDP 송수신 (추적기 → Unity, Unity → 추적기 후보 목록)
+6. 손 모양 입력: 손가락 패턴 19종 → 스킬, 유지 프레임 · 재선택 · 추적 끊김
 """
 
 import json
@@ -172,6 +173,84 @@ class RuneTest(unittest.TestCase):
 
     def test_too_short(self):
         self.assertFalse(wow_runes.recognize([(0, 0), (0.01, 0.01)])["recognized"])
+
+
+def shape_hand(pattern):
+    """손가락을 패턴대로 편 오른손 21점 — 엄지는 손 옆으로 펴거나 손바닥 위로 접는다."""
+    wrist = (0.50, 0.80)
+    mcps = [(0.46, 0.62), (0.50, 0.61), (0.54, 0.62), (0.575, 0.64)]
+    tip = (0.36, 0.62) if pattern[0] == "1" else (0.50, 0.66)
+    pts = [wrist, (0.44, 0.76), (0.41, 0.71), ((0.41 + tip[0]) / 2, (0.71 + tip[1]) / 2), tip]
+    for i, (mx, my) in enumerate(mcps):
+        if pattern[i + 1] == "1":
+            pts += [(mx, my), (mx, my - 0.05), (mx, my - 0.085), (mx, my - 0.115)]
+        else:
+            pts += [(mx, my), (mx, my - 0.04), (mx + 0.005, my - 0.015), (mx + 0.005, my + 0.02)]
+    return [(x, y, 0.0) for x, y in pts]
+
+
+class ShapeInputTest(unittest.TestCase):
+    def feed(self, hand, lm, t, n):
+        evs = []
+        for _ in range(n):
+            evs += hand.update(lm, t[0])
+            t[0] += 1 / 30
+        return evs
+
+    def test_table_covers_every_spell(self):
+        self.assertEqual(sorted(hg.SKILL_SHAPES.values()), sorted(wow_runes.SPELLS))
+
+    def test_every_pattern_is_read_back(self):
+        for pattern in hg.SKILL_SHAPES:
+            self.assertEqual(hg.finger_pattern(shape_hand(pattern)), pattern)
+
+    def test_hold_picks_once(self):
+        hand, t = hg.ShapeHand(hold_frames=8), [0.0]
+        evs = self.feed(hand, shape_hand("01110"), t, 7)
+        self.assertEqual([e for e in evs if e["name"] == "shape"], [])
+        self.assertGreater(hand.progress, 0.8)
+        evs = self.feed(hand, shape_hand("01110"), t, 30)      # 계속 들고 있어도 한 번만
+        self.assertEqual([e["spell"] for e in evs if e["name"] == "shape"], ["S03"])
+        self.assertEqual(hand.progress, 0.0)
+
+    def test_quick_change_is_ignored(self):
+        hand, t = hg.ShapeHand(hold_frames=8), [0.0]
+        evs = []
+        for pattern in ("11111", "01110", "01000", "00000"):
+            evs += self.feed(hand, shape_hand(pattern), t, 5)   # 손을 바꾸는 도중의 모양은 고르지 않는다
+        self.assertEqual([e for e in evs if e["name"] == "shape"], [])
+
+    def test_raising_hand_again_picks_again(self):
+        hand, t = hg.ShapeHand(hold_frames=8), [0.0]
+        evs = self.feed(hand, shape_hand("10000"), t, 12)
+        evs += self.feed(hand, None, t, 30)                    # 다시 고를 수 있는 간격(0.8초)이 지나도록
+        evs += self.feed(hand, shape_hand("10000"), t, 40)
+        names = [e["name"] for e in evs]
+        self.assertEqual(names, ["tracking", "shape", "tracking", "tracking", "shape"], names)
+
+    def test_unknown_pattern_picks_nothing(self):
+        hand, t = hg.ShapeHand(hold_frames=8), [0.0]
+        evs = self.feed(hand, shape_hand("10010"), t, 30)
+        self.assertEqual([e for e in evs if e["name"] == "shape"], [])
+
+    def test_cursor_reaches_edges_inside_camera(self):
+        hand, t = hg.ShapeHand(hold_frames=8), [0.0]
+        lm = [(x - 0.40, y, z) for x, y, z in shape_hand("00000")]   # 손이 화면 왼쪽 가까이
+        self.feed(hand, lm, t, 20)
+        self.assertEqual(hand.cursor[0], 0.0)
+
+    def test_packet_has_shape_and_no_nested_list(self):
+        import wow_hand_tracker as tr
+        hand = hg.ShapeHand(hold_frames=8)
+        lm = shape_hand("01110")
+        hand.update(lm, 0.0)
+        pkt = tr.hand_packet(hand, lm, 4 / 3)
+        self.assertEqual(pkt["shape"]["spell"], "S03")
+        self.assertFalse(pkt["drawing"])
+        self.assertFalse(_has_nested_list(pkt))
+        table = tr.shapes_json()
+        self.assertEqual(len(table["patterns"]), len(table["spells"]))
+        self.assertFalse(_has_nested_list(table))
 
 
 def _has_nested_list(v):

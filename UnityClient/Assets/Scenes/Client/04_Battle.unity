@@ -1037,7 +1037,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 119ee961833b3344194209534f06154e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SpellboundVR.Core.GameBootstrap
-  bootMode: 3
+  bootMode: 2
   sessionName: spellbound-dev
   serverPort: 0
   rules: {fileID: 11400000, guid: 5315434185c97614ab3bd27ba86f9df1, type: 2}
@@ -8720,6 +8720,8 @@ MonoBehaviour:
   commanderPlatformHeight: 0.52243906
   ffaNexusDepth: 4
   ffaTowerDepth: 9
+  ffaViewLift: 3.5
+  ffaModelScale: 0.65
   homeTowerVisual: {fileID: 572280587}
   homeNexusVisual: {fileID: 269228009}
   awayTowerVisual: {fileID: 557882359}

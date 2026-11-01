@@ -70,8 +70,10 @@ namespace SpellboundVR.UI
         public int pointerSize = 40;
         /// <summary>손에서 나오는 레이 선도 보일지 (기본 꺼짐 — 점만)</summary>
         public bool showRayLine;
-        /// <summary>헤드셋 없는 PC 에서 웹캠 손 추적(MediaPipe)으로 플레이 (GestureTools/MediaPipe/run_hand_tracker.bat)</summary>
-        public bool webcamHands;
+        /// <summary>헤드셋 없는 PC 에서 웹캠 손 추적(MediaPipe)으로 플레이 (끄면 마우스 · 키보드)</summary>
+        public bool webcamInput = true;
+        /// <summary>웹캠 입력을 손 모양 대신 허공에 룬 그리기로</summary>
+        public bool webcamDrawRunes;
     }
 
     public static class MetaState

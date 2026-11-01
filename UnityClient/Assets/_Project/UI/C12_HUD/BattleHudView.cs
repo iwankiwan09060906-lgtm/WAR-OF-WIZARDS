@@ -552,6 +552,11 @@ namespace SpellboundVR.UI
 
         private void HandleRejected(string reason)
         {
+            if (reason == "Not in deck")
+            {
+                ShowMessage("이 스킬은 덱에 없습니다", UiTheme.Orange);
+                return;
+            }
             ShowMessage(reason, UiTheme.Orange);
         }
 
