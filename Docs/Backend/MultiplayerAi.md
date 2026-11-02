@@ -14,6 +14,8 @@
 
 ## 1. 실행
 
+보통은 저장소 맨 위 **`StartServer.bat`** 하나면 된다 — 아래 `run_server_vlm.bat` + 4인 · 1:1 게임 서버를 함께 켠다.
+
 | 실행기 | 켜지는 것 |
 | --- | --- |
 | `Backend/run_server.bat` | 서버 전부 (외부 패키지 없음). AI 코치는 **규칙 AI**, 손 추적은 **랜드마크 입력만** |
@@ -120,7 +122,7 @@ Claude VLM 을 쓰려면 실행 전에 `set ANTHROPIC_API_KEY=키` (없으면 �
 
 | 키 | 기본값 | 뜻 |
 | --- | --- | --- |
-| `ai.vlm_provider` | auto | auto = Claude 를 쓸 수 있으면 Claude, 아니면 규칙 AI · claude · ollama · local(이 게임으로 학습한 VLM) · rules |
+| `ai.vlm_provider` | auto | auto = Claude 를 쓸 수 있으면 Claude → 로컬 VLM 이 켜져 있으면 local → 아니면 규칙 AI · claude · ollama · local(llama-server · 학습한 VLM) · rules |
 | `ai.vlm_model` | claude-opus-5-5 | Claude 모델 ID (빠르게: claude-haiku-5-5) |
 | `ai.vlm_effort` | low | 생각 깊이 low · medium · high (낮을수록 빠름) |
 | `ai.ollama_url` · `ai.ollama_model` | http://127.0.0.1:11434 · qwen2.5vl:7b | 무료 로컬 VLM (`ollama pull qwen2.5vl:7b`) |
@@ -136,7 +138,7 @@ Claude 는 공식 `anthropic` SDK 로 부르고(structured outputs 로 JSON 고�
 
 ## 5. 서버 MediaPipe 손 추적 — `POST /api/mediapipe/frame`
 
-`GestureTools/MediaPipe/wow_hand_tracker.py` 와 같은 손 자세 로직 · 룬 인식기를 서버에서 돌린다. 플레이어마다 따로(4명 동시 가능).
+`GestureTools/MediaPipe/wow_hand_tracker.py` 와 같은 손 자세 로직 · 룬 인식기를 서버에서 돌린다. 플레이어마다 따로(4명 동시 가능). 웹 전투 화면용이다 — Unity PC 는 서버를 거치지 않고 게임이 추적기를 직접 켠다 ([`MediaPipeHandInput.md`](../Input/MediaPipeHandInput.md)).
 
 ```json
 { "image": "data:image/jpeg;base64,...", "t": 12345.6, "candidates": ["S03","S06"], "session": "battle",

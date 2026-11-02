@@ -55,9 +55,11 @@
 | `GestureTools/MediaPipe/hand_gestures.py` | 21점 → 핀치/주먹/가리키기/손바닥, 왼손 휘두르기 판정 (카메라 없이 시험 가능) |
 | `GestureTools/MediaPipe/wow_runes.py` | 19종 룬 인식기 ($P Point-Cloud). 백엔드 `Backend/wow_server.py` 의 `/api/runes/recognize` 도 같은 파일을 쓴다 |
 | `GestureTools/MediaPipe/udp_monitor.py` | Unity 없이 출력 확인용 "가짜 Unity" 수신기 |
-| `GestureTools/MediaPipe/UnityReceiver/MediaPipeHandInput.cs` | **Unity 담당자용** 수신 스크립트 (`IPlayerInput` 구현) |
+| `Assets/_Project/Input/MediaPipe/MediaPipeHandInput.cs` | Unity 수신 · 입력 (`IPlayerInput` 구현) |
+| `Assets/_Project/Input/MediaPipe/WebcamTracker.cs` | 추적기 프로세스를 창 없이 켜고 끈다 |
+| `Assets/_Project/UI/C12_HUD/WebcamHandPanel.cs` | 화면 오른쪽 아래 내 모습 · 손 모양 안내 |
 | `GestureTools/MediaPipe/rune_sheet.png` | 19종 룬 안내 그림 (초록 점 = 시작점) |
-| `GestureTools/MediaPipe/test_hand_pipeline.py` | 자동 검사 11개 (카메라 · Unity 없이) |
+| `GestureTools/MediaPipe/test_hand_pipeline.py` | 자동 검사 19개 (카메라 · Unity 없이) |
 
 ---
 
@@ -115,7 +117,7 @@ Unity 없이 확인하려면 다른 창에서 `run_unity_simulator.bat` 를 켜�
 
 ## 3. 19종 룬
 
-![룬 안내](../GestureTools/MediaPipe/rune_sheet.png)
+![룬 안내](../../GestureTools/MediaPipe/rune_sheet.png)
 
 | 코드 | 스킬 | 룬 | 코드 | 스킬 | 룬 |
 |---|---|---|---|---|---|
@@ -204,11 +206,12 @@ UDP `5068` 로는 내 모습 JPEG 를 보낸다 (320px, 약 15장/초, 장당 �
 
 ---
 
-## 5. Unity 담당자에게 — 연결 방법
+## 5. Unity 연결 구조
 
-1. `GestureTools/MediaPipe/UnityReceiver/MediaPipeHandInput.cs` 를 `Assets/_Project/Input/MediaPipe/` 로 복사한다.
-   (계약서 `SpellboundVR.Contracts` 의 `IPlayerInput` · `Column` 만 사용, Unity 6 DLL 로 컴파일 확인 — 경고 0 · 오류 0)
-2. 씬의 빈 GameObject 에 붙이고, 시전 상태 머신이 `KeyboardInput` 대신 이 컴포넌트를 `IPlayerInput` 으로 받는다.
+> 연결은 끝났다. 아래는 룬 그리기 입력이 코드에 어떻게 이어져 있는지 설명한다. 손 모양 입력은 `shape` 이벤트 → `CastStateMachine.SelectSpell` 로 슬롯 시전과 같은 길을 간다.
+
+1. `Assets/_Project/Input/MediaPipe/MediaPipeHandInput.cs` 가 계약서 `IPlayerInput` 구현이다.
+2. `GameBootstrap.CreateInput` 이 키보드 대신 이 컴포넌트를 만들어 시전 상태 머신에 넘긴다.
 3. 룬 결정: `OnPinchEnded` 직전에 `OnRuneRecognized(RuneResult)` 가 오고 `LastRune` 에도 저장된다.
    - 그대로 쓰기: `LastRune.recognized` 이면 `LastRune.spellNumber` 로 RuneReady.
    - 직접 인식: `OnPinchEnded(Vector2[])` 궤적으로 클라이언트 $P+ 를 돌려도 된다 (같은 좌표계).
@@ -260,7 +263,16 @@ UDP `5068` 로는 내 모습 JPEG 를 보낸다 (320px, 약 15장/초, 장당 �
 
 ---
 
-## 8. 검증 방법과 결과 (2026-10-12)
+## 8. 검증 방법과 결과
+
+### 2026-11-02 — 손 모양 입력
+
+- 환경: Python 3.14 · MediaPipe 1.2.0 (`.venv`). 예전 안내와 달리 3.13 이상에서도 설치된다.
+- `test_hand_pipeline.py` 19개 중 16개 통과. 손 모양 8개는 모두 통과하고, 실패 3개(`test_candidates_limit` · `test_full_cast_flow` · `test_messages_are_jsonutility_friendly`)는 룬 모양을 바꾸기 전 값을 기대하는 낡은 시험이다.
+- MediaPipe 공식 손 사진으로 만든 영상 → 실제 추적기 → UDP: 펴진 손을 `11111` 로 읽어 S05 를 고름, 미리보기 장당 약 5.7KB, 시작까지 약 4초, `--exit-idle` · `quit` 종료 확인.
+- **아직 못 한 것**: 실제 사람 손으로 19가지 모양을 구분하는 시험, Unity 안에서의 패널 배치. 엄지 판정은 손 방향에 민감할 수 있다.
+
+### 2026-10-12 — 룬 그리기
 
 ```bat
 cd AI\MediaPipe
@@ -268,7 +280,7 @@ cd AI\MediaPipe
 .venv\Scripts\python.exe wow_runes.py            :: 19종 룬 혼동 검사
 ```
 
-- 자동 검사 11개 통과: 손 자세 판정, 오른손 전체 흐름(핀치로 삼각형 → S03 → 주먹 → 가리키기 → 취소 → 추적 끊김),
+- 당시 자동 검사 11개 통과: 손 자세 판정, 오른손 전체 흐름(핀치로 삼각형 → S03 → 주먹 → 가리키기 → 취소 → 추적 끊김),
   그리다가 손이 사라질 때 취소, 왼손 휘두르기(+1, 연타 무시, -1, 느린 움직임 무시), 룬 19종, 후보 제한,
   UDP 왕복, Unity `JsonUtility` 호환 형식.
 - 룬 자체 검사: 760개 중 정답 751 · 오인식 0 · 거절 9.

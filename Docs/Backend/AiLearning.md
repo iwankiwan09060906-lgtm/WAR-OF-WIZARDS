@@ -1,7 +1,9 @@
 # AI 가 War of Wizards 를 배우게 하기 (VLM 학습)
 
 AI 전략 코치(`/api/ai/strategy`, [`MultiplayerAi.md`](MultiplayerAi.md) 4장)가 **실제 판 결과로 이 게임을 배우도록** 한 구조다.
-서버 코드: `Backend/wow_learn.py` (외부 패키지 없음) · `wow_server.py` · `wow_ai.py`. Unity 는 손대지 않았다.
+서버 코드: `Backend/wow_learn.py` (외부 패키지 없음) · `wow_server.py` · `wow_ai.py` · `wow_board.py`. Unity 쪽은 `Backend/AiStrategyLink.cs` 가 잇는다.
+
+> **데이터와 모델은 PC 마다 따로다.** `Backend/ai_data/` · DB · `%USERPROFILE%\models` 는 git 에 없다. 아래 수치는 RTX 4060 노트북(팀 PC)에서 잰 값이고, 새 PC 는 학습 데이터 0건 · 모델 없음으로 시작해 규칙 AI 로 돈다. 다른 PC 의 판은 4-2 로 가져온다. 현재 상태: [`ProjectStatus.md`](../ProjectStatus.md) 2장.
 
 ```text
  ① 모으기        ② 이름표           ③ 배우기 (GPU 없이 · 자동)       ④ 쓰기
@@ -22,7 +24,7 @@ AI 전략 코치(`/api/ai/strategy`, [`MultiplayerAi.md`](MultiplayerAi.md) 4장
 | --- | --- | --- |
 | 웹 전투 화면 | 시전할 때마다 상황(덱 · 쿨타임 · HP · 내 위치 · Unity 가 보낸 상황) + 실제 행동(스킬 · 열 · AI 추천대로 썼는지) + **화면 보여주기를 켰으면 그 순간 화면** | 자동 |
 | AI 전략 코치 | 물어본 상황 + (화면) + AI 가 추천한 수 | `/api/ai/strategy` 를 부를 때마다 |
-| Unity · 봇 (할 일) | `BotObservation` + 그 틱의 행동 + 즉시 보상 | `POST /api/ai/experience` (아래 4장) |
+| Unity · 봇 | `BotObservation` + 그 틱의 행동 (3초마다 묶어서) | `POST /api/ai/experience` (아래 4장) |
 | 판 결과 | 그 판의 모든 경험에 WIN · LOSE · 등수 이름표 | 게임 방 결과(`/api/match/{id}/result`), 봇 연습 · 1:1 친선전(`/api/matches` + `gameId`), 또는 `/api/ai/experience {gameId, outcome}` |
 
 `POST /api/ai/experience` (로그인 토큰 또는 `X-Server-Key` + `botId`)
@@ -58,10 +60,10 @@ AI 전략 코치(`/api/ai/strategy`, [`MultiplayerAi.md`](MultiplayerAi.md) 4장
 
 ## 3. 2단계 — VLM 미세조정 (이 게임 화면을 읽도록 모델 자체를 학습)
 
-> **이 PC에서 실제로 돌려 확인했다 (2026-10-26)** — 설치 → 가짜 데이터 47장면 학습 → 서빙 → 게임 서버 연결까지.
+> **팀 PC 에서 실제로 돌려 확인했다 (2026-10-26)** — 설치 → 가짜 데이터 47장면 학습 → 서빙 → 게임 서버 연결까지.
 > 진짜 판 데이터로는 아직 학습하지 않았다 (모아야 한다).
 
-이 PC: RTX 4060 노트북 (VRAM 8GB) · RAM 16GB → **Qwen2.5-VL 3B + 4bit QLoRA**. 모든 단계는 `Backend/ai_finetune/run_finetune.bat` 하나로 한다.
+그 PC: RTX 4060 노트북 (VRAM 8GB) · RAM 16GB → **Qwen2.5-VL 3B + 4bit QLoRA**. 모든 단계는 `Backend/ai_finetune/run_finetune.bat` 하나로 한다.
 
 | 단계 | 명령 | 확인한 것 |
 | --- | --- | --- |
@@ -91,7 +93,7 @@ Unity 봇은 이제 랜덤이 아니라 **AI 전략 두뇌**로 두고, 서버�
 | 전략 | `Backend/AiStrategyLink.cs` | 봇마다 3초에 한 번 `POST /api/ai/strategy` (상황 + 레인 유닛, `X-Server-Key`, `botId`) → 서버 학습 결과 · VLM 의 수를 봇이 씀 |
 | 경험 | 〃 | 봇의 판단(상황 + 행동)을 3초마다 묶어 `POST /api/ai/experience {gameId, steps}` |
 | 판 결과 | 〃 | 경기가 끝나면 `{gameId, outcome}` → 그 판 경험에 이름표 → 서버 자동 학습 |
-| 남은 일 | Unity 담당 | 화면 사진 (Camera → RenderTexture → JPEG) 을 몇 초에 한 장 `image` 로 — VLM 미세조정의 핵심 데이터 · WebGL `state` 메시지에 레인 정보 |
+| 남은 일 | Unity 담당 | 화면 사진 (Camera → RenderTexture → JPEG) 을 몇 초에 한 장 `image` 로 — 지금은 서버가 그린 전장 지도로 대신한다. WebGL `state` 메시지에 레인 정보 |
 
 ---
 
@@ -102,6 +104,7 @@ Unity 봇은 이제 랜덤이 아니라 **AI 전략 두뇌**로 두고, 서버�
   자세한 구조: [`Docs/Bot/AiStrategyBot.md`](../Bot/AiStrategyBot.md) "하이브리드 봇".
 - 데이터셋: 사진이 없는 장면(봇)은 저장한 상황으로 **같은 지도를 다시 그려** `frames/board_<id>.png` 로 넣는다 (`boards` 수). 정답에도 `orders` 가 있다.
 - 학습 결과로 한 수를 바꿀 때 **진 판의 스킬(가치 ≤ 0)로는 바꾸지 않는다** (예전에는 표본만 많으면 진 스킬로도 바꿨다).
+- **켜는 방법은 `StartServer.bat`** — 안에서 `run_server_vlm.bat` 을 부르므로 모델이 있으면 VLM 도 같이 켜진다.
 - **빠른 VLM (llama.cpp)**: LLaMA-Factory 4bit 서빙은 답 하나에 약 20초라 실시간 봇에는 느리다. llama.cpp `llama-server` 가 같은 OpenAI 호환 주소를 낸다
   (RTX 4060 노트북: 답 하나 2~3.5초 · VRAM 약 4.2GB, 2026-10-29 측정).
   - **켜기: `Backend/run_server_vlm.bat`** — llama-server(새 창, `--parallel 3` = 4인전 봇 3개 동시)를 먼저 켜고 게임 서버(8080)를 켠다.
@@ -143,4 +146,4 @@ llama-server -m Qwen2.5-VL-3B-Instruct-Q4_K_M.gguf --mmproj mmproj-Qwen2.5-VL-3B
 | `ai.local_schema` | true | 학습한 VLM(local) 요청에 response_format json_schema (llama-server 는 문법으로 강제) |
 | `match.default_players` | 4 | 인원을 안 정한 매칭 · 방 요청의 인원 (4 = 4인 개인전, 2 = 1:1) |
 
-검사: `python Backend/test_web_ui_api.py` — 113개 (경험 · 이름표 · 학습 · 전략 반영 · 데이터셋 · 학습한 VLM 연결 · Unity 봇 연결 형식 포함).
+검사: `python Backend/test_web_ui_api.py` — 124개 (경험 · 이름표 · 학습 · 전략 반영 · 데이터셋 · 학습한 VLM 연결 · Unity 봇 연결 형식 포함).

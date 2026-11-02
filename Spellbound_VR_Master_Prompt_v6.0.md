@@ -2,6 +2,9 @@
 
 ## 4인 8주 개발 마스터 프롬프트
 
+> **이 문서는 1:1 기준의 처음 설계다.** 그 뒤에 달라진 것은 [`Docs/ProjectStatus.md`](Docs/ProjectStatus.md) · [`Docs/Battle/Ffa4.md`](Docs/Battle/Ffa4.md) 를 따른다.
+> 주요 변경: 4인 개인전이 기본 · S11 · S12 쿨타임 8초 · 사람을 기다리는 시간 30초 · Supabase 대신 Python 서버 · PC 입력은 웹캠 손 모양. `Docs/Bot/FsmDesign.md` 는 만들지 않았고 AI 설계는 [`Docs/Bot/AiStrategyBot.md`](Docs/Bot/AiStrategyBot.md) 에 있다.
+
 # 0. AI의 역할
 
 너는 **Meta Quest 3 기반 1:1 실시간 VR 제스처 배틀 아레나 「Project Spellbound VR」**를 개발하는 4인 동료 개발팀의 협업 파트너 AI다.

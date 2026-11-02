@@ -4,7 +4,7 @@
 Unity 게임 코드(전투 · 입력 · 네트워크 · 스킬)는 건드리지 않았고, 백엔드 영역만 추가했습니다.
 팀원 원본 폴더 없이도 전부 동작합니다.
 
-기획서 §2.1 · §23 의 **Supabase 자리를 이 Python 서버가 대신합니다.** (`Supabase/` 폴더는 비어 있는 채로 둠)
+기획서 §2.1 · §23 의 **Supabase 자리를 이 Python 서버가 대신합니다.**
 
 ---
 
@@ -14,20 +14,22 @@ Unity 게임 코드(전투 · 입력 · 네트워크 · 스킬)는 건드리지 
 WAR-OF-WIZARDS/
 ├── Backend/                         ★ 백엔드 서버 (Python 3.10+, 외부 패키지 없음)
 │   ├── wow_server.py                  - 서버 하나에 전부: 인증 · 덱 · 전적 · 매칭 큐(1:1 · 3 · 4인 개인전) · 친선전 · 친구 · 우편 · 랭킹 · 관리자
-│   ├── wow_ai.py                      - AI 전략 코치: VLM(Claude · Ollama) / 규칙 AI → /api/ai/strategy
+│   ├── wow_ai.py                      - AI 전략 코치: VLM(Claude · 로컬 llama.cpp · Ollama) / 규칙 AI → /api/ai/strategy
+│   ├── wow_board.py                   - 전장 지도 그리기 (사진이 없을 때 VLM 에 보여 줄 그림)
 │   ├── wow_hands.py                   - 서버 MediaPipe 손 추적 → /api/mediapipe/frame
 │   ├── wow_learn.py                   - AI 학습: 경기 경험 → 판 결과로 학습 → 전략 반영 · VLM 미세조정 데이터셋
 │   ├── run_server.bat                 - 더블 클릭으로 실행 (http://localhost:8080)
 │   ├── run_server_ai.bat              - AI 까지 켜서 실행 (MediaPipe · anthropic 을 GestureTools/MediaPipe/.venv 에 설치)
+│   ├── run_server_vlm.bat             - 로컬 VLM(llama.cpp) + 서버. 맨 위 StartServer.bat 이 이것을 부른다
+│   ├── ai_import.py · ai_finetune/    - 다른 서버의 판 가져오기 · VLM 미세조정
 │   ├── open-firewall.bat              - Quest/다른 PC 에서 접속할 때 8080 포트 열기 (관리자 권한, 한 번만)
-│   ├── test_web_ui_api.py             - 자동 검사 59개 (임시 DB 로 서버를 따로 띄움)
+│   ├── test_web_ui_api.py             - 자동 검사 124개 (임시 DB 로 서버를 따로 띄움)
 │   ├── test_server.py                 - 실행 중인 서버 간단 확인
 │   └── static/                        - 웹 화면 (로그인 → 로비 → 덱 → 매칭 → 결과, 관리자 콘솔 #/admin)
 │
 ├── GestureTools/MediaPipe/          ★ 웹캠 손 추적 → UDP → Unity (헤드셋 없이 시연용)
-│   ├── run_hand_tracker.bat           - 첫 실행 때 .venv 에 MediaPipe 자동 설치
-│   ├── wow_runes.py                   - 19종 룬 인식기 (서버의 /api/runes/recognize 도 이 파일을 씀)
-│   └── UnityReceiver/MediaPipeHandInput.cs - IPlayerInput 구현 참고본 (Assets 밖이라 컴파일 안 됨)
+│   ├── run_hand_tracker.bat           - 첫 실행 때 .venv 에 MediaPipe 자동 설치. 게임이 창 없이 직접 켠다
+│   └── wow_runes.py                   - 19종 룬 인식기 (서버의 /api/runes/recognize 도 이 파일을 씀)
 │
 ├── UnityClient/Assets/_Project/Backend/   ★ Unity ↔ 서버 연결 (기획서 §28 이름 그대로)
 │   ├── BackendClient.cs               - HTTP 공통 (서버 주소, 로그인 토큰, 접속 하트비트)
@@ -50,7 +52,7 @@ WAR-OF-WIZARDS/
 
 ## 2. 실행
 
-1. `Backend/run_server.bat` 더블 클릭 → 브라우저에서 `http://localhost:8080/`
+1. 저장소 맨 위 `StartServer.bat` 더블 클릭 (백엔드 + 게임 서버) → 브라우저에서 `http://localhost:8080/`. 백엔드만 켜려면 `Backend/run_server.bat`
    - 데모 계정 `demo@wow.dev` / `demo1234`, 관리자 `admin@wow.dev` / `admin1234`
    - 공식 팀 계정 `1조`/`1111` · `2조`/`2222` · `3조`/`3333` · `4조`/`4444` (Unity 는 `group1@wow.dev` ~ `group4@wow.dev`)
    - AI(VLM 전략 코치 · 서버 MediaPipe)까지 쓰려면 `Backend/run_server_ai.bat` — [`Docs/Backend/MultiplayerAi.md`](Docs/Backend/MultiplayerAi.md)
@@ -75,7 +77,7 @@ DeckService.Save(DeckService.ToCodes(deckData.ToArray()), _ => {}, err => ShowEr
 
 ISessionService session = BackendSessionService.Instance;
 BackendSessionService.Instance.OnMatchFound += s => StartMatch(s.opponentNickname, s.bot);
-session.RequestMatchmaking();   // 15초(서버 설정) 안에 사람이 없으면 봇
+session.RequestMatchmaking();   // 30초(서버 설정)가 지나면 빈자리는 AI
 ```
 
 | 화면 (§23.1) | 서비스 |
@@ -94,8 +96,7 @@ session.RequestMatchmaking();   // 15초(서버 설정) 안에 사람이 없으�
 `GameBootstrap` 을 자동으로 찾아 `OnMatchEnded` 를 구독하고, 매칭 경기는 레이팅에 반영(±16),
 봇 연습 · 친선전은 기록만 합니다(§22.2). 로그인 안 했거나 전용 서버 빌드면 아무것도 안 합니다.
 
-**아직 연결 안 된 것**: 매칭 · 친선전이 성사된 뒤 실제 Photon Fusion 세션을 시작하는 부분은
-`BackendSessionService` 이벤트(`OnMatchFound`, `OnFriendlyMatchStarted`)를 받아 Network/Session 쪽에서 해야 합니다.
+**전투 연결**: 매칭 · 친선전이 성사되면 `UI/Common/MetaFlow.cs` 가 전투를 시작합니다. `FusionClient` 빌드의 랭킹전 · 친선전은 PC 게임 서버(`이름-ffa` 또는 1:1 세션)로 접속하고, 그 밖에는 이 기기 안에서 봇과 합니다.
 
 ---
 
@@ -122,10 +123,9 @@ session.RequestMatchmaking();   // 15초(서버 설정) 안에 사람이 없으�
 
 ## 5. 확인한 것
 
-- `python Backend/test_web_ui_api.py` → 59개 모두 통과 (방 코드 제안 검사 2개 추가)
+- `python Backend/test_web_ui_api.py` → 124개 모두 통과 (2026-11-02)
 - Unity 와 같은 순서의 흐름 확인: 로그인 → 덱 → 매칭(봇) → 게임 방 참가 → 승리 보고 → 레이팅 1200 → 1216
 - Unity C# (`_Project/Backend/*.cs`) 을 Unity 6 DLL + 현재 `Assembly-CSharp.dll` 로 컴파일 → 오류 0
-- `GestureTools/MediaPipe/test_hand_pipeline.py` 는 11개 중 4개 실패 — 팀원 원본에서도 똑같이 실패함
-  (2개는 전역 Python 에 `cv2` 가 없어서, 2개는 원래 있던 문제). 손 추적기 자체는 `.venv` 로 실행하면 됨.
+- `GestureTools/MediaPipe/test_hand_pipeline.py` 는 `.venv` 로 실행해 19개 중 16개 통과. 실패 3개는 룬 모양을 바꾸기 전 값을 기대하는 낡은 시험이다.
 
 Unity 에디터를 처음 열면 새 파일들의 `.meta` 가 생성됩니다. 그것까지 함께 커밋하세요.

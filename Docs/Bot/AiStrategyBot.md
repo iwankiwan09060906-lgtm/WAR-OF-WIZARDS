@@ -99,6 +99,10 @@ VLM 답 727번 평균 3.2초 · 실패 0, 시전의 약 54% 가 작전을 반영
 레인이 곧 상대다. 두뇌는 레인마다 전황을 따로 보고 노릴 상대를 고른다 (타워가 무너진 상대 → HP 가 낮은 상대, 동점이면 왼쪽 이웃, VLM 이 `focusColumn` 을 주면 그 상대).
 가중치는 `AiBrainWeights.Ffa` — 1:1 조정값은 타워 부수기에 몰려 있어 플레이어를 직접 때리는 스킬을 되살렸다. 규칙: [`Docs/Battle/Ffa4.md`](../Battle/Ffa4.md).
 
+타워가 레인마다 하나가 된 뒤로 봇은 상대의 **내 쪽 레인 타워**가 무너졌는지를 본다 (다른 레인이 뚫린 것은 내 공격에 도움이 안 된다). 200판 측정 (2026-11-01, `ffa 200 900`): 평균 447초 · 시간 초과 0 · 무승부 6 · 첫 타워 파괴 중앙값 290초, 자리별 승률 고름. 사람이 나간 자리는 봇이 이어받고, 관전자가 모두 나가면 남은 HP 순으로 끝낸다.
+
+사람에게는 같은 서버 API 로 **AI 코치**(`Backend/BattleCoach.cs`)가 HUD 에 조언을 보여 준다. 판정에는 영향이 없고, 탈락해 관전 중일 때는 조언하지 않는다.
+
 ## 다시 재기 · 다시 찾기
 
 ```text
@@ -114,7 +118,7 @@ dotnet run -c Release -- tune 300 3     # 가중치 찾기 (약 13분) → tuned
 - BotLab 은 `UnityClient/Assets/_Project` 의 전투 · 봇 코드를 **복사하지 않고 그대로** 컴파일한다 (Unity 기능 몇 개만 `UnityShim.cs` 대역).
   에셋 대신 코드 기본값(`CreateDefault`)을 쓰므로 에셋으로 바꾼 수치와는 조금 다를 수 있다.
 - 전투 코드가 정적 버퍼를 써서 판은 한 번에 하나씩 돈다 (Unity 와 같다).
-- `Tools/BotLab/UnityCheck`: 같은 파일 + `AiStrategyLink` 를 **진짜 UnityEngine DLL**(설치된 에디터 6000.0)로 C# 9 컴파일 — 오류 0.
+- `Tools/BotLab/UnityCheck`: 같은 파일 + `AiStrategyLink` 를 **진짜 UnityEngine DLL** 로 C# 9 컴파일 — 오류 0.
 
 ## 서버 연결 (AiStrategyLink)
 
@@ -125,5 +129,5 @@ dotnet run -c Release -- tune 300 3     # 가중치 찾기 (약 13분) → tuned
 
 ## 확인하지 못한 것
 
-- Unity 에디터에서 열어 보지 않았다 (프로젝트는 6000.3.10f1, 이 PC에는 6000.0 · 6000.5 만 있음). 처음 열면 새 파일의 `.meta` 가 생긴다 — 콘솔 오류가 없는지 확인.
+- 하이브리드 봇을 실제 Unity 경기에서 VLM 과 함께 오래 돌려 보지 않았다 (BotLab 대전으로만 측정). 모델이 없는 PC 는 봇 두뇌 + 규칙 AI 로 돈다.
 - 사람 대 AI 봇 체감 난이도 — 너무 세면 `AiCastGapSeconds` 를 4~6초로 올리면 약해진다 (같은 속도에서도 랜덤보다는 셈).

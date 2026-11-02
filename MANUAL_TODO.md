@@ -1,7 +1,8 @@
 # Spellbound VR — 사람이 직접 해야 하는 일
 
 > 대상: 4인 팀 (ㅊㄱㅇ · ㅈㅈㅇ · ㅈㅇㅈ · ㅇㅎㅅ)
-> 기준: `Spellbound_VR_Master_Prompt_v6.0.md`, 작업일 2026-10-03 · 갱신 2026-10-24 (스킬 개편 · 에셋 정리)
+> 기준: `Spellbound_VR_Master_Prompt_v6.0.md`, 작업일 2026-10-03 · 갱신 2026-11-02
+> **전체 현황과 남은 일은 [`Docs/ProjectStatus.md`](Docs/ProjectStatus.md) 를 먼저 본다.** 이 문서는 직접 해 볼 절차를 모은 것이다.
 
 ---
 
@@ -23,7 +24,7 @@
 
 ## 0-1. VR로 전체 흐름 테스트 (Quest) — [`Docs/GameDesign/VrTestGuide.md`](Docs/GameDesign/VrTestGuide.md)
 
-`Backend/run_server.bat` → Unity `Spellbound > Build > ★ Quest APK — VR 전체 흐름` → `adb install -r Builds/Quest/WarOfWizards_VR.apk` → 헤드셋에서 게스트 로그인 → 봇 연습전 → 덱 선택 → 경기 → 결과(전적 저장) → 로비 / 게임 종료.
+`StartServer.bat` → Unity `Spellbound > Build > ★ Quest APK — VR 전체 흐름` → `adb install -r Builds/Quest/WarOfWizards_VR.apk` → 헤드셋에서 게스트 로그인 → 봇 연습전 → 덱 선택 → 경기 → 결과(전적 저장) → 로비 / 게임 종료.
 빌드한 PC의 LAN 주소가 앱에 자동으로 들어간다 (같은 Wi-Fi + `Backend/open-firewall.bat`). 경기 중 메뉴(기권) = 왼손 메뉴 제스처 / 컨트롤러 ☰.
 
 - 2026-10-25: 씬 `04_Battle`의 `GameBootstrap.bootMode`가 `FusionClient`로 저장되어 있어(문서상 기본은 LocalVsBot) PC 게임 서버 없이 Play하면 카운트다운에서 멈췄다 → **`Auto`(에디터 = LocalVsBot)로 되돌림**. 빌드 메뉴는 빌드마다 모드를 직접 정하므로 영향 없다.
@@ -32,7 +33,7 @@
 
 1. Unity에서 `Assets/Scenes/Client/04_Battle.unity`를 열고 **Play**를 누른다.
 2. Game 뷰를 한 번 클릭해 포커스를 준다 (포커스가 없으면 Input System이 키보드를 무시한다).
-3. 조작 (자세한 표: `Docs/Bot/ManualControlKeys.md`)
+3. 조작 (자세한 표: `Docs/Bot/ManualControlKeys.md`). **PC 기본 입력은 웹캠 손 모양이다** — 전투가 시작되면 오른쪽 아래에 내 모습과 손 모양 안내가 뜬다 ([`Docs/Input/MediaPipeHandInput.md`](Docs/Input/MediaPipeHandInput.md)). 아래 마우스 조작은 C04 환경설정에서 "웹캠 손 입력"을 끄면 쓴다.
    - `1`~`8` 덱 슬롯 바로 시전 (씬 기본 덱: S03 · S07 · S08 · S01 · S11 · S13 · H01 · H04 — 조준형은 마우스 위치로 2초 조준 후 시전)
    - 마우스 왼쪽 드래그로 룬 그리기 (모양: `Assets/Art/Runes/Designs/` 19종) → `F`(주먹 = 그리기 끝 · 인식) → `G`(포인팅). 인식된 룬 아이콘은 마우스 커서(손 모드는 검지 끝)를 따라다닌다
      (`Recognize All Runes`가 켜져 있으면 덱 밖 룬도 로컬 봇전에서 쿨타임 없이 테스트 시전된다)
@@ -85,15 +86,15 @@
 
 | # | 할 일 |
 | --- | --- |
-| 3-1 | 메뉴 `Spellbound > Build > PC Server (Windows)` → `Builds/Server/SpellboundServer.exe` + `RunServer.bat` 생성 |
-| 3-2 | `RunServer.bat` 실행 (창 모드, `-server`). Windows 방화벽 허용 팝업이 뜨면 허용 |
+| 3-1 | 메뉴 `Spellbound > Build > PC Server (Windows)` → `Builds/Server/SpellboundServer.exe` + `RunServer.bat`(4인) · `RunServer1v1.bat`(1:1) 생성 |
+| 3-2 | 저장소 맨 위 `StartServer.bat` 실행 (4인 · 1:1 게임 서버를 창 없이 함께 켠다). 서버 창을 보려면 `RunServer.bat` 을 대신 쓴다. Windows 방화벽 허용 팝업이 뜨면 허용 |
 | 3-3 | 메뉴 `Spellbound > Build > Quest APK (Fusion Client → PC server)` → `Builds/Quest/Spellbound.apk` 설치 |
-| 3-4 | Quest 실행 → 서버 디버그 패널에 `HUMAN` 입장 확인 → 10초(`MatchRuleConfig.BotFillWaitSeconds`) 안에 두 번째 사람이 없으면 **봇 자동 매칭** |
+| 3-4 | Quest 실행 → 서버 디버그 패널에 `HUMAN` 입장 확인 → 30초(`MatchRuleConfig.BotFillWaitSeconds`) 안에 안 들어온 자리는 **AI 가 대신한다** |
 | 3-5 | 사람 대 사람: 에디터를 `Spellbound > Mode > Fusion Client`로 바꿔 Play → 두 번째 플레이어로 입장 |
 | 3-6 | 10분 연속 경기 · 회피 판정 · 핑(`DebugOverlay`, F11) 기록 → §21.3 지연 보정 여부 결정 (W6) |
 
 - Photon 설정: `Assets/Photon/Fusion/Resources/PhotonAppSettings.asset` (AppId 설정됨, 지역 `kr`). 서버와 클라이언트는 **같은 AppId · 지역 · 세션 이름**(`GameBootstrap.sessionName = spellbound-dev`)이어야 한다.
-- 명령줄: `SpellboundServer.exe -server -session 이름` / 클라이언트 `-client` (bootMode가 `Auto`일 때).
+- 명령줄: `SpellboundServer.exe -server -session 이름 -ffa` 또는 `-duel` (실행 모드가 빌드에 들어 있어도 읽는다) / 클라이언트 `-client` (bootMode가 `Auto`일 때). 창 없이 돌리려면 `-batchmode -nographics`.
 - 무료 플랜 20 CCU 안에서 서버 접속도 CCU에 포함되는지 확인 (§3.2, W1 항목).
 - 빌드 메뉴는 빌드 직전에 `GameBootstrap.bootMode`를 바꾸고 빌드 후 원래 값으로 되돌린다. 에디터 기본값은 `LocalVsBot`.
 - **서버 창 카메라** (`Server/ServerSpectatorCamera.cs`): 대기 · 카운트다운은 Home 뒤 시점, **경기가 시작되면 위에서 약 42° 내려다보는 사이드뷰**로 자동 전환 (왼쪽 Home · 오른쪽 Away, 전장 전체가 가로로 들어오게 거리 자동). `V` = 사이드뷰 → 탑뷰 → Home 시점, `B` = 반대편 옆에서 보기, 마우스 휠 = 확대 · 축소. 봇 조종 `Q/W/E`는 시점과 상관없이 **Home 기준** 좌 / 중 / 우.
@@ -131,11 +132,11 @@
 
 ## 6. 수치 밸런싱 (§3.3 "추후 설정")
 
-확정 수치(쿨타임 5/20초, +20%/+40%, 20%, 10초, 5분, 30초, 1초, 웨이브 10초 등)는 기본값으로 넣었다. 나머지는 **임시값**이며 에셋에서 조정한다.
+확정 수치(쿨타임 5/20초, +20%/+40%, 20%, 10초, 5분, 30초, 조준 2초, 웨이브 15초 등)는 기본값으로 넣었다. 나머지는 **임시값**이며 에셋에서 조정한다.
 
 | 에셋 | 주요 임시값 |
 | --- | --- |
-| `_Project/Core/Data/MatchRuleConfig.asset` | 플레이어 HP 1000, 타워 3000 / 넥서스 4000 (2026-10-25 2배), 타워 공격 35, 넥서스 회복 25, 강화당 공격 +15% · 쿨타임 -10%(하한 50%), 봇 매칭 대기 10초, 재시작 10초 |
+| `_Project/Core/Data/MatchRuleConfig.asset` | 플레이어 HP 1000, 타워 3000 / 넥서스 4000 (2026-10-25 2배), 타워 공격 35, 넥서스 회복 25, 강화당 공격 +15% · 쿨타임 -10%(하한 50%), 봇 매칭 대기 30초, 재시작 10초 |
 | `_Project/Spells/Definition/Data/Spell_*.asset` (19종) | 마스터 프롬프트 §14.3 수치표 그대로 (2026-10-24: 고위력 6종 강화, S05 · S06 · H03 · H05 동작 변경) |
 | `_Project/Combat/Minion/Data/Minion_*.asset` | 근접 180HP/14, 원거리 120HP/11, Brute 630HP/30 · 구조물 ×2, 오크 1100HP/65, 드래곤 450HP/45, 터렛 900HP/55, 소환탑 1400HP |
 | `_Project/Bot/Data/BotConfig.asset` | 시전 간격 4~8초 |
@@ -186,7 +187,12 @@
 | $P+ 인식기 | `Gesture/Recognizer/PDollarPlusRecognizer.cs` |
 | 스킬 19종 | `Spells/Definition/SpellDefinition.cs`(기본값) · `Spells/Executor/*Executor.cs` · `Spells/Behaviors/` · `Spells/Effects/` |
 | 월드 표시 (유닛 크기 배율 · 타워 파괴 연출) | `Presentation/ArenaStateView.cs` |
-| 봇 | `Bot/BotPlayer.cs`, `Bot/Brains/TimerRandomBrain.cs`, `ManualKeyBrain.cs` |
+| 봇 | `Bot/BotPlayer.cs`, `Bot/Brains/AiStrategyBrain.cs`, `TimerRandomBrain.cs`, `ManualKeyBrain.cs` |
+| 서버 AI 연결 · 코치 | `Backend/AiStrategyLink.cs`, `Backend/BattleCoach.cs` |
+| 전장 좌표 · 4인 전장 | `Arena/ArenaGeometry.cs`, `Presentation/FfaArenaView.cs` |
+| 웹캠 입력 · 패널 | `Input/MediaPipe/MediaPipeHandInput.cs`, `WebcamTracker.cs`, `UI/C12_HUD/WebcamHandPanel.cs` |
+| 관전 | `Presentation/SpectatorView.cs` |
+| 서버 자동 실행 | `Backend/LocalServer.cs`, `Core/LocalTools.cs`, 저장소 맨 위 `StartServer.bat` |
 | 에디터 도구 | `Editor/SpellboundSetupWizard.cs`, `SpellboundBuildMenu.cs`, `SpellboundDebugMenu.cs` |
 
 ---
@@ -212,7 +218,7 @@
 ## 11. 메타 UI (C01~C13, Unity) — 2026-10-25
 
 - `GameBootstrap > Meta Ui`(기본 켜짐): Play하면 **C01 로그인**부터 뜬다. 끄면 예전처럼 바로 봇전(전투만 테스트).
-- 서버(`Backend/run_server.bat`)를 켜 두면 웹과 같은 계정 · 덱 · 친구 · 우편 · 랭킹을 쓴다. 서버 없이 보려면 C01의 **"서버 없이 시작 (오프라인 봇 연습)"**.
+- 서버는 PC 에서 게임을 켜면 자동으로 켜진다 (`StartServer.bat`). 켜져 있으면 웹과 같은 계정 · 덱 · 친구 · 우편 · 랭킹을 쓴다. 서버 없이 보려면 C01의 **"서버 없이 시작 (오프라인 봇 연습)"**.
 - Quest에서는 C01 아래 **주소 변경**으로 서버 PC의 IP(예: `http://192.168.0.10:8080`)를 넣는다 (`Backend/open-firewall.bat`).
 - 조작: 데스크톱 = 마우스, VR = 오른손 레이로 가리키고 핀치(컨트롤러는 트리거). 입력칸을 고르면 VR 화면 키보드(영문 · 숫자)가 뜬다. 전투에 들어가면 UI 레이는 꺼진다.
 - 흐름: C02 로비 → 랭킹전(C10 매칭) / 친선전(C06 룸) / 봇 연습전 → C11 카운트다운(여기서 전투 시작) → C12 HUD → C13 결과 → 다시 대전 · 로비로 (씬을 다시 불러와 전투를 지운다).
@@ -237,6 +243,7 @@
 
 ## 12. 스킬 19종 전부 테스트하는 방법
 
+0. 룬을 마우스로 그리려면 C04 환경설정에서 "웹캠 손 입력"을 끈다. 웹캠을 켠 채로는 손 모양으로 19종을 시험할 수 있다.
 1. `GameBootstrap > Recognize All Runes`가 켜져 있는지 확인한다 (기본 켜짐). 로컬 봇전에서는 **덱에 없는 룬도 그리면 바로 시전**된다 — 쿨타임 · 고위력 횟수 없음.
 2. Play → C02 로비의 **"스킬 테스트 (19종 전부)" → 시작** (메타 UI를 끄면 Play 즉시 봇전).
 3. Game 뷰를 한 번 클릭하고 마우스 왼쪽 드래그로 룬을 그린다 (모양: C09 마법서의 "그리는 룬" 또는 `Assets/Art/Runes/Designs/`). 여러 획이면 드래그를 나눠 그린다.

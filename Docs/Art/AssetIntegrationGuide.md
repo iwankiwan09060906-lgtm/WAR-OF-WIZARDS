@@ -9,7 +9,7 @@
 
 | 항목 | 규칙 |
 | --- | --- |
-| 렌더 파이프라인 | **Built-in** (URP 아님). 머티리얼은 `Standard` 셰이더, Shader Graph는 **Built-In 타깃**으로 만든다 |
+| 렌더 파이프라인 | **Built-in** (URP 아님). 머티리얼은 `Standard` 셰이더, Shader Graph는 **Built-In 타깃**으로 만든다. URP 패키지가 설치되어 있어도 `GraphicsSettings` 에 파이프라인이 없으므로 `URP/Lit` 은 분홍색이 된다 — 에셋 팩의 URP 머티리얼 · SRP 패키지를 가져오지 말 것. **빌드에도 치명적이다**: URP 머티리얼 하나만 들어가도 변형 제거가 안 되어 Quest 빌드가 셰이더 변형 약 362억 개를 준비하느라 끝나지 않는다 (2026-11-02 실제로 겪음) |
 | 단위 · 방향 | 1 unit = 1m, **앞 = +Z**, 위 = +Y |
 | 피벗 | 모델: **발바닥(바닥) 중앙**. VFX: 부위별 아래 표 참고 |
 | 형식 | 모델은 FBX를 넣은 뒤 **같은 이름의 프리팹**을 만든다 (코드는 FBX가 아니라 프리팹을 찾는다) |
@@ -128,8 +128,11 @@
 | `MDL_Minion_Melee` | 근접 미니언 | 키 ~1.2m, 발바닥 중앙 | Animator 컨트롤러에 **int 파라미터 `State`** |
 | `MDL_Minion_Ranged` | 원거리 미니언 | ~1.0m | 〃 |
 | `MDL_Minion_Brute` | Brute | ~2.0m | 〃 |
-| `MDL_Avatar_Wizard` | 상대 플레이어(Away 발판 위) | ~1.8m, 발바닥 중앙 | (현재 미사용) |
+| `MDL_Avatar_Wizard` | 상대 플레이어 아바타 (자기 자신은 안 보인다) | 2m, 발바닥 중앙 | Polytope 사제 + 고정 자세. 표시 크기 = `playerScale` 2배, 4인전은 × `ffaModelScale` |
+| `MDL_Avatar_Staff` | 아바타 지팡이 — 코드가 `PT_Right_Hand_Weapon_slot` 에 붙인다 | Polytope 지팡이 | 없음 |
 
+> 아바타 두 프리팹은 `_Project/Presentation/Resources/Models/` 에 있다 (Polytope 원본의 프리팹 변형 + `Standard` 머티리얼 `MAT_Avatar_*`). 카탈로그가 아니라 Resources 로 찾으므로 메뉴를 돌리지 않아도 된다. 진영색은 코드가 30% 섞는다.
+>
 > 미니언 3종은 KayKit Adventurers(Knight · Rogue_Hooded · Barbarian)로 만들어져 있다. 메뉴 `Spellbound > Assets > Build KayKit Minion Models`가 프리팹(`Prefabs/Minion/`) · 컨트롤러(`Art/Models/Minion/AC_*`)를 다시 만들고 카탈로그까지 갱신한다. 캐릭터 · 키 · 무기 · 공격 클립은 `SpellboundMinionModelBuilder.cs`의 `Specs`에서 바꾼다.
 
 **미니언 Animator `State` 값** (코드가 상태가 바뀔 때마다 `SetInteger("State", …)`)
@@ -169,6 +172,7 @@
   - 낭떠러지: 바닥 아래 절차 생성 바위 덩어리(`MESH_Arena_CliffBody`, AEGIS `Rock mat`), 양옆 두 줄 협곡 벽(AEGIS 바위를 20~44배), 벽 안쪽 작은 바위 장식. 예전 400m `Ground`는 지운다.
   - 타워 총알: `VFX_Tower_Ally_Projectile` / `VFX_Tower_Enemy_Projectile` (Hovl Magic fire pro blue / red를 0.8배, 검은 연기 끔, `Prefabs/VFX`). 속도는 `ArenaStateView.towerShotSpeed` 12m/s.
   - 18시 해질녘 하늘(`TEX_Sky_Dusk` — 지평선 아래 = 안개색) · 조명 · 안개.
+- **4인 개인전 전장은 씬 아트가 아니라 코드로 만든다** (`FfaArenaView`). 1:1 아트를 끄고 바닥 · 레인을 도형으로 세우며, 구조물은 1번 것을 복제해 0.65배로 줄인다. 좌표 · 구현: [`ArenaCoordinateSpec.md`](../Input/ArenaCoordinateSpec.md).
 - 배경 장식은 `Arena/Environment/` 같은 새 폴더에 넣는다. 콜라이더 불필요 (판정은 서버 수학으로 함).
 - 전체 배치를 플레이스홀더로 되돌리고 싶으면 `Spellbound > 5. Build Placeholder Arena` (Body가 없으면 다시 만든다).
 
@@ -179,6 +183,8 @@
 - 프로젝트가 쓰지 않는 에셋은 지운다. 기준은 **GUID 참조 폐포**: 빌드 씬(`04_Battle`) · `_Project` · `Prefabs` · `Resources` · `Settings` · `XR` · `Photon` · `Art/Runes`에서 참조를 따라가 닿지 않는 파일, 그리고 빌더 코드(`_Project/Editor/*Builder*.cs`)가 경로 · 이름으로 읽지 않는 파일.
 - 이번 정리로 각 팩의 데모 씬 · Readme · 쓰지 않는 색 · 모델(FourEvilDragons 나머지 3종, KayKit gltf · obj 사본, ZNS3D 미사용 소품 등)과 통째로 안 쓰던 `Stylized Crystal`을 지웠다 (약 850MB). 부분적으로 쓰는 팩의 C# 스크립트 · 셰이더는 컴파일 보호를 위해 남겼다.
 - 빌더가 새 원본(프리팹 · FBX)을 쓰도록 바꿀 때는 그 원본이 아직 있는지 먼저 확인한다. 지운 원본은 에셋 스토어 / 원 배포처에서 다시 받을 수 있다 (`Docs/Art/Licenses.md`).
+- **2026-11-02 정리**: 같은 기준으로 `Polytope Studio`(사제 · 지팡이 · 셰이더만 남김, 62MB → 약 5MB), `ZNS3D` 의 나무 · 덤불 · 바위 텍스처(706MB → 428MB), `_Recovery` 복구 씬을 지웠다. 필요하면 git 기록에서 되살린다.
+- **참조 추적만 믿으면 안 된다**: 빌더가 경로로 읽는 원본은 씬 · 프리팹이 참조하지 않아 "미사용"으로 보인다. `Turret.fbx` · `castle.fbx` 가 그런 예로, 지우면 메뉴 6 으로 전장을 다시 만들 수 없다. 지우기 전에 `_Project/Editor` 의 경로 상수를 함께 확인한다.
 - 빌드 임시 · 디버그 산출물(`UnityClient/.utmp`, `UnityClient/Apks`, `UnityClient/.unity/captures`)은 저장소에 넣지 않는다 (`.gitignore`).
 
 ---

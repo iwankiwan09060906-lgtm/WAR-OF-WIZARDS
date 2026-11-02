@@ -82,12 +82,13 @@ UnityClient/Assets/_Project/Backend/Resources/GoogleOAuth/device_client.json
 UnityClient/Assets/_Project/Backend/Resources/GoogleOAuth/device_client.json.meta
 # Quest 빌드가 자동으로 쓰는 이 PC의 백엔드 주소 (PC마다 다름)
 UnityClient/Assets/_Project/Backend/Resources/ServerConfig/
+# 빌드할 때 Unity · Meta SDK 가 만들었다 지우는 파일
+UnityClient/Assets/Resources/PerformanceTestRun*
+UnityClient/Assets/StreamingAssets/RuntimeActionBindings.json*
+
 # Unity WebGL 빌드 산출물 자리
 Backend/static/game/
 
-## ---------- Supabase CLI ----------
-Supabase/.branches/
-Supabase/.temp/
 .env
 .env.local
 *.env
