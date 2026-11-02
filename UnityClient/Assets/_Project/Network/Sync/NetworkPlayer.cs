@@ -93,5 +93,24 @@ namespace SpellboundVR.Network
             if (state == null) return;
             state.ServerReportActivity(Object.InputAuthority);
         }
+
+        /// <summary>상대에게 보일 시전 준비 (표시 전용) — 그리거나 조준하는 동안만 초당 12회 이하로 온다</summary>
+        [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
+        public void RPC_CastPreview(byte phase, int spellId, byte localColumn, float progress, float penX, float penY, byte stroke)
+        {
+            var state = NetworkMatchState.Instance;
+            if (state == null) return;
+            state.ServerCastPreview(Object.InputAuthority, new CastPreview
+            {
+                Phase = (CastPreviewPhase)phase,
+                SpellId = spellId,
+                Aiming = localColumn != PlayerSnap.NoCastLane,
+                TargetColumn = (Column)localColumn,
+                Progress = progress,
+                PenX = penX,
+                PenY = penY,
+                Stroke = stroke,
+            });
+        }
     }
 }

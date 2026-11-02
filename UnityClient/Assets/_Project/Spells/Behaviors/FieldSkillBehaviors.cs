@@ -1,7 +1,7 @@
 // 장판 · 레인 계열 스킬 동작 (§14.4, §11.2 지속 장판 = 매 틱 판정)
-//   S02 독 장판  : 파이어볼처럼 조준 지점(열 + 깊이)으로 독병이 포물선 비행 → 떨어진 깊이를 중심으로 3열 전체를 가로지르는 띠 장판.
+//   S02 독 장판  : 파이어볼처럼 조준 지점(열 + 깊이)으로 독병이 포물선 비행 → 떨어진 깊이를 중심으로 띠 장판 (1:1 은 3열 전체, 개인전은 그 레인 안).
 //                  틱마다 피해, 머문 틱 수만큼 피해 증가(상한)
-//   S05 토네이도 : 조준한 레인을 따라 회오리가 시전자 앞에서 상대 진영 쪽으로 쓸고 지나간다.
+//   S05 토네이도 : 조준한 레인을 따라 회오리가 상대 진영 쪽으로 쓸고 지나간다 (OffMap 이면 시전자 등 뒤 맵 밖에서 레인 축을 따라 들어온다).
 //                  닿은 적 유닛은 피해 + KnockbackDistance만큼 뒤로(상대 진영 쪽) 밀려나고 잠시 정지 (유닛마다 1회, 설치물은 피해만)
 //   S06 번개     : 조준 지점(열 + 깊이) 중심, 레인 폭 × 깊이 ±FieldHalfDepth(세로로 긴 직사각형)에 예고 후 ShotCount번 낙뢰.
 //                  매 낙뢰마다 범위 안 적 유닛 전부 + 범위 안에 서 있는 상대 플레이어 (그 순간 위치 판정)
@@ -31,7 +31,7 @@ namespace SpellboundVR.Spells.Behaviors
         {
             Vector2 from = SpellDamage.Muzzle(world, casterTeam);
             world.PublishFx(def.SpellId, VfxPart.Cast, from, 1.5f, world.GetPlayerWorldColumn(casterTeam));
-            world.LaunchProjectile(new ProjectileLaunch
+            var launch = new ProjectileLaunch
             {
                 SpellId = def.SpellId,
                 CasterTeam = casterTeam,
@@ -48,7 +48,9 @@ namespace SpellboundVR.Spells.Behaviors
                 ArcHeight = def.ArcHeight,
                 SuppressImpactFx = true, // 장판이 3열 폭으로 직접 발행
                 OnHit = new PoisonFlask(def, focus),
-            });
+            };
+            OffMapShot.Apply(def, world, casterTeam, center, ref launch);
+            world.LaunchProjectile(launch);
         }
 
         public void OnProjectileArrived(ISpellWorld world, in ProjectileArrival arrival)
@@ -167,8 +169,8 @@ namespace SpellboundVR.Spells.Behaviors
             _team = team;
             _lane = world.Arena.GetLane(team, worldColumn);
             _focus = SpellDamage.DamageFocus(def, focus);
-            // 깊이(m, 시전자 발판 기준)로 계산 — 진영 방향과 무관
-            _startDepth = Mathf.Clamp01(def.LaneStartDepth) * _lane.Length;
+            // 깊이(m, 시전자 발판 기준)로 계산 — 진영 방향과 무관. 맵 밖 출발은 레인 축의 시전자 뒤쪽
+            _startDepth = def.FromOffMap ? -def.OffMapDistance : Mathf.Clamp01(def.LaneStartDepth) * _lane.Length;
             _endDepth = Mathf.Max(_startDepth + 1f, Mathf.Clamp01(def.LaneEndDepth) * _lane.Length);
             _duration = Mathf.Max(0.3f, def.EffectDuration);
 

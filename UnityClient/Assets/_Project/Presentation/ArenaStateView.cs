@@ -168,6 +168,8 @@ namespace SpellboundVR.Presentation
 
         private static bool IsSummonKind(MinionKind kind) => (int)kind >= (int)MinionKind.AxeOrc;
 
+        private static bool IsFlyingSummon(SpellDefinition def) => def != null && def.FromOffMap && def.Executor == SpellExecutorType.Summon;
+
         /// <summary>모델 크기 배율 (인스펙터 값)</summary>
         private float ModelScale(MinionKind kind)
         {
@@ -327,8 +329,10 @@ namespace SpellboundVR.Presentation
             GameObject prefab = null;
             bool hasPrefab = def != null && _catalog != null &&
                              (_catalog.TryGet(def.GetVfxPrefabName(VfxPart.Projectile), out prefab) ||
-                              // S05 토네이도: 레인을 따라 움직이는 회오리 = 장판(Field) 프리팹을 투사체처럼 이동
-                              (def.Behavior == SpellBehaviorType.TornadoLane && _catalog.TryGet(def.GetVfxPrefabName(VfxPart.Field), out prefab)));
+                              // S05 토네이도: 움직이는 회오리 = 장판(Field) 프리팹을 투사체처럼 이동
+                              (def.Behavior == SpellBehaviorType.TornadoLane && _catalog.TryGet(def.GetVfxPrefabName(VfxPart.Field), out prefab)) ||
+                              // 맵 밖에서 날아오는 소환수: 유닛 모델이 그대로 날아온다
+                              (IsFlyingSummon(def) && _catalog.TryGet(ModelName(def.SummonKind), out prefab)));
             if (hasPrefab)
             {
                 pool = new ObjectPool(prefab, _poolRoot, def.ShotCount > 4 ? projectilePrewarm : 4);
@@ -354,6 +358,17 @@ namespace SpellboundVR.Presentation
 
         /// <summary>진영 배정 전(오프라인 · 서버 화면)에는 Home 시점</summary>
         private Team LocalTeam => _session.Events.HasLocalTeam ? _session.Events.LocalTeam : Team.Home;
+
+        /// <summary>지금 화면에 보이는 그 진영의 아바타 (내 아바타 · 관전 중인 사람 · 빈자리는 null)</summary>
+        public Transform VisibleAvatar(Team team)
+        {
+            for (int i = 0; i < _avatars.Count; i++)
+                if (_avatars[i].Team == team) return _avatars[i].Root.gameObject.activeSelf ? _avatars[i].Root : null;
+            return null;
+        }
+
+        /// <summary>아바타 크기 배율 (플레이어 크기 × 경기 종류별 배율)</summary>
+        public float AvatarWorldScale => AvatarScale;
 
         /// <summary>관전 시점을 옮긴다 — 그 사람 아바타를 끄고 아군 · 적군 색도 그 사람 기준으로 (null = 내 시점)</summary>
         public void SetViewpoint(Team? team)
@@ -824,15 +839,20 @@ namespace SpellboundVR.Presentation
             {
                 ref var p = ref s.Projectiles[i];
                 Vector3 pos = _arena.ToWorld(p.U, p.V, p.Height);
+                var def = _session.Catalog.Get(p.SpellId);
+                bool summon = IsFlyingSummon(def);
                 if (!_projectiles.TryGetValue(p.Id, out var go))
                 {
                     go = GetProjectilePool(p.SpellId).Get(pos, Quaternion.identity);
                     var trail = go.GetComponentInChildren<TrailRenderer>();
                     if (trail != null) trail.Clear();
+                    if (summon) go.transform.localScale = Vector3.one * ModelScale(def.SummonKind);
+                    else if (def != null && def.FromOffMap && !Mathf.Approximately(def.OffMapVisualScale, 1f)) go.transform.localScale = Vector3.one * def.OffMapVisualScale;
                     _projectiles.Add(p.Id, go);
                 }
                 Vector3 next = Vector3.Lerp(go.transform.position, pos, 0.6f);
                 Vector3 dir = next - go.transform.position;
+                if (summon) dir.y = 0f; // 머리부터 떨어지지 않게 — 서서 날아온다
                 if (dir.sqrMagnitude > 1e-6f) go.transform.rotation = Quaternion.LookRotation(dir, Vector3.up);
                 go.transform.position = next;
             }

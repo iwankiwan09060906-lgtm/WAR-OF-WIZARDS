@@ -25,5 +25,7 @@
     <Compile Include="$(P)Network/Authority/**/*.cs" />
     <Compile Include="$(P)Network/Events/IMatchEventSink.cs" />
     <Compile Include="$(P)Network/Sync/MatchSnapshot.cs" />
+    <Compile Include="$(P)Gesture/Recognizer/**/*.cs" />
+    <Compile Include="$(P)Gesture/Runtime/RuneDesigns.cs;$(P)Gesture/Runtime/RuneTemplate.cs;$(P)Gesture/Runtime/RuneTemplateLibrary.cs;$(P)Gesture/Runtime/GestureValidator.cs" />
   </ItemGroup>
 </Project>

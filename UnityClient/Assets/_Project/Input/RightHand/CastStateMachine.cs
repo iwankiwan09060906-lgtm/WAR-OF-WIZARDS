@@ -12,6 +12,7 @@
 //
 // 키보드 대체 입력(§6.6)은 슬롯 번호로 RuneReady를 건너뛰고 바로 Aiming(또는 즉시 시전)으로 간다.
 // 웹캠 손 모양(SelectSpell)도 같은 길로 간다 — 룬을 그리지 않고 스킬을 바로 고른다.
+// 웹캠 룬 그리기(autoFinishSeconds · aimAfterRune): 획을 끝내고 잠시 기다리면 인식되고 바로 조준한다 — 주먹 · 포인팅은 카메라에서 헷갈리기 쉽다.
 // 룬 인식 테스트(recognizeAllRunes): 덱에 없는 룬도 후보로 인식해 손 옆 아이콘 · 조준까지 진행하고, SlotIndex = -1 테스트 시전을 보낸다
 //   (로컬 봇전 서버만 받아들인다 — 쿨타임 · 횟수 없음). 덱에 있는 룬은 원래대로 시전한다.
 // 클라이언트는 요청만 보낸다 — 시전 가능 여부 · 결과는 서버가 결정한다(Rule 4).
@@ -45,6 +46,10 @@ namespace SpellboundVR.Input
         public bool logRecognition = true;
         [Tooltip("룬 인식 테스트: 덱 · 쿨타임과 상관없이 라이브러리의 모든 룬을 후보로 인식한다. 덱 밖의 룬은 시전 요청 없이 로그만 남긴다")]
         public bool recognizeAllRunes;
+        [Tooltip("웹캠 룬 그리기: 획을 끝내고 이 시간(초) 동안 다음 획이 없으면 주먹 없이 그리기를 끝낸다 (0 = 끔)")]
+        public float autoFinishSeconds;
+        [Tooltip("웹캠 룬 그리기: 룬이 인식되면 주먹 · 포인팅 없이 바로 조준한다 (손 위치가 곧 조준점)")]
+        public bool aimAfterRune;
 
         private ClientSession _session;
         private ISpellInputSource _input;
@@ -127,6 +132,12 @@ namespace SpellboundVR.Input
                 return;
             }
 
+            if (State == CastState.Drawing && autoFinishSeconds > 0f && !_input.IsDrawing && _strokes.Count > 0 && TimeInState >= autoFinishSeconds)
+            {
+                HandleFist();
+                return;
+            }
+
             if (State == CastState.Aiming)
             {
                 float progress = AimProgress;
@@ -176,7 +187,8 @@ namespace SpellboundVR.Input
                 CommitCast(); // §6.3 자기 · 타워 · 전역: 주먹 즉시 시전
                 return;
             }
-            SetState(CastState.Armed);
+            if (aimAfterRune) BeginAiming();
+            else SetState(CastState.Armed);
         }
 
         private void HandlePoint()

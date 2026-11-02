@@ -16,6 +16,7 @@
 
 - **조준 = 상대 고르기.** 세 열이 곧 세 상대다. 룬 · 조준 입력은 1:1 과 같고, 가리킨 방향에 가장 가까운 레인이 고른 상대가 된다 (`ArenaGeometry.ResolveAim`).
 - **칸 이동 = 회피.** 투사체는 쏜 순간 상대가 선 칸으로 날아가고, 도착 전에 칸을 옮기면 빗나간다.
+- **스킬은 레인 안에서.** 효과 · 장판 · 날아오는 길 모두 조준한 레인 폭 안이다. 1:1 의 3열 띠 장판(S02 · H05)은 그 레인 폭으로 줄어든다 (`ArenaGeometry.BandHalfWidth` · `OffMapPoint`).
 - **타워 = 레인마다 하나.** 각자 세 상대로 가는 레인 위에 타워를 하나씩 세운다 (진영당 3개, 넥서스는 1개). 스킬 피해 감소 · 공격 보너스 · 넥서스 잠금이 레인별로 따로 움직인다.
 - 씬 아트는 1:1 직사각형이라 개인전이면 `FfaArenaView` 가 실행 중에 바꾼다: 1:1 벽 · 바닥 · 절벽을 끄고, 바닥 · 레인 6개(이중선) · 번호판을 만들고, 2 · 4번 발판은 1번 것을 복제한다. 구조물은 `ArenaStateView` 가 1번 것을 복제해 세운다 (옆 레인 타워 포함).
 - 구조물 깊이는 `ArenaLayout.ffaTowerDepth` 9m(레인을 따라) · `ffaNexusDepth` 4m (옆 레인에서도 닿도록 타워를 1:1 의 13m 보다 발판 가까이 둔다). 이 오브젝트들은 옮겨야 하므로 정적 배칭을 껐다.
@@ -84,7 +85,7 @@
 | S02 독 장판 | `S02_poison` | S11 도끼 전사 | `S17_Melee Minion` |
 | S03 파이어볼 | `S04_fireball` | S12 드래곤 | `S18_Caster Minion` |
 | S04 화살 세례 | `S05_arrow` | S13 터렛 | `S19_turret tower` |
-| S05 토네이도 | `S06_tornado` | H01 프리즈 | `S03_timestop` |
+| S05 토네이도 | `S06_tornado` | H01 프리즈 | `S03_timestop` · 혜성은 `52SpecialEffectPack` 사본 ([OffMapSkills.md](OffMapSkills.md)) |
 | S06 번개 | `S07_thunde` | H02 레이저 | `S10_laser` (시전만) |
 | S07 총난사 | `S09_shootingr` | H03 흡혈 | `S08_Lifesteal` |
 | S08 쉴드 · H04 반사 | `S11_Shield` (시전만) | H05 분노 · H06 소환탑 | `S14_Minon Buff` · `S20_turret Minion` |

@@ -140,6 +140,9 @@ namespace SpellboundVR.Presentation
                 Vector3 scale = prefab.transform.localScale;
                 if (spellId == SpellIds.H02_Laser && (part == VfxPart.Field || part == VfxPart.Telegraph))
                     scale = new Vector3(scale.x, scale.y, scale.z * arena.GetLane(Team.Home, lane).Length);
+                // 띠 장판은 3열 폭으로 제작 → 개인전은 레인 폭으로 줄인다
+                if ((def.Behavior == SpellBehaviorType.PoisonField || def.Behavior == SpellBehaviorType.RageField) && (part == VfxPart.Field || part == VfxPart.Impact))
+                    scale.x *= arena.BandHalfWidth / (arena.ColumnSpacing * 1.5f);
                 inst.transform.localScale = scale;
                 RestartParticles(inst);
                 bool loop = part == VfxPart.Loop || part == VfxPart.Field;
@@ -173,7 +176,9 @@ namespace SpellboundVR.Presentation
                 case VfxPart.Loop:
                     return def.EffectDuration > 0f ? Mathf.Min(def.EffectDuration, 2.5f) : 2f;
                 case VfxPart.Telegraph:
-                    return def.TelegraphDelay > 0f ? def.TelegraphDelay + 0.15f : 1.2f;
+                    // 맵 밖에서 날아오는 스킬은 도착할 때까지 예고 표시를 남긴다
+                    float warning = Mathf.Max(def.TelegraphDelay, def.FromOffMap ? def.OffMapFlightSeconds : 0f);
+                    return warning > 0f ? warning + 0.15f : 1.2f;
                 default:
                     return oneShotMaxLifetime;
             }

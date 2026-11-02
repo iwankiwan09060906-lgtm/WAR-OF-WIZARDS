@@ -35,12 +35,13 @@ namespace SpellboundVR.Input
 
         public static string LogFile => Path.Combine(Application.temporaryCachePath, "hand_tracker.log");
 
-        public static void EnsureRunning(bool drawRunes, int holdFrames)
+        public static void EnsureRunning(bool drawRunes, int holdFrames, bool leftHanded)
         {
             if (IsRunning) return;
             string bat = LocalTools.FindFile(Script);
             if (bat == null) return;
-            string args = "--no-preview --exit-idle " + ExitIdleSeconds.ToString("0") + (drawRunes ? " --input rune" : " --hold-frames " + holdFrames);
+            string args = "--no-preview --exit-idle " + ExitIdleSeconds.ToString("0") + (drawRunes ? " --input rune" : " --hold-frames " + holdFrames) +
+                          (leftHanded ? " --swap-hands" : "");
             s_process = LocalTools.RunHidden(bat, args, LogFile);
         }
 

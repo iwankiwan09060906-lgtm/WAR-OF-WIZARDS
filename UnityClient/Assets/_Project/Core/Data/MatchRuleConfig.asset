@@ -33,7 +33,7 @@ MonoBehaviour:
   MinCooldownRatio: 0.5
   AfkForfeitSeconds: 30
   AfkWarningSeconds: 20
-  AimDurationSeconds: 2
+  AimDurationSeconds: 3
   RuneReadyTimeoutSeconds: 5
   MoveCooldownSeconds: 0.35
   BaseAccuracy: 1

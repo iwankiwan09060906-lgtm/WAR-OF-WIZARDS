@@ -53,7 +53,7 @@ namespace SpellboundVR.Core
 
         [Header("입력 (§6)")]
         [Tooltip("조준(검지 포인팅) 후 시전까지 대기 시간 (초)")]
-        public float AimDurationSeconds = 2f;
+        public float AimDurationSeconds = 3f;
         public float RuneReadyTimeoutSeconds = 5f;
         [Tooltip("이동 재입력 제한 (초)")]
         public float MoveCooldownSeconds = 0.35f;

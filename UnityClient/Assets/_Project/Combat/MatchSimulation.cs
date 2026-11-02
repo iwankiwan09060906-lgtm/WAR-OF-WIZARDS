@@ -35,6 +35,8 @@ namespace SpellboundVR.Combat
         }
 
         private const int QueueCapacity = 64;
+        /// <summary>이 시간(초) 동안 보고가 없는 시전 준비 표시는 지운다 (클라이언트는 1초마다 다시 보낸다)</summary>
+        private const float CastPreviewTimeout = 2.5f;
 
         public readonly PlayerState[] Players = new PlayerState[TeamUtil.TeamCount];
         public readonly StructureState[] Structures = new StructureState[MatchSnapshot.StructureCount];
@@ -337,6 +339,23 @@ namespace SpellboundVR.Combat
             Enqueue(new PendingRequest { Team = team, Kind = RequestKind.Activity });
         }
 
+        /// <summary>
+        /// 상대에게 보일 시전 준비를 갱신한다. 표시 전용이라 요청 큐를 거치지 않고, 시전 가능 여부는 여전히 ProcessCast 가 정한다.
+        /// </summary>
+        public void SetCastPreview(Team team, in CastPreview preview)
+        {
+            var p = Players[(int)team];
+            if (_phase != MatchPhase.Playing || !p.Alive || preview.Phase == CastPreviewPhase.None)
+            {
+                p.ClearPreview();
+                return;
+            }
+            p.Preview = preview;
+            if (!Catalog.TryGet(preview.SpellId, out _)) p.Preview.SpellId = 0;
+            p.PreviewLane = preview.Aiming && (int)preview.TargetColumn <= 2 ? (byte)Arena.ResolveLane(team, preview.TargetColumn) : PlayerSnap.NoCastLane;
+            p.PreviewUntil = _matchTime + CastPreviewTimeout;
+        }
+
         private bool Enqueue(in PendingRequest r)
         {
             if (_queueCount >= QueueCapacity) return false;
@@ -398,7 +417,12 @@ namespace SpellboundVR.Combat
             _matchTime += dt;
             _scaling.Update(_matchTime, Rules);
 
-            for (int t = 0; t < Players.Length; t++) SlotCooldownService.Update(Players[t], _matchTime);
+            for (int t = 0; t < Players.Length; t++)
+            {
+                var p = Players[t];
+                SlotCooldownService.Update(p, _matchTime);
+                if (p.Preview.Phase != CastPreviewPhase.None && (!p.Alive || _matchTime > p.PreviewUntil)) p.ClearPreview();
+            }
 
             for (int t = 0; t < _bots.Length; t++) _bots[t]?.Tick(this);
 
@@ -770,6 +794,7 @@ namespace SpellboundVR.Combat
             _routines.Clear();
             _projectiles.Clear();
             _queueCount = 0;
+            for (int t = 0; t < Players.Length; t++) Players[t].ClearPreview();
             Debug.Log($"[MatchSimulation] 경기 #{_matchSerial} 종료 — 승자 {outcome.Winner}, 사유 {outcome.Reason}, {_duration:0.0}초");
         }
 

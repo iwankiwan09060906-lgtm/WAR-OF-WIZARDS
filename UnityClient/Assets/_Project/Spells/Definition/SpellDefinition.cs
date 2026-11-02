@@ -3,6 +3,7 @@
 // 수치 기본값은 "추후 설정"(§3.3)을 위한 임시값이며 에셋에서 조정한다.
 // 19종 기본값(Create*Default)은 Spellbound > Skills > Rebuild Spell Definitions 가 에셋으로 덮어쓴다.
 
+using SpellboundVR.Arena;
 using SpellboundVR.Combat;
 using SpellboundVR.Contracts;
 using UnityEngine;
@@ -119,6 +120,19 @@ namespace SpellboundVR.Spells
         [Tooltip("예고 표시 후 실제 타격까지 (초)")]
         public float TelegraphDelay = 0f;
 
+        [Header("맵 밖에서 날아오기 (None = 시전자 손에서) — Spells/Behaviors/OffMapShot")]
+        public OffMapOrigin OffMap = OffMapOrigin.None;
+        [Tooltip("전장 가장자리에서 바깥으로 얼마나 먼 곳에서 출발하나 (m)")]
+        public float OffMapDistance = 30f;
+        [Tooltip("출발 높이 (m)")]
+        public float OffMapHeight = 14f;
+        [Tooltip("도착 높이 (m, 0 = 스킬 기본값) — S12 드래곤은 비행 높이로 들어온다")]
+        public float OffMapArrivalHeight = 0f;
+        [Tooltip("출발에서 도착까지 (초) — 거리와 상관없이 일정해서 피할 시간이 늘 같다")]
+        public float OffMapFlightSeconds = 1.2f;
+        [Tooltip("탄환 표시 크기 배율 (표시 전용) — 멀리서 날아와도 보이게")]
+        public float OffMapVisualScale = 1f;
+
         [Header("지속 피해 (장판 · 빔)")]
         [Tooltip("틱 간격 (초)")]
         public float TickInterval = 0.5f;
@@ -160,6 +174,17 @@ namespace SpellboundVR.Spells
         public MinionKind SummonKind = MinionKind.Melee;
 
         public string Code => SpellIds.Code(SpellId);
+
+        public bool FromOffMap => OffMap != OffMapOrigin.None;
+
+        private void SetOffMap(OffMapOrigin origin, float distance, float height, float flightSeconds, float visualScale = 1f)
+        {
+            OffMap = origin;
+            OffMapDistance = distance;
+            OffMapHeight = height;
+            OffMapFlightSeconds = flightSeconds;
+            OffMapVisualScale = visualScale;
+        }
 
         /// <summary>§6.3 조준 생략 — 주먹을 쥐는 순간 즉시 시전</summary>
         public bool RequiresAim =>
@@ -235,6 +260,7 @@ namespace SpellboundVR.Spells
             d.ArcHeight = 1.5f;
             d.StatusEffectId = "S01_Blind";
             d.EffectDuration = 5f;
+            d.SetOffMap(OffMapOrigin.Flank, 24f, 9f, 2f);   // 맵 밖에서 날아드는 연막탄 — 예전처럼 피할 시간이 있다
             return d;
         }
 
@@ -255,6 +281,7 @@ namespace SpellboundVR.Spells
             d.FieldHalfDepth = 2.5f;     // 깊이 5m × 3열 전체
             d.Radius = 2.5f;
             d.MaxDepth = 1f;
+            d.SetOffMap(OffMapOrigin.Flank, 26f, 11f, 1.3f); // 맵 옆에서 독병이 날아든다
             return d;
         }
 
@@ -270,6 +297,7 @@ namespace SpellboundVR.Spells
             d.MaxDepth = 1f;
             d.ProjectileSpeed = 26f;
             d.ArcHeight = 4f;
+            d.SetOffMap(OffMapOrigin.Behind, 34f, 22f, 1.3f, 2.5f); // 시전자 등 뒤 맵 밖에서 유성처럼
             return d;
         }
 
@@ -288,6 +316,7 @@ namespace SpellboundVR.Spells
             d.Radius = 1.2f;             // 화살 1발 착탄 반경
             d.FieldHalfDepth = 3f;       // 낙하 범위: 레인 폭 × 깊이 ±3m
             d.MaxDepth = 1f;
+            d.SetOffMap(OffMapOrigin.Flank, 20f, 12f, 1f); // 맵 밖 양쪽에서 번갈아 쏟아진다
             return d;
         }
 
@@ -300,11 +329,12 @@ namespace SpellboundVR.Spells
             d.Dodgeable = false;
             d.BaseDamage = 35f;          // 닿을 때 1회 피해
             d.EffectDuration = 2.5f;     // 레인을 쓸고 지나가는 시간
-            d.LaneStartDepth = 0.1f;     // 시전자 앞에서 출발
+            d.LaneStartDepth = 0.1f;     // OffMap 을 끄면 시전자 앞에서 출발
             d.LaneEndDepth = 0.85f;      // 상대 진영 앞까지
             d.Radius = 1.6f;             // 회오리 반경 (깊이 방향 판정)
             d.KnockbackDistance = 7f;    // 뒤로 밀어내는 거리
             d.EffectRatio = 0.8f;        // 밀려난 뒤 정신 못 차리는 시간 (초)
+            d.SetOffMap(OffMapOrigin.Behind, 14f, 0.05f, 2.5f); // 시전자 등 뒤 맵 밖에서 레인 축을 따라 들어온다
             return d;
         }
 
@@ -393,6 +423,7 @@ namespace SpellboundVR.Spells
             d.Behavior = SpellBehaviorType.SummonUnit;
             d.FocusCategory = SpellFocusCategory.Summon;
             d.SummonKind = MinionKind.AxeOrc;
+            d.SetOffMap(OffMapOrigin.Sky, 6f, 26f, 0.9f); // 하늘에서 떨어져 착지
             return d;
         }
 
@@ -405,6 +436,8 @@ namespace SpellboundVR.Spells
             d.Behavior = SpellBehaviorType.SummonUnit;
             d.FocusCategory = SpellFocusCategory.Summon;
             d.SummonKind = MinionKind.Dragon;
+            d.SetOffMap(OffMapOrigin.Flank, 26f, 12f, 1.5f); // 맵 옆에서 날아 들어온다
+            d.OffMapArrivalHeight = 3f;  // ArenaStateView.dragonFlightHeight
             return d;
         }
 
@@ -430,6 +463,7 @@ namespace SpellboundVR.Spells
             d.FocusCategory = SpellFocusCategory.Defense;
             d.BaseDamage = 150f;
             d.EffectDuration = 7f;
+            d.SetOffMap(OffMapOrigin.Around, 22f, 18f, 1f, 0.15f); // 맵 둘레 사방에서 얼음 혜성 — 첫 혜성이 떨어질 때 얼어붙는다
             return d;
         }
 

@@ -1,9 +1,11 @@
 // §20.1 봇은 "서버 안의 가상 플레이어" — 사람과 같은 요청 · 같은 검증 · 같은 스킬 코드 · 같은 승패 규칙.
 // 봇 두뇌(IBotBrain)가 만든 SpellCastRequest / MoveRequest를 MatchSimulation의 공용 요청 경로로 넣는다.
 // 봇은 AFK 판정 대상이 아니다.
+// 사람이 룬을 그리고 조준하는 시간처럼, 봇도 시전 전에 BotConfig.CastWindupSeconds 동안 시전 준비를 상대에게 보여 준다 (CastPreview).
 
 using SpellboundVR.Combat;
 using SpellboundVR.Contracts;
+using SpellboundVR.Network;
 using SpellboundVR.Spells;
 using SpellboundVR.Utils;
 using UnityEngine;
@@ -16,12 +18,17 @@ namespace SpellboundVR.Bot
         private readonly IBotBrain _autoBrain;
         private readonly ManualKeyBrain _manualBrain;
         private readonly bool _manualKeysEnabled;
+        private readonly float _windup;
+        private bool _hasPendingCast;
+        private SpellCastRequest _pendingCast;
+        private float _pendingCastAt;
 
         public BotPlayer(Team team, int[] deck, SpellCatalog catalog, BotConfig config, uint seed,
                          bool manualKeysEnabled, bool requireAlt, IBotBrain brainOverride = null)
         {
             Team = team;
             Deck = deck;
+            _windup = config != null ? Mathf.Max(0f, config.CastWindupSeconds) : 0f;
             _autoBrain = brainOverride ?? CreateBrain(team, deck, catalog, config, seed);
             _manualBrain = new ManualKeyBrain(team, deck) { RequireAlt = requireAlt };
             _manualKeysEnabled = manualKeysEnabled;
@@ -70,8 +77,35 @@ namespace SpellboundVR.Bot
             if (ManualMode) _manualBrain.Tick(obs, ref cmd);
             else _autoBrain.Tick(obs, ref cmd);
 
-            if (cmd.HasCastRequest) sim.SubmitCast(Team, cmd.CastRequest);
+            if (cmd.HasCastRequest && !_hasPendingCast)
+            {
+                _hasPendingCast = true;
+                _pendingCast = cmd.CastRequest;
+                _pendingCastAt = sim.MatchTime + _windup;
+            }
             if (cmd.HasMoveRequest) sim.SubmitMove(Team, cmd.MoveRequest);
+            if (_hasPendingCast) TickPendingCast(sim);
+        }
+
+        /// <summary>시전 준비를 보여 주다가 시간이 되면 시전한다 (준비 중에도 이동은 한다)</summary>
+        private void TickPendingCast(MatchSimulation sim)
+        {
+            float left = _pendingCastAt - sim.MatchTime;
+            if (left > 0f)
+            {
+                sim.SetCastPreview(Team, new CastPreview
+                {
+                    Phase = CastPreviewPhase.Preparing,
+                    SpellId = _pendingCast.SpellId,
+                    Aiming = true,
+                    TargetColumn = _pendingCast.TargetColumn,
+                    Progress = 1f - left / _windup,
+                });
+                return;
+            }
+            _hasPendingCast = false;
+            sim.SubmitCast(Team, _pendingCast);
+            sim.SetCastPreview(Team, default);
         }
     }
 }

@@ -72,13 +72,24 @@ namespace SpellboundVR.UI
         public bool showRayLine;
         /// <summary>헤드셋 없는 PC 에서 웹캠 손 추적(MediaPipe)으로 플레이 (끄면 마우스 · 키보드)</summary>
         public bool webcamInput = true;
-        /// <summary>웹캠 입력을 손 모양 대신 허공에 룬 그리기로</summary>
-        public bool webcamDrawRunes;
+        /// <summary>웹캠 입력을 허공에 룬 그리기로 (끄면 손 모양으로 스킬 고르기)</summary>
+        public bool webcamDrawRunes = true;
+        /// <summary>왼손잡이 모드 — 왼손으로 스킬, 오른손으로 이동 (웹캠 · 헤드셋 손 추적)</summary>
+        public bool leftHanded;
+
+        /// <summary>스킬을 쓰는 손 이름 (안내 문구용)</summary>
+        public string CastHandName => leftHanded ? "왼손" : "오른손";
+        /// <summary>이동하는 손 이름 (안내 문구용)</summary>
+        public string MoveHandName => leftHanded ? "오른손" : "왼손";
+        /// <summary>저장 형식 버전 — 기본값이 바뀐 항목을 옛 저장값에서 올려 준다 (MetaState.Settings)</summary>
+        public int version;
     }
 
     public static class MetaState
     {
         private const string SettingsKey = "wow.settings.v1";
+        /// <summary>2: 웹캠 기본 입력을 룬 그리기로 (손 모양이 기본이던 때의 false 는 고른 값이 아니다)</summary>
+        private const int SettingsVersion = 2;
 
         public static AuthResponseDto User => AuthService.CurrentUser;
         public static PlayerDto Profile;
@@ -229,6 +240,7 @@ namespace SpellboundVR.UI
                 if (!string.IsNullOrEmpty(json))
                 {
                     try { JsonUtility.FromJsonOverwrite(json, s_settings); } catch (Exception) { /* 손상된 값은 기본값 */ }
+                    if (s_settings.version < SettingsVersion) s_settings.webcamDrawRunes = true;
                 }
                 return s_settings;
             }
@@ -236,6 +248,7 @@ namespace SpellboundVR.UI
 
         public static void SaveSettings()
         {
+            Settings.version = SettingsVersion;
             PlayerPrefs.SetString(SettingsKey, JsonUtility.ToJson(Settings));
             PlayerPrefs.Save();
             ApplySettings();
@@ -303,20 +316,20 @@ namespace SpellboundVR.UI
 
         public static readonly Info[] All =
         {
-            I("S01", "연막", "projectile", "명중하면 상대 시야를 5초 동안 완전히 가린다", "눈"),
-            I("S02", "독 장판", "area", "조준 지점에 독병을 던져 3열을 가로지르는 독 장판 (머물수록 피해 증가)", "삼각형 + X"),
-            I("S03", "파이어볼", "area", "포물선으로 날아가 착탄 지점에 범위 폭발", "왕관"),
-            I("S04", "화살 세례", "area", "한 레인의 지점 주변에 화살 10발이 쏟아진다", "세 갈래 화살"),
-            I("S05", "토네이도", "beam", "레인을 쓸고 지나가는 회오리 — 닿은 적 유닛을 뒤로 밀어내고 피해", "소용돌이"),
+            I("S01", "연막", "projectile", "맵 밖에서 날아오는 연막탄 — 명중하면 상대 시야를 5초 동안 완전히 가린다", "눈"),
+            I("S02", "독 장판", "area", "맵 밖에서 독병이 날아와 조준 지점에 3열을 가로지르는 독 장판 (머물수록 피해 증가)", "삼각형 + X"),
+            I("S03", "파이어볼", "area", "시전자 등 뒤 맵 밖에서 날아온 유성이 착탄 지점에 범위 폭발", "왕관"),
+            I("S04", "화살 세례", "area", "맵 밖 양쪽에서 조준 지점 주변으로 화살 10발이 쏟아진다", "세 갈래 화살"),
+            I("S05", "토네이도", "beam", "맵 밖에서 들어온 회오리가 레인을 따라 쓸고 지나가며 닿은 적 유닛을 밀어내고 피해", "소용돌이"),
             I("S06", "번개", "area", "지정 위치의 세로로 긴 범위(한 레인)에 낙뢰 3번", "번개"),
             I("S07", "총난사", "projectile", "열 전방 유닛부터 순차 연사 타격 (15발)", "가로줄 5개"),
             I("S08", "방어 쉴드", "buff", "피해 흡수 쉴드 생성 (피격 없을 시 HP 회복)", "방패"),
             I("S09", "타워 버프", "buff", "본인 타워 방어력 · 공격력 일시 강화 (타워 파괴 시 비활성화)", "#"),
             I("S10", "집중", "buff", "다음 스킬 1회 강화 (공격 피해 · 방어 지속 · 소환 체력 ×1.5)", "위쪽 화살표"),
-            I("S11", "도끼 전사", "summon", "체력이 높은 근접 범위 공격 소환수", "X"),
-            I("S12", "드래곤", "summon", "공중 비행 원거리 화염 소환수", "육각별"),
+            I("S11", "도끼 전사", "summon", "하늘에서 떨어져 착지하는 체력 높은 근접 범위 공격 소환수", "X"),
+            I("S12", "드래곤", "summon", "맵 밖에서 날아 들어오는 공중 비행 원거리 화염 소환수", "육각별"),
             I("S13", "터렛", "install", "적 유닛 요격용 고정 포탑 설치 (진영당 1기)", "I"),
-            I("H01", "프리즈", "global", "적 전체 미니언 · 소환수 · 설치물 · 타워 7초간 정지 + 피해", "원 안 모래시계"),
+            I("H01", "프리즈", "global", "맵 둘레에서 얼음 혜성이 떨어져 적 전체 미니언 · 소환수 · 설치물 · 타워 7초간 정지 + 피해", "원 안 모래시계"),
             I("H02", "레이저 빔", "beam", "0.5초 예고선 후 4초간 유지되는 빔으로 열 전체 관통", "별표"),
             I("H03", "흡혈", "beam", "조준 레인의 적 플레이어 HP를 흡수 (못 맞히면 레인의 유닛 · 설치물에서)", "심장 박동 하트"),
             I("H04", "반사 결계", "buff", "9초간 상대 스킬 피해 무효화 및 100% 반사", "원 + 위 화살표"),

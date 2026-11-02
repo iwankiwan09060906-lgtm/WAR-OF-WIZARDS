@@ -283,6 +283,43 @@ class UnityJsonShapeTest(unittest.TestCase):
             self.assertFalse(_has_nested_list(json.loads(json.dumps(msg))), msg)
 
 
+class HandSplitTest(unittest.TestCase):
+    """MediaPipe 라벨은 그림 속 손 모양 그대로다 — 공식 손 사진(woman_hands.jpg)을 뒤집으면 라벨도 뒤집힌다."""
+
+    @staticmethod
+    def result(*hands):
+        from types import SimpleNamespace as Ns
+        return Ns(hand_landmarks=[[Ns(x=x, y=0.5, z=0.0) for _ in range(21)] for _, x in hands],
+                  handedness=[[Ns(category_name=label)] for label, _ in hands])
+
+    def test_mirrored_frame_swaps_labels(self):
+        import wow_hand_tracker as tr
+        right, left = tr.split_hands(self.result(("Left", 0.7), ("Right", 0.3)))
+        self.assertEqual((right[0][0], left[0][0]), (0.7, 0.3))   # 거울 화면 오른쪽 = 사용자의 오른손 = 라벨 Left
+
+    def test_raw_frame_keeps_labels(self):
+        import wow_hand_tracker as tr
+        right, left = tr.split_hands(self.result(("Right", 0.3), ("Left", 0.7)), mirrored=False)
+        self.assertEqual((right[0][0], left[0][0]), (0.3, 0.7))
+
+    def test_left_handed_swaps_roles(self):
+        import wow_hand_tracker as tr
+        right, left = tr.split_hands(self.result(("Left", 0.7), ("Right", 0.3)), swap=True)
+        self.assertEqual((right[0][0], left[0][0]), (0.3, 0.7))   # 스킬 자리에 사용자의 왼손
+
+    def test_same_label_falls_back_to_screen_side(self):
+        import wow_hand_tracker as tr
+        right, left = tr.split_hands(self.result(("Left", 0.2), ("Left", 0.8)))
+        self.assertEqual((right[0][0], left[0][0]), (0.8, 0.2))
+
+
+class SkillHandTest(unittest.TestCase):
+    def test_input_mode_picks_hand(self):
+        import wow_hand_tracker as tr
+        self.assertIsInstance(tr.skill_hand(tr.parse_args(["--input", "rune"])), hg.RightHand)
+        self.assertIsInstance(tr.skill_hand(tr.parse_args([])), hg.ShapeHand)
+
+
 class UdpTest(unittest.TestCase):
     def test_roundtrip(self):
         import wow_hand_tracker as tr

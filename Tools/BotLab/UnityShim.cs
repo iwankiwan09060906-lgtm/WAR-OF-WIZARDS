@@ -94,6 +94,13 @@ namespace UnityEngine
 
     public static class Mathf
     {
+        public static float Sin(float f) => (float)Math.Sin(f);
+        public static float Acos(float f) => (float)Math.Acos(f);
+        public static float Atan2(float y, float x) => (float)Math.Atan2(y, x);
+        public static float Pow(float f, float p) => (float)Math.Pow(f, p);
+        public static float Floor(float f) => (float)Math.Floor(f);
+        public const float Deg2Rad = PI / 180f;
+        public static float Cos(float f) => (float)Math.Cos(f);
         public const float PI = (float)Math.PI;
         public const float Epsilon = 1.401298E-45f;
         public static float Abs(float v) => Math.Abs(v);
@@ -148,6 +155,8 @@ namespace UnityEngine
         public static void DestroyImmediate(Object o) { }
         public static implicit operator bool(Object o) => !ReferenceEquals(o, null);
     }
+
+    public class Texture2D : Object { }
 
     public class ScriptableObject : Object
     {

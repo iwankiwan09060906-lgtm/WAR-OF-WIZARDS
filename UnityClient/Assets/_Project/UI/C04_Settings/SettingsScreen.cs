@@ -1,5 +1,5 @@
 // C04 환경설정 — VR UI 프로토타입(Figma Make, 이식 후 삭제)의 SettingsScreen.tsx (+ 웹 pages/settings.js 의 저장 방식)
-//   2 × 2 섹션 카드: 카메라(보라) · 사운드(청록) · 제스처 인식(주황) · 접근성(보라). 카드 머리 = Cinzel 영문 + 한글 제목 + 아래 선,
+//   2 × 2 섹션 카드: 조작(보라) · 사운드(청록) · 제스처 인식(주황) · 접근성(보라). 카드 머리 = Cinzel 영문 + 한글 제목 + 아래 선,
 //   슬라이더 · 토글은 섹션 색으로 빛난다. 아래에 저장 막대("저장 후 돌아가기").
 //   이 기기에 자동 저장 (PlayerPrefs "wow.settings.v1"). 효과음 크기 · 비네팅 · UI 크게는 바로 게임에 반영된다.
 
@@ -34,11 +34,12 @@ namespace SpellboundVR.UI
 
         private static readonly (string title, string english, Color color, Item[] items)[] Groups =
         {
-            ("카메라 · 멀미 방지", "Camera", UiTheme.Purple, new[]
+            ("조작 · 멀미 방지", "Controls", UiTheme.Purple, new[]
             {
+                S("왼손잡이 모드", "왼손으로 스킬을 쓰고 오른손으로 이동합니다.", s => s.leftHanded, (s, v) => s.leftHanded = v),
                 R("카메라 감도", null, 0, 100, "%", s => s.camSensitivity, (s, v) => s.camSensitivity = v),
                 S("비네팅", "열을 옮길 때 시야 가장자리를 어둡게 하여 멀미를 줄입니다.", s => s.comfortVignette, (s, v) => s.comfortVignette = v),
-                S("스냅 이동", "왼손 스냅으로 좌/중/우 열을 한 칸씩 순간 이동합니다.", s => s.snapTurning, (s, v) => s.snapTurning = v),
+                S("스냅 이동", "이동하는 손을 휘둘러 좌/중/우 열을 한 칸씩 순간 이동합니다.", s => s.snapTurning, (s, v) => s.snapTurning = v),
             }),
             ("사운드", "Audio", UiTheme.Cyan, new[]
             {
@@ -49,10 +50,10 @@ namespace SpellboundVR.UI
             ("제스처 인식", "Gesture Recognition", UiTheme.Orange, new[]
             {
                 R("인식 민감도", null, 0, 100, "%", s => s.gestureSensitivity, (s, v) => s.gestureSensitivity = v),
-                R("유지 시간 (손 모양)", "웹캠에서 손 모양을 이 프레임 수만큼 유지하면 스킬을 고릅니다 (30프레임 = 약 1초)", 5, 45, "", s => s.holdFrames, (s, v) => s.holdFrames = v),
+                R("유지 시간 (손 모양)", "룬 그리기를 끄면 손 모양을 이 프레임 수만큼 유지해 스킬을 고릅니다 (30프레임 = 약 1초)", 5, 45, "", s => s.holdFrames, (s, v) => s.holdFrames = v),
                 S("햅틱 피드백", "시전 · 피격 때 컨트롤러 진동", s => s.haptics, (s, v) => s.haptics = v),
                 S("웹캠 손 입력 (MediaPipe)", "헤드셋 없는 PC 에서 웹캠으로 손동작을 인식해 플레이합니다. 끄면 마우스 · 키보드로 플레이합니다.", s => s.webcamInput, (s, v) => s.webcamInput = v),
-                S("웹캠으로 룬 그리기", "손 모양 대신 엄지 · 검지를 붙인 채 허공에 룬을 그립니다.", s => s.webcamDrawRunes, (s, v) => s.webcamDrawRunes = v),
+                S("웹캠으로 룬 그리기", "엄지 · 검지를 붙인 채 허공에 룬을 그립니다. 끄면 손 모양으로 스킬을 고릅니다.", s => s.webcamDrawRunes, (s, v) => s.webcamDrawRunes = v),
             }),
             ("접근성", "Accessibility", UiTheme.Purple, new[]
             {

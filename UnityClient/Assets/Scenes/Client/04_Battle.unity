@@ -1037,7 +1037,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 119ee961833b3344194209534f06154e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SpellboundVR.Core.GameBootstrap
-  bootMode: 1
+  bootMode: 0
   sessionName: spellbound-dev
   serverPort: 0
   rules: {fileID: 11400000, guid: 5315434185c97614ab3bd27ba86f9df1, type: 2}

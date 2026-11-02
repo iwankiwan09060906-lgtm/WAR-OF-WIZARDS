@@ -39,5 +39,12 @@ namespace SpellboundVR.Network
             if (!IsReady) return;
             _player.RPC_ReportActivity();
         }
+
+        public void ReportCastPreview(in CastPreview preview)
+        {
+            if (!IsReady) return;
+            _player.RPC_CastPreview((byte)preview.Phase, preview.SpellId, preview.Aiming ? (byte)preview.TargetColumn : PlayerSnap.NoCastLane,
+                                    preview.Progress, preview.PenX, preview.PenY, (byte)preview.Stroke);
+        }
     }
 }

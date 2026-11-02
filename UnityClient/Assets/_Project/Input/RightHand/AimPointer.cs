@@ -1,5 +1,5 @@
-// §6.2 Aiming — 포인터 표시, 1초 카운트
-//   · 포인터가 열 경계를 넘나들어도 1초 타이머는 리셋하지 않는다 (§6.3).
+// §6.2 Aiming — 포인터 표시, 시전까지 카운트 (MatchRuleConfig.AimDurationSeconds)
+//   · 포인터가 열 경계를 넘나들어도 타이머는 리셋하지 않는다 (§6.3).
 //   · 조준 포인터는 본인에게만 보인다 (로컬 표시만, 네트워크 전송 없음).
 
 using SpellboundVR.Contracts;
@@ -41,9 +41,9 @@ namespace SpellboundVR.Input
                 var arena = _session.Arena;
                 var behavior = spell != null ? spell.Behavior : SpellBehaviorType.None;
                 if (behavior == SpellBehaviorType.PoisonField)
-                    markerView.SetShape(new Vector2(arena.ColumnSpacing * 1.5f, spell.FieldHalfDepth), true);                // 3열 전체 띠
+                    markerView.SetShape(new Vector2(arena.BandHalfWidth, spell.FieldHalfDepth), true);                       // 띠 (1:1 은 3열 전체, 개인전은 레인 안)
                 else if (behavior == SpellBehaviorType.RageField)
-                    markerView.SetShape(new Vector2(arena.ColumnSpacing * 1.5f, RageRoutine.HalfDepth(spell, arena)), true); // 3열 × 타워~넥서스 폭
+                    markerView.SetShape(new Vector2(arena.BandHalfWidth, RageRoutine.HalfDepth(spell, arena)), true);        // 띠 × 타워~넥서스 폭
                 else if (behavior == SpellBehaviorType.ArrowVolley)
                     markerView.SetShape(new Vector2(arena.LaneHalfWidth * 0.8f, spell.FieldHalfDepth), false);              // 레인 폭 × 깊이
                 else if (behavior == SpellBehaviorType.LightningStrikes)

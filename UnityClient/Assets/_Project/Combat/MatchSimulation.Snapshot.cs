@@ -45,6 +45,13 @@ namespace SpellboundVR.Combat
                 ps.AttackMultiplier = GetDisplayAttackMultiplier((Team)t);
                 ps.Place = (byte)p.Place;
                 ps.DamageDealt = Mathf.RoundToInt(p.DamageDealt);
+                ps.CastPhase = (byte)p.Preview.Phase;
+                ps.CastSpellId = (short)p.Preview.SpellId;
+                ps.CastLane = p.PreviewLane;
+                ps.CastProgress = (byte)Mathf.RoundToInt(Mathf.Clamp01(p.Preview.Progress) * 255f);
+                ps.PenX = (sbyte)Mathf.RoundToInt(Mathf.Clamp(p.Preview.PenX, -1f, 1f) * 100f);
+                ps.PenY = (sbyte)Mathf.RoundToInt(Mathf.Clamp(p.Preview.PenY, -1f, 1f) * 100f);
+                ps.PenStroke = (byte)p.Preview.Stroke;
                 s.Names[t] = Names[t];
                 ps.AfkSecondsLeft = _phase == MatchPhase.Playing ? AfkMonitor.SecondsLeft(p, _matchTime, Rules) : -1f;
 

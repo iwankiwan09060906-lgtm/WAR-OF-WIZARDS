@@ -168,6 +168,11 @@ namespace SpellboundVR.Network
             if (_sim != null && _playerTeams.TryGetValue(player, out var team)) _sim.ReportActivity(team);
         }
 
+        public void ServerCastPreview(PlayerRef player, in CastPreview preview)
+        {
+            if (_sim != null && _playerTeams.TryGetValue(player, out var team)) _sim.SetCastPreview(team, preview);
+        }
+
         private void WriteNetworked(MatchSnapshot s)
         {
             Header = s.Header;

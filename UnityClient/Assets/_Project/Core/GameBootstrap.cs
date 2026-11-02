@@ -85,6 +85,8 @@ namespace SpellboundVR.Core
         public InputMode inputMode = InputMode.Auto;
         [Tooltip("키보드(데스크톱) 모드에서 시점을 아래로 기울이는 각도 — 헤드셋에서는 사용 안 함")]
         public float desktopViewPitch = 28f;
+        [Tooltip("웹캠 룬 그리기: 획을 끝내고 이 시간(초) 동안 다음 획이 없으면 그리기를 끝낸다")]
+        public float webcamRuneFinishSeconds = 1.2f;
 
         [Header("경기 종류")]
         [Tooltip("서버 빌드가 여는 경기 — 메타 UI 경기는 C02 에서 고른 인원을 따른다. 명령줄 -duel 이면 1:1")]
@@ -421,6 +423,7 @@ namespace SpellboundVR.Core
             // 시전 흐름
             var markerGo = new GameObject("[AimMarker]");
             var marker = markerGo.AddComponent<AimMarkerView>();
+            marker.Initialize(vfxCatalog);
             var aim = gameObject.AddComponent<AimPointer>();
             aim.markerView = marker;
             var cast = gameObject.AddComponent<CastStateMachine>();
@@ -428,6 +431,7 @@ namespace SpellboundVR.Core
             cast.recognizeAllRunes = _allowAllRunes && !networked; // PC 서버는 덱 밖 테스트 시전을 항상 거절하므로 네트워크 모드에선 덱 룬만 인식
             cast.Initialize(_session, input, _deckManager);
             _cast = cast;
+            gameObject.AddComponent<CastPreviewReporter>().Initialize(_session, input, cast, _deckManager, head);
 
             // 표시
             var lineGo = new GameObject("[MagicLine]", typeof(LineRenderer));
@@ -438,6 +442,7 @@ namespace SpellboundVR.Core
             presentation.AddComponent<VFXPlayer>().Initialize(_session, vfxCatalog);
             _arenaView = presentation.AddComponent<ArenaStateView>();
             _arenaView.Initialize(_session, vfxCatalog, head);
+            presentation.AddComponent<CastPreviewView>().Initialize(_session, _arenaView, head, vfxCatalog);
             presentation.AddComponent<DamageTextView>().Initialize(_session, head);
             presentation.AddComponent<BlindOverlayView>().Initialize(_session, head);
             var hud = gameObject.AddComponent<BattleHudView>();
@@ -455,7 +460,12 @@ namespace SpellboundVR.Core
             if (input is MediaPipeHandInput tracker)
             {
                 var settings = SpellboundVR.UI.MetaState.Settings;
-                tracker.Bind(hud, _deckManager, deck.ToArray(), cast, settings.webcamDrawRunes, settings.holdFrames);
+                if (settings.webcamDrawRunes)
+                {
+                    cast.autoFinishSeconds = webcamRuneFinishSeconds;
+                    cast.aimAfterRune = true;
+                }
+                tracker.Bind(hud, _deckManager, deck.ToArray(), cast, settings.webcamDrawRunes, settings.holdFrames, runeLibrary);
             }
 
             platform.SetTeam(localTeam, 1);
@@ -517,7 +527,9 @@ namespace SpellboundVR.Core
                 var left = HandJointProvider.EnsureForAnchor(leftHandAnchor, false);
                 var right = HandJointProvider.EnsureForAnchor(rightHandAnchor, true);
                 var hands = inputGo.AddComponent<HandTrackingInput>();
-                hands.Configure(left, right, head);
+                // 왼손잡이 모드: 입력의 "오른손"(스킬 손) 자리에 왼손을 넣는다
+                bool swap = SpellboundVR.UI.MetaState.Settings.leftHanded;
+                hands.Configure(swap ? right : left, swap ? left : right, head);
                 Debug.Log("[GameBootstrap] 입력: HandTrackingInput (Quest 핸드트래킹)");
                 return hands;
             }
@@ -546,7 +558,9 @@ namespace SpellboundVR.Core
             var presentation = new GameObject("[Server View]");
             if (_arenaMode == ArenaMode.Ffa4) presentation.AddComponent<FfaArenaView>().Initialize(_session);
             presentation.AddComponent<VFXPlayer>().Initialize(_session, vfxCatalog);
-            presentation.AddComponent<ArenaStateView>().Initialize(_session, vfxCatalog, head);
+            var serverArena = presentation.AddComponent<ArenaStateView>();
+            serverArena.Initialize(_session, vfxCatalog, head);
+            presentation.AddComponent<CastPreviewView>().Initialize(_session, serverArena, head, vfxCatalog);
             presentation.AddComponent<DamageTextView>().Initialize(_session, head);
 
             // 서버 창 카메라: 대기 중엔 Home 뒤 시점, 경기가 시작되면 위에서 비스듬히 내려다보는 사이드뷰 (V로 전환)

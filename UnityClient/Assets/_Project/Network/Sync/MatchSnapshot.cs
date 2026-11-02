@@ -66,6 +66,34 @@ namespace SpellboundVR.Network
         public const byte Raged = 1;
     }
 
+    /// <summary>상대에게 보이는 시전 준비 단계 (표시 전용 — 판정과 무관)</summary>
+    public enum CastPreviewPhase : byte
+    {
+        None = 0,
+        /// <summary>룬을 그리는 중 — 아직 무슨 스킬인지 모르고 펜 위치만 보인다</summary>
+        Drawing = 1,
+        /// <summary>스킬이 정해졌다 (룬 인식 · 조준 · 봇의 시전 준비)</summary>
+        Preparing = 2,
+    }
+
+    /// <summary>시전 준비 보고 — 사람은 CastPreviewReporter, 봇은 BotPlayer 가 만든다</summary>
+    public struct CastPreview
+    {
+        public CastPreviewPhase Phase;
+        public int SpellId;
+        /// <summary>TargetColumn 이 의미 있는가 (조준을 시작했는가)</summary>
+        public bool Aiming;
+        /// <summary>시전자 시점 열 — 어느 상대를 노리는지 아바타가 그쪽을 본다 (정확한 조준점은 보내지 않는다, §6.3)</summary>
+        public Contracts.Column TargetColumn;
+        /// <summary>시전까지 진행률 0~1</summary>
+        public float Progress;
+        /// <summary>그리는 손끝 위치 -1~1 (시전자 기준 오른쪽 · 위쪽)</summary>
+        public float PenX;
+        public float PenY;
+        /// <summary>몇 번째 획인가</summary>
+        public int Stroke;
+    }
+
     public struct MatchHeaderNet : INetworkStruct
     {
         public int MatchSerial;
@@ -112,6 +140,20 @@ namespace SpellboundVR.Network
         public byte Place;
         /// <summary>다른 플레이어에게 입힌 피해 합</summary>
         public int DamageDealt;
+        /// <summary>CastPreviewPhase</summary>
+        public byte CastPhase;
+        /// <summary>준비 중인 스킬 (모르면 0)</summary>
+        public short CastSpellId;
+        /// <summary>노리는 월드 레인 (조준 전이면 NoCastLane)</summary>
+        public byte CastLane;
+        /// <summary>시전까지 진행률 0~255</summary>
+        public byte CastProgress;
+        /// <summary>그리는 손끝 위치 -100~100</summary>
+        public sbyte PenX;
+        public sbyte PenY;
+        public byte PenStroke;
+
+        public const byte NoCastLane = 255;
     }
 
     public struct SlotSnap : INetworkStruct

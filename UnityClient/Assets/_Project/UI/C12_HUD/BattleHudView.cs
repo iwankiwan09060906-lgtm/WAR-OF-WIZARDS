@@ -195,8 +195,9 @@ namespace SpellboundVR.UI
             _afk = Label(rt, "Afk", new Vector2(0f, -192f), new Vector2(960f, 40f), 26, TextAnchor.MiddleCenter, UiTheme.Enemy, true);
             Glow(_afk, UiTheme.Alpha(Color.black, 0.8f));
             var hint = Label(rt, "Hint", new Vector2(Ffa ? 100f : 0f, -280f), new Vector2(Ffa ? 760f : 960f, 30f), Ffa ? 14 : 16, TextAnchor.MiddleCenter, UiTheme.Alpha(UiTheme.PurpleLight, 0.6f), false);
-            hint.text = Ffa ? "왼쪽 · 가운데 · 오른쪽을 가리키면 그쪽 상대를 공격   ·   왼손 휘두르기로 피하기   ·   왼손 메뉴 제스처 = 경기 메뉴"
-                            : "핀치 룬 › 주먹 › 검지 2초   ·   손바닥 취소   ·   왼손 휘두르기 이동   ·   왼손 메뉴 제스처 = 경기 메뉴";
+            string moveHand = MetaState.Settings.MoveHandName;
+            hint.text = Ffa ? "왼쪽 · 가운데 · 오른쪽을 가리키면 그쪽 상대를 공격   ·   " + moveHand + " 휘두르기로 피하기   ·   왼손 메뉴 제스처 = 경기 메뉴"
+                            : "핀치 룬 › 주먹 › 검지 3초   ·   손바닥 취소   ·   " + moveHand + " 휘두르기 이동   ·   왼손 메뉴 제스처 = 경기 메뉴";
 
             // 가운데 큰 글자 뒤 어두운 띠 (슬롯 위에 겹쳐도 읽히게, 글자가 있을 때만)
             _centerBack = Sliced(rt, "CenterBack", new Vector2(0f, 60f), new Vector2(980f, 190f),

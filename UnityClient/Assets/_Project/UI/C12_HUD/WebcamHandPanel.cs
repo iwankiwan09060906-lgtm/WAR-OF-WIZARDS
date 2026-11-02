@@ -1,8 +1,10 @@
 // 웹캠 패널 — 화면 오른쪽 아래에 내 모습(손 뼈대 포함)을 작게 띄우고, 왼쪽에 내 덱의 손 모양 안내를 둔다.
 //   데스크톱 전용이라 HUD(머리에 붙은 월드 캔버스)와 따로 화면 오버레이 캔버스에 그린다.
 //   손 모양 그림: 다섯 칸 = 엄지 · 검지 · 중지 · 약지 · 새끼, 키가 큰 칸 = 편 손가락.
+//   룬 그리기 모드: 왼쪽에 내 덱의 룬 그림(RuneTemplate.Icon)을 띄운다 — 무엇을 그릴지 보면서 따라 그린다.
 
 using SpellboundVR.Deck;
+using SpellboundVR.Gesture;
 using SpellboundVR.Input;
 using UnityEngine;
 using UnityEngine.UI;
@@ -14,6 +16,8 @@ namespace SpellboundVR.UI
         private const float PreviewWidth = 320f;
         private const float PreviewHeight = 180f;
         private const float SheetWidth = 190f;
+        private const float RuneSheetWidth = 268f;
+        private const int RuneSheetColumns = 2;
         private const float BarHeight = 30f;
         private const float RowHeight = 22f;
         private const float PreviewAspect = PreviewWidth / PreviewHeight;
@@ -28,6 +32,7 @@ namespace SpellboundVR.UI
             public Text Name;
             public Image[] Fingers;
             public string Pattern;
+            public RawImage Rune;
         }
 
         private MediaPipeHandInput _input;
@@ -41,23 +46,30 @@ namespace SpellboundVR.UI
         private RectTransform _fill;
         private bool _drawRunes;
         private Row[] _rows;
+        private string _handHint;
+        private string _runeHint;
+        private Material _runeMaterial;
 
-        public void Initialize(MediaPipeHandInput input, EightSlotDeckManager slots, int[] deck, CastStateMachine cast, bool drawRunes)
+        public void Initialize(MediaPipeHandInput input, EightSlotDeckManager slots, int[] deck, CastStateMachine cast, bool drawRunes, RuneTemplateLibrary runes)
         {
             _input = input;
             _slots = slots;
             _cast = cast;
             _drawRunes = drawRunes;
-            Build(deck);
+            var settings = MetaState.Settings;
+            _handHint = settings.CastHandName + " 모양 = 스킬 · " + settings.MoveHandName + " 휘두르기 = 이동";
+            _runeHint = settings.CastHandName + " 엄지 · 검지를 붙여 룬 그리기 · " + settings.MoveHandName + " 휘두르기 = 이동";
+            Build(deck, runes);
         }
 
         private void OnDestroy()
         {
             if (_canvas != null) Destroy(_canvas.gameObject);
             if (_texture != null) Destroy(_texture);
+            if (_runeMaterial != null) Destroy(_runeMaterial);
         }
 
-        private void Build(int[] deck)
+        private void Build(int[] deck, RuneTemplateLibrary runes)
         {
             var go = new GameObject("[WebcamPanel]", typeof(Canvas), typeof(CanvasScaler));
             _canvas = go.GetComponent<Canvas>();
@@ -68,7 +80,7 @@ namespace SpellboundVR.UI
             scaler.referenceResolution = new Vector2(1920f, 1080f);
             scaler.matchWidthOrHeight = 0.5f;
 
-            float width = _drawRunes ? PreviewWidth : PreviewWidth + SheetWidth;
+            float width = PreviewWidth + (_drawRunes ? RuneSheetWidth : SheetWidth);
             float height = PreviewHeight + BarHeight;
             var root = Box(go.transform, "Panel", Back);
             root.anchorMin = root.anchorMax = root.pivot = new Vector2(1f, 0f);
@@ -94,7 +106,42 @@ namespace SpellboundVR.UI
             _picking = Label(track, "Picking", Color.white, 15, TextAnchor.MiddleCenter);
             UiKit.Stretch(_picking.rectTransform);
 
-            if (!_drawRunes) BuildSheet(root, deck);
+            if (_drawRunes) BuildRuneSheet(root, deck, runes);
+            else BuildSheet(root, deck);
+        }
+
+        /// <summary>내 덱의 룬 그림 — 아이콘은 투명 배경 위 검은 선이라 RuneIcon 셰이더로 밝은 선 + 어두운 받침으로 그린다</summary>
+        private void BuildRuneSheet(RectTransform root, int[] deck, RuneTemplateLibrary runes)
+        {
+            var shader = Shader.Find("Spellbound/RuneIcon");
+            if (shader != null) _runeMaterial = new Material(shader) { color = Color.white };
+            _rows = new Row[deck.Length];
+            int rows = Mathf.CeilToInt((float)deck.Length / RuneSheetColumns);
+            float cellWidth = RuneSheetWidth / RuneSheetColumns;
+            float cellHeight = (PreviewHeight + BarHeight) / Mathf.Max(1, rows);
+            float icon = cellHeight - 6f;
+            for (int i = 0; i < deck.Length; i++)
+            {
+                float x = i % RuneSheetColumns * cellWidth + 4f;
+                float y = PreviewHeight + BarHeight - (i / RuneSheetColumns + 1) * cellHeight + 3f;
+                string code = deck[i] > 0 ? MediaPipeHandInput.SpellCode(deck[i]) : null;
+                var row = new Row { Code = code, Slot = i, Fingers = new Image[0] };
+                var template = code != null && runes != null ? runes.Find(deck[i]) : null;
+                if (template != null && template.Icon != null)
+                {
+                    var go = new GameObject("Rune", typeof(RectTransform), typeof(RawImage));
+                    go.transform.SetParent(root, false);
+                    row.Rune = go.GetComponent<RawImage>();
+                    row.Rune.texture = template.Icon;
+                    row.Rune.material = _runeMaterial;
+                    row.Rune.raycastTarget = false;
+                    Place(row.Rune.rectTransform, x, y, icon, icon);
+                }
+                row.Name = Label(root, "Name", UiTheme.Text, 13, TextAnchor.MiddleLeft);
+                Place(row.Name.rectTransform, x + icon + 4f, y, cellWidth - icon - 12f, icon);
+                row.Name.text = code != null ? MetaSkills.Name(code) : "";
+                _rows[i] = row;
+            }
         }
 
         /// <summary>내 덱의 손 모양 안내 — 표는 추적기가 보내 주므로 도착하면 채운다</summary>
@@ -163,10 +210,10 @@ namespace SpellboundVR.UI
             float progress = aiming ? _cast.AimProgress : _input.ShapeProgress;
             _fill.anchorMax = new Vector2(Mathf.Clamp01(progress), 1f);
             if (!_input.IsTrackerConnected) _picking.text = "";
-            else if (_drawRunes) _picking.text = drawing ? "그리는 중 · 주먹 = 끝" : "엄지 · 검지를 붙여 룬 그리기";
-            else if (aiming) _picking.text = "손을 움직여 조준 · 화면 밖으로 빼면 취소";
+            else if (aiming) _picking.text = _drawRunes ? "손을 움직여 조준 · 손바닥을 펴면 취소" : "손을 움직여 조준 · 화면 밖으로 빼면 취소";
+            else if (_drawRunes) _picking.text = !drawing ? _runeHint : _input.IsDrawing ? "그리는 중 · 손가락을 떼면 한 획" : "이어 그리려면 다시 집기 · 그대로 두면 완성";
             else if (progress > 0f && !string.IsNullOrEmpty(_input.ShapeSpell)) _picking.text = MetaSkills.Name(_input.ShapeSpell);
-            else _picking.text = "오른손 모양 = 스킬 · 왼손 휘두르기 = 이동";
+            else _picking.text = _handHint;
         }
 
         private void UpdateSheet()
@@ -176,8 +223,14 @@ namespace SpellboundVR.UI
             {
                 var row = _rows[i];
                 if (row.Code == null) continue;
-                if (row.Pattern == null) row.Pattern = FindPattern(row.Code);
                 bool ready = _slots.IsReady(row.Slot);
+                if (_drawRunes)
+                {
+                    row.Name.color = ready ? UiTheme.Text : Dim;
+                    if (row.Rune != null) row.Rune.color = ready ? Color.white : Dim;
+                    continue;
+                }
+                if (row.Pattern == null) row.Pattern = FindPattern(row.Code);
                 bool current = row.Pattern != null && row.Pattern == _input.ShapePattern;
                 row.Name.color = current ? UiTheme.CyanLight : ready ? UiTheme.Text : Dim;
                 for (int f = 0; f < row.Fingers.Length && row.Pattern != null; f++)

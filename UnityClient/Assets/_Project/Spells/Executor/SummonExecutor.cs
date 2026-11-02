@@ -23,8 +23,14 @@ namespace SpellboundVR.Spells.Executor
         {
             int lane = _world.Arena.ResolveLane(casterTeam, request.TargetColumn);
             Vector2 pos = _world.Arena.SpawnPosition(casterTeam, lane);
+            float hp = SpellDamage.HpFocus(_def, _world.CastFocus);
+            if (_def.FromOffMap)
+            {
+                SummonDrop.Launch(_def, _world, casterTeam, lane, pos, hp);
+                return;
+            }
             _world.PublishFx(_def.SpellId, VfxPart.Cast, pos, 0.05f, lane);
-            if (!_world.SpawnUnit(casterTeam, _def.SummonKind, lane, pos, SpellDamage.HpFocus(_def, _world.CastFocus), out _))
+            if (!_world.SpawnUnit(casterTeam, _def.SummonKind, lane, pos, hp, out _))
                 Debug.LogWarning($"[SummonExecutor] {_def.Code} 소환 실패 (생존 상한 · 풀 부족)");
         }
     }

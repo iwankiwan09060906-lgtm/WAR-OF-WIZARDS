@@ -23,6 +23,7 @@ internal static class Program
         if (args.Length > 0 && args[0] == "tune") return Tune(args.Length > 1 ? int.Parse(args[1]) : 400, args.Length > 2 ? int.Parse(args[2]) : 3);
         if (args.Length > 0 && args[0] == "ffa") return Ffa.Measure(args.Length > 1 ? int.Parse(args[1]) : 200, args.Length > 2 ? float.Parse(args[2]) : 900f);
         if (args.Length > 0 && args[0] == "ffatest") return Ffa.Test();
+        if (args.Length > 0 && args[0] == "skilltest") return SkillTest.Run();
         if (args.Length > 0 && args[0] == "ffatrace") return Ffa.Trace(args.Length > 1 ? uint.Parse(args[1]) : 1u, args.Length > 2 ? float.Parse(args[2]) : 900f);
         if (args.Length > 0 && args[0] == "vlm")
             return Vlm(args.Length > 1 ? int.Parse(args[1]) : 10, args.Length > 2 ? args[2] : "http://127.0.0.1:8080",
@@ -35,10 +36,10 @@ internal static class Program
         var arena = ArenaGeometry.CreateDefault();
         Console.WriteLine($"[BotLab] 판 {games}개씩 · 최대 {cap:0}초 · 틱 {1f / rules.LocalTickInterval:0}Hz · 스킬 {catalog.All.Count}종");
 
-        Run("랜덤 vs 랜덤 (기준)", games, cap, rules, catalog, arena, Brain.Random, Brain.Random, 2.5f);
-        Run("AI 전략 vs 랜덤", games, cap, rules, catalog, arena, Brain.Ai, Brain.Random, 2.5f);
+        Run("랜덤 vs 랜덤 (기준)", games, cap, rules, catalog, arena, Brain.Random, Brain.Random, 5f);
+        Run("AI 전략 vs 랜덤", games, cap, rules, catalog, arena, Brain.Ai, Brain.Random, 5f);
         Run("AI 전략 (랜덤과 같은 시전 속도 6초) vs 랜덤", games, cap, rules, catalog, arena, Brain.Ai, Brain.Random, 6f);
-        Run("AI 전략 vs AI 전략 (기준)", games, cap, rules, catalog, arena, Brain.Ai, Brain.Ai, 2.5f);
+        Run("AI 전략 vs AI 전략 (기준)", games, cap, rules, catalog, arena, Brain.Ai, Brain.Ai, 5f);
         return 0;
     }
 

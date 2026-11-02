@@ -1,5 +1,6 @@
 // §6.3 조준 포인터 표시 (본인에게만 보임)
-//   · 열 하이라이트 + 지면 마커(범위형은 스킬 반경) + 1초 진행 링
+//   · 열 하이라이트 + 지면 마커(범위형은 스킬 반경) + 시전 진행 링
+//   · 원형 마커 · 진행 링은 마법진 이펙트(VFX_Aim_Circle), 열 · 범위 하이라이트는 바닥에 깔리는 반투명 판
 //   · 직사각형 범위는 SetShape로 반폭을 지정 — S02 독 장판 · H05 분노 = 3열 전체 띠, S04 화살 세례 · S06 번개 = 레인 폭 × 깊이
 
 using SpellboundVR.Arena;
@@ -9,6 +10,10 @@ namespace SpellboundVR.Presentation
 {
     public sealed class AimMarkerView : MonoBehaviour
     {
+        private const string CirclePrefab = "VFX_Aim_Circle";
+        /// <summary>VFX_Aim_Circle 마법진 지름 (배율 1, m)</summary>
+        private const float CircleDiameter = 10f;
+
         private Transform _marker;
         private Transform _rect;
         private Transform _progress;
@@ -17,6 +22,8 @@ namespace SpellboundVR.Presentation
         private Renderer _rectRenderer;
         private Renderer _laneRenderer;
         private Renderer _progressRenderer;
+        private GameObject _circle;
+        private GameObject _progressCircle;
         private float _radius;
         private Vector2 _halfExtents;
         private bool _spanAllLanes;
@@ -24,6 +31,17 @@ namespace SpellboundVR.Presentation
         private void Awake()
         {
             Build();
+        }
+
+        /// <summary>마법진 이펙트로 바꾼다 (카탈로그에 없으면 대체 원판을 그대로 쓴다)</summary>
+        public void Initialize(VFXCatalog catalog)
+        {
+            Build();
+            if (catalog == null || !catalog.TryGet(CirclePrefab, out var prefab)) return;
+            _circle = Instantiate(prefab, transform);
+            _progressCircle = Instantiate(prefab, transform);
+            _markerRenderer.enabled = false;
+            _progressRenderer.enabled = false;
         }
 
         private void Build()
@@ -56,6 +74,8 @@ namespace SpellboundVR.Presentation
             _marker.gameObject.SetActive(true);
             _progressRenderer.sharedMaterial = FallbackVisuals.Transparent(new Color(color.r, color.g, color.b, 0.8f));
             _laneRenderer.sharedMaterial = FallbackVisuals.Transparent(new Color(color.r, color.g, color.b, 0.12f));
+            VfxTint.Apply(_circle, color);
+            VfxTint.Apply(_progressCircle, color);
             gameObject.SetActive(true);
         }
 
@@ -67,6 +87,7 @@ namespace SpellboundVR.Presentation
             bool rect = halfExtents.x > 0f;
             _rect.gameObject.SetActive(rect);
             _marker.gameObject.SetActive(!rect);
+            if (_circle != null) _circle.SetActive(!rect);
         }
 
         public void UpdateMarker(Vector3 position, ArenaGeometry arena, Contracts.Team team, int worldColumn, float progress)
@@ -92,6 +113,13 @@ namespace SpellboundVR.Presentation
             _progress.position = position + Vector3.up * 0.02f;
             float p = Mathf.Clamp01(progress) * _radius * 2f;
             _progress.localScale = new Vector3(p, 0.012f, p);
+            if (_circle != null)
+            {
+                _circle.transform.position = position;
+                _circle.transform.localScale = Vector3.one * (_radius * 2f / CircleDiameter);
+                _progressCircle.transform.position = position + Vector3.up * 0.02f;
+                _progressCircle.transform.localScale = Vector3.one * (p / CircleDiameter);
+            }
 
             _lane.position = arena.ToWorld(frame.Point(frame.Length * 0.5f), 0.02f);
             _lane.rotation = facing;

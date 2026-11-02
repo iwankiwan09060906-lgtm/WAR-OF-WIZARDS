@@ -21,5 +21,8 @@ namespace SpellboundVR.Network
 
         /// <summary>§10 활동 보고 (룬 드로잉 시작)</summary>
         void ReportActivity();
+
+        /// <summary>상대에게 보일 시전 준비 보고 (표시 전용)</summary>
+        void ReportCastPreview(in CastPreview preview);
     }
 }

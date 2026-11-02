@@ -30,6 +30,12 @@ MonoBehaviour:
   ShotInterval: 0.1
   ArcHeight: 3.5
   TelegraphDelay: 0
+  OffMap: 2
+  OffMapDistance: 26
+  OffMapHeight: 11
+  OffMapArrivalHeight: 0
+  OffMapFlightSeconds: 1.3
+  OffMapVisualScale: 1
   TickInterval: 0.5
   TickDamageRamp: 2
   MaxTickDamage: 30

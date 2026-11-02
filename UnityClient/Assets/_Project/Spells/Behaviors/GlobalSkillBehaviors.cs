@@ -3,7 +3,7 @@
 //   H03 흡혈   : 조준한 레인 공격. 상대 플레이어가 그 레인에 서 있고 피해가 들어가면 실제 피해 × EffectRatio 만큼 회복.
 //               플레이어를 맞히지 못하면(다른 레인 · 쉴드 · 반사 · MISS) 그 레인의 적 유닛 · 소환된 설치물 전부에게서 빼앗는다
 //               (실제 피해 합 × EffectRatio × LaneHealRatio). 생명력은 EffectDuration에 걸쳐 시전자에게 날아와 도착하면 회복
-//   H05 분노   : 파이어볼처럼 조준한 깊이에 3열을 가로지르는 띠 장판 (띠 폭 = 아레나의 타워 ~ 넥서스 거리).
+//   H05 분노   : 파이어볼처럼 조준한 깊이에 띠 장판 (1:1 은 3열 전체, 개인전은 그 레인 안 · 띠 폭 = 아레나의 타워 ~ 넥서스 거리).
 //               EffectDuration 동안 장판에 들어온 아군 유닛은 장판이 끝날 때까지 공격력 · 공격 속도 · 이동 속도 · 방어력 증가
 
 using System.Collections.Generic;
@@ -21,13 +21,13 @@ namespace SpellboundVR.Spells.Behaviors
         /// <summary>프리즈 장판 표시 위치: 3열 × 깊이 5줄</summary>
         public static readonly float[] FieldRows = { 0.1f, 0.3f, 0.5f, 0.7f, 0.9f };
 
-        public static void Apply(SpellDefinition def, ISpellWorld world, Team casterTeam, float focus)
+        public static void Apply(SpellDefinition def, ISpellWorld world, Team casterTeam, float focus, bool publishCast = true)
         {
             float duration = def.EffectDuration * SpellDamage.DurationFocus(def, focus);
             float dmgFocus = SpellDamage.DamageFocus(def, focus);
             var arena = world.Arena;
 
-            world.PublishFx(def.SpellId, VfxPart.Cast, world.GetPlayerPosition(casterTeam), 1.5f, world.GetPlayerWorldColumn(casterTeam));
+            if (publishCast) world.PublishFx(def.SpellId, VfxPart.Cast, world.GetPlayerPosition(casterTeam), 1.5f, world.GetPlayerWorldColumn(casterTeam));
             for (int c = 0; c < 3; c++)
             {
                 int lane = arena.ResolveLane(casterTeam, (Column)c);

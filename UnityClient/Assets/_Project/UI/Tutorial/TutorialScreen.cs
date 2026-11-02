@@ -1,7 +1,7 @@
 // 제스처 튜토리얼 — VR UI 프로토타입(Figma Make, 이식 후 삭제)의 TutorialScreen.tsx 를 이 게임의 실제 손동작으로 옮김 (C02 로비 → 튜토리얼)
 //   왼쪽: 동작 목록 5개 (본 동작은 청록 "확인") · 가운데: 큰 표시 + 이름 · 설명 · PC 키 · 연습 구역 · 오른쪽: n / 5 · 다음 · 건너뛰기
 //   프로토타입의 Fireball / Shield / Lightning 3동작 대신 시전 흐름 그대로:
-//     핀치로 룬 그리기 → 주먹(인식) → 검지 포인팅 2초(조준 · 시전) · 손바닥(취소) · 왼손 휘두르기(이동)
+//     핀치로 룬 그리기 → 주먹(인식) → 검지 포인팅 3초(조준 · 시전) · 손바닥(취소) · 왼손 휘두르기(이동)
 //   "연습" = 스킬 테스트 봇전 (덱 밖의 19종 룬도 바로 시전, 쿨타임 · 횟수 없음).
 
 using System.Collections.Generic;
@@ -23,7 +23,7 @@ namespace SpellboundVR.UI
             new Step
             {
                 Name = "룬 그리기", Gesture = "Pinch Draw", Color = UiTheme.PurpleLight, Art = "S03",
-                Description = "오른손 엄지와 검지를 집은 채 허공에 룬을 그립니다.\n여러 획이면 손가락을 뗐다가 다시 집어 이어 그리세요.",
+                Description = "스킬 손(기본 오른손)의 엄지와 검지를 집은 채 허공에 룬을 그립니다.\n여러 획이면 손가락을 뗐다가 다시 집어 이어 그리세요.",
                 Hold = "그린 모양은 덱 8장의 룬과 비교해 가장 닮은 스킬로 인식됩니다",
                 PcKeys = "마우스 왼쪽 드래그",
             },
@@ -37,21 +37,21 @@ namespace SpellboundVR.UI
             new Step
             {
                 Name = "포인팅 조준", Gesture = "Index Point", Color = UiTheme.CyanLight, Art = "S06",
-                Description = "검지를 펴서 노릴 열(· 깊이)을 가리킵니다.\n같은 곳을 2초 동안 유지하면 시전이 확정됩니다.",
+                Description = "검지를 펴서 노릴 열(· 깊이)을 가리킵니다.\n같은 곳을 3초 동안 유지하면 시전이 확정됩니다.",
                 Hold = "가리킨 곳에 조준 표시가 차오르면 시전",
                 PcKeys = "G → 마우스로 조준",
             },
             new Step
             {
                 Name = "손바닥 취소", Gesture = "Open Palm", Color = UiTheme.Enemy, Art = "S05",
-                Description = "룬을 그린 뒤 · 조준 중에 오른손 손바닥을 활짝 펴면 취소됩니다.\n취소하면 쿨타임 · 횟수가 줄지 않습니다.",
+                Description = "룬을 그린 뒤 · 조준 중에 스킬 손 손바닥을 활짝 펴면 취소됩니다.\n취소하면 쿨타임 · 횟수가 줄지 않습니다.",
                 Hold = "잘못 그렸을 때 바로 손바닥",
                 PcKeys = "X 또는 마우스 오른쪽",
             },
             new Step
             {
-                Name = "왼손 이동", Gesture = "Left Swipe", Color = UiTheme.Green, Art = "S09",
-                Description = "왼손 손가락을 모두 펴고 왼쪽 · 오른쪽으로 휘두르면 한 칸씩 움직입니다.\n날아오는 마법을 피할 때 쓰세요.",
+                Name = "손 휘둘러 이동", Gesture = "Hand Swipe", Color = UiTheme.Green, Art = "S09",
+                Description = "이동 손(기본 왼손) 손가락을 모두 펴고 왼쪽 · 오른쪽으로 휘두르면 한 칸씩 움직입니다.\n날아오는 마법을 피할 때 쓰세요. 왼손잡이는 환경설정에서 손을 바꿀 수 있습니다.",
                 Hold = "빠르게 짧게 휘두르기 (0.5초 간격)",
                 PcKeys = "A / D",
             },

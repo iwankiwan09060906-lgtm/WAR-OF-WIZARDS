@@ -4,6 +4,7 @@
 using SpellboundVR.Contracts;
 using SpellboundVR.Core;
 using SpellboundVR.Deck;
+using SpellboundVR.Network;
 
 namespace SpellboundVR.Combat
 {
@@ -45,6 +46,12 @@ namespace SpellboundVR.Combat
         public bool Eliminated;
         /// <summary>4인 개인전 순위 1 ~ 4 (0 = 아직 결정 안 됨)</summary>
         public int Place;
+        /// <summary>상대에게 보일 시전 준비 (표시 전용)</summary>
+        public CastPreview Preview;
+        /// <summary>Preview 가 노리는 월드 레인 (조준 전이면 PlayerSnap.NoCastLane)</summary>
+        public byte PreviewLane = PlayerSnap.NoCastLane;
+        /// <summary>이 시각까지 새 보고가 없으면 Preview 를 지운다 (접속이 끊긴 사람)</summary>
+        public float PreviewUntil;
 
         public PlayerState(Team team)
         {
@@ -71,6 +78,13 @@ namespace SpellboundVR.Combat
             Eliminated = false;
             Place = 0;
             DamageDealt = 0f;
+            ClearPreview();
+        }
+
+        public void ClearPreview()
+        {
+            Preview = default;
+            PreviewLane = PlayerSnap.NoCastLane;
         }
 
         public bool HasFocus => PendingFocus > 1f;

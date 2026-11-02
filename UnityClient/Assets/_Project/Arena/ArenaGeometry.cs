@@ -27,6 +27,21 @@ namespace SpellboundVR.Arena
         Ffa4 = 1,
     }
 
+    /// <summary>스킬이 전장 바깥 어디에서 들어오나 (시전자 시점). 에셋에 정수로 저장되므로 순서를 바꾸지 않는다</summary>
+    public enum OffMapOrigin : byte
+    {
+        /// <summary>맵 밖을 쓰지 않는다 — 시전자 손에서</summary>
+        None,
+        /// <summary>레인 축을 따라 시전자 등 뒤 먼 곳 — 머리 위를 넘어 전장으로 (상대에게는 정면에서 날아온다)</summary>
+        Behind,
+        /// <summary>1:1 은 조준 지점의 왼쪽 · 오른쪽 바깥, 개인전은 레인이 교차하므로 그 레인의 양 끝 바깥</summary>
+        Flank,
+        /// <summary>조준 지점 바로 위 높은 하늘</summary>
+        Sky,
+        /// <summary>전장 둘레 사방</summary>
+        Around,
+    }
+
     /// <summary>시전자 시점의 레인 좌표계</summary>
     public readonly struct LaneFrame
     {
@@ -76,8 +91,8 @@ namespace SpellboundVR.Arena
         public float LaneHalfWidth => ColumnSpacing * 0.5f;
         public float MinU => IsDuel ? -ColumnSpacing * 1.5f : -FieldLength * 0.5f;
         public float MaxU => IsDuel ? ColumnSpacing * 1.5f : FieldLength * 0.5f;
-        /// <summary>3열 폭 띠 장판의 반폭 (S02 독 장판 · H05 분노)</summary>
-        public float BandHalfWidth => ColumnSpacing * 1.5f;
+        /// <summary>띠 장판의 반폭 (S02 독 장판 · H05 분노) — 1:1 은 3열 전체, 개인전은 레인이 교차하므로 그 레인 안에서만</summary>
+        public float BandHalfWidth => IsDuel ? ColumnSpacing * 1.5f : LaneHalfWidth;
 
         public ArenaGeometry(Vector3 homeBase, Vector3 forward, float fieldLength, float columnSpacing,
                              float nexusDepth, float towerDepth, float spawnDepth, ArenaMode mode = ArenaMode.Duel)
@@ -312,6 +327,38 @@ namespace SpellboundVR.Arena
             uv.x = Mathf.Clamp(uv.x, MinU, MaxU);
             uv.y = Mathf.Clamp(uv.y, 0f, FieldLength);
             return uv;
+        }
+
+        // ── 맵 밖 ─────────────────────────────────────────────
+
+        /// <summary>
+        /// lane 위 target 으로 날아올 스킬의 맵 밖 출발점. side = -1 시전자 쪽 · +1 반대쪽, distance = 전장 가장자리에서 바깥으로 (m).
+        /// 판정은 도착 지점으로 하므로 ClampToField 를 쓰지 않는다.
+        /// </summary>
+        public Vector2 OffMapPoint(in LaneFrame lane, OffMapOrigin origin, Vector2 target, int side, float distance)
+        {
+            switch (origin)
+            {
+                case OffMapOrigin.Behind:
+                    return lane.Point(-distance);
+                case OffMapOrigin.Flank:
+                    if (!IsDuel) return lane.Point(side < 0 ? -distance : lane.Length + distance); // 날아오는 길도 레인 위
+                    float lateral = Vector2.Dot(target - Center, lane.Right);
+                    return target + lane.Right * (side * (BandHalfWidth + distance - side * lateral));
+                case OffMapOrigin.Sky:
+                    return target - lane.Dir * distance;
+                case OffMapOrigin.Around:
+                    return OffMapRing(side, 8, distance);
+                default:
+                    return target;
+            }
+        }
+
+        /// <summary>전장 둘레 count 등분 중 index 번째 맵 밖 지점</summary>
+        public Vector2 OffMapRing(int index, int count, float distance)
+        {
+            float angle = (index + 0.5f) / Mathf.Max(1, count) * Mathf.PI * 2f;
+            return Center + new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * (FieldLength * 0.5f + distance);
         }
     }
 }

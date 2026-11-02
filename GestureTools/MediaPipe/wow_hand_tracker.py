@@ -91,17 +91,24 @@ def open_capture(args):
     return cap
 
 
-def split_hands(result, swap=False):
-    """MediaPipe 결과 → (오른손 랜드마크, 왼손 랜드마크). 거울 모드 화면이므로 'Right' = 사용자의 오른손."""
+def split_hands(result, swap=False, mirrored=True):
+    """
+    MediaPipe 결과 → (오른손 랜드마크, 왼손 랜드마크).
+    MediaPipe 라벨은 넣어 준 그림 속 손 모양 그대로다 — 원본 카메라 영상에서 'Right' = 사용자의 오른손이고,
+    좌우를 뒤집은 거울 화면에서는 반대로 나오므로 mirrored 이면 라벨을 맞바꾼다.
+    swap = 왼손잡이: 왼손이 스킬(오른손 자리), 오른손이 이동(왼손 자리).
+    """
+    other = {"Left": "Right", "Right": "Left"}
     hands = []
     for i, lms in enumerate(result.hand_landmarks or []):
-        label = result.handedness[i][0].category_name if result.handedness and result.handedness[i] else "Right"
+        label = result.handedness[i][0].category_name if result.handedness and result.handedness[i] else None
+        label = (other[label] if mirrored else label) if label else "Right"
         pts = [(p.x, p.y, p.z) for p in lms]
         hands.append([label, pts])
     if len(hands) == 2 and hands[0][0] == hands[1][0]:
-        # 두 손이 같은 쪽으로 분류되면 화면 위치로 정한다 (화면 오른쪽 = 오른손)
+        # 두 손이 같은 쪽으로 분류되면 화면 위치로 정한다 (거울 화면 오른쪽 = 오른손)
         hands.sort(key=lambda h: hg.palm_center(h[1])[0])
-        hands[0][0], hands[1][0] = "Left", "Right"
+        hands[0][0], hands[1][0] = ("Left", "Right") if mirrored else ("Right", "Left")
     right = next((h[1] for h in hands if h[0] == "Right"), None)
     left = next((h[1] for h in hands if h[0] == "Left"), None)
     return (left, right) if swap else (right, left)
@@ -373,7 +380,7 @@ def render(frame, ov, st, args):
 
     cv2.rectangle(img, (0, h - 44), (w, h), (20, 20, 20), -1)
     guide = ("오른손: 손 모양을 유지 → 스킬 선택 · 손을 움직여 조준 · 화면 밖으로 빼면 취소" if args.input == "shape"
-             else "오른손: 핀치한 채 룬 그리기 → 떼기 → 주먹 → 검지로 가리키기 1초 · 손바닥 = 취소")
+             else "오른손: 핀치한 채 룬 그리기 → 떼고 잠시 기다리기 → 손을 움직여 조준 3초 · 손바닥 = 취소")
     ov.text((10, h - 42), guide + "   |   왼손: 손바닥 펴고 좌/우로 휘두르기 = 이동", (200, 200, 200), 14)
     ov.text((10, h - 22), "q 종료 · h 왼손/오른손 바꾸기 · a 조준 방식(위치/기울기) · r 룬 안내 켜기/끄기", (160, 160, 160), 14)
     return ov.flush(img)
@@ -410,6 +417,11 @@ def parse_args(argv=None):
     return p.parse_args(argv)
 
 
+def skill_hand(args):
+    """스킬 손 판정기 — 손 모양으로 고르기 또는 핀치로 룬 그리기."""
+    return hg.ShapeHand(hold_frames=args.hold_frames) if args.input == "shape" else hg.RightHand()
+
+
 def main(argv=None):
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
@@ -428,8 +440,7 @@ def main(argv=None):
         link.send({"type": "status", "state": "no_camera"})
         sys.exit(f"카메라 {args.camera} 을(를) 열 수 없습니다. 다른 프로그램이 쓰고 있는지 확인하거나 --camera 1 로 바꿔 보세요.")
 
-    right = hg.ShapeHand(hold_frames=args.hold_frames) if args.input == "shape" else hg.RightHand()
-    st = {"right": right, "left": hg.LeftHand(), "lm_right": None, "lm_left": None, "link": link,
+    st = {"right": skill_hand(args), "left": hg.LeftHand(), "lm_right": None, "lm_left": None, "link": link,
           "fps": 0.0, "log": deque(maxlen=20), "last_rune": None, "candidates": candidates,
           "show_runes": True, "swap": args.swap_hands}
     print(f"[MediaPipe] 손 추적 시작 — UDP {args.host}:{args.port} 로 송출, 제어 포트 {args.listen}")
@@ -463,7 +474,7 @@ def main(argv=None):
 
             rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             result = landmarker.detect_for_video(mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb), ts)
-            lm_r, lm_l = split_hands(result, st["swap"])
+            lm_r, lm_l = split_hands(result, st["swap"], not args.no_mirror)
             st["lm_right"], st["lm_left"] = lm_r, lm_l
 
             # Unity → 추적기: {"type":"candidates","spells":["S03",...]}  (쿨타임 끝난 슬롯 목록)
@@ -478,6 +489,11 @@ def main(argv=None):
                     if cs != st["candidates"]:
                         print(f"[MediaPipe] Unity 가 룬 후보를 바꿈 ({len(cs)}개): {','.join(cs) or '없음'}")
                     st["candidates"] = cs
+                elif m.get("type") == "hands":   # 환경설정 "왼손잡이 모드" · "웹캠으로 룬 그리기" — 켜져 있는 추적기에도 바로 반영
+                    st["swap"] = bool(m.get("swap"))
+                    if m.get("input") in ("shape", "rune") and m["input"] != args.input:
+                        args.input = m["input"]
+                        st["right"] = skill_hand(args)
                 elif m.get("type") == "hello":
                     link.send({"type": "hello", "from": "tracker", "candidates": st["candidates"]})
 
@@ -495,6 +511,7 @@ def main(argv=None):
                 if ev["name"] == "pinch_end":
                     msg["points"] = points_json(ev["points"])
                     msg["rune"] = rune_json(ev["rune"])
+                    msg["aspect"] = round(aspect, 4)   # 궤적은 화면 비율 좌표 — 받는 쪽이 가로세로를 맞출 수 있게
                 link.send(msg)
                 st["log"].append((now, describe(hand, ev)))
                 print(f"[{now - t_start:7.2f}s] {describe(hand, ev)}")

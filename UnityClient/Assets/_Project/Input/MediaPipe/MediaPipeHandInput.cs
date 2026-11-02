@@ -6,8 +6,10 @@
 //
 // 쓰는 법  : 헤드셋 없는 PC 의 기본 입력이다 (환경설정 > "웹캠 손 입력"). GameBootstrap.CreateInput 이 키보드 대신 이 입력을 만들고,
 //            전투가 시작되면 추적기를 창 없이 직접 켠다 (WebcamTracker). 내 모습은 화면 오른쪽 아래에 나온다 (WebcamHandPanel).
-//            기본 입력 = 손 모양: 오른손 모양을 유지하면 그 스킬을 고른다 (CastStateMachine.SelectSpell), 왼손 휘두르기 = 이동.
+//            기본 입력 = 룬 그리기: 엄지 · 검지를 붙인 채 허공에 룬을 그리고 떼면 인식된다 (환경설정 "웹캠으로 룬 그리기").
+//            끄면 손 모양: 오른손 모양을 유지하면 그 스킬을 고른다 (CastStateMachine.SelectSpell). 왼손 휘두르기 = 이동.
 //            조준은 오른손 커서(0~1)를 화면 좌표로 본 레이다 — 마우스와 같은 경로로 열 · 깊이 · 개인전 레인이 정해진다.
+//            왼손잡이 모드(환경설정)는 추적기가 두 손을 맞바꿔 보낸다 — 이 파일의 "오른손"은 언제나 스킬 손, "왼손"은 이동 손이다.
 //            추적기가 없거나 카메라가 안 열리면 1~8 · A/D · 마우스 조준으로 계속 플레이할 수 있다.
 // 메시지 형식: Docs/Input/MediaPipeHandInput.md
 
@@ -20,6 +22,7 @@ using System.Text;
 using System.Threading;
 using SpellboundVR.Contracts;
 using SpellboundVR.Deck;
+using SpellboundVR.Gesture;
 using SpellboundVR.Spells;
 using SpellboundVR.UI;
 using SpellboundVR.Utils;
@@ -44,6 +47,7 @@ namespace SpellboundVR.Input
         private bool _drawRunes;
         private int _holdFrames;
         private bool _bound;
+        private string _handsJson;
 
         [Header("UDP")]
         [SerializeField] private int listenPort = 5065;
@@ -100,19 +104,22 @@ namespace SpellboundVR.Input
         }
 
         /// <summary>전투 시작: 추적기를 켜고 덱의 룬을 후보로 보낸다. holdFrames = 손 모양을 유지할 프레임 수</summary>
-        public void Bind(BattleHudView hud, EightSlotDeckManager slots, int[] deck, CastStateMachine cast, bool drawRunes, int holdFrames)
+        public void Bind(BattleHudView hud, EightSlotDeckManager slots, int[] deck, CastStateMachine cast, bool drawRunes, int holdFrames, RuneTemplateLibrary runes)
         {
             _hud = hud;
             _cast = cast;
             _drawRunes = drawRunes;
             _holdFrames = holdFrames;
             _bound = true;
+            _handsJson = "{\"type\":\"hands\",\"swap\":" + (MetaState.Settings.leftHanded ? "true" : "false") +
+                         ",\"input\":\"" + (drawRunes ? "rune" : "shape") + "\"}";
             var codes = new List<string>(deck.Length);
             for (int i = 0; i < deck.Length; i++)
                 if (deck[i] > 0) codes.Add(SpellCode(deck[i]));
             SendCandidates(codes);
-            WebcamTracker.EnsureRunning(drawRunes, holdFrames);
-            gameObject.AddComponent<WebcamHandPanel>().Initialize(this, slots, deck, cast, drawRunes);
+            SendHandedness();
+            WebcamTracker.EnsureRunning(drawRunes, holdFrames, MetaState.Settings.leftHanded);
+            gameObject.AddComponent<WebcamHandPanel>().Initialize(this, slots, deck, cast, drawRunes, runes);
         }
 
         private void TrackDrawing()
@@ -190,7 +197,7 @@ namespace SpellboundVR.Input
             running = true;
             StartReceiver(receiver, "MediaPipeUdp", data => inbox.Enqueue(Encoding.UTF8.GetString(data)));
             StartReceiver(previewReceiver, "MediaPipePreview", data => Interlocked.Exchange(ref preview, data)); // 항상 최신 장만
-            if (_bound) WebcamTracker.EnsureRunning(_drawRunes, _holdFrames); // 메뉴가 길어 추적기가 스스로 꺼졌을 수 있다
+            if (_bound) WebcamTracker.EnsureRunning(_drawRunes, _holdFrames, MetaState.Settings.leftHanded); // 메뉴가 길어 추적기가 스스로 꺼졌을 수 있다
         }
 
         private void OnDisable()
@@ -253,7 +260,14 @@ namespace SpellboundVR.Input
             {
                 nextHello = Time.unscaledTime + 2f;
                 Send(candidatesJson ?? "{\"type\":\"hello\"}");
+                SendHandedness();
             }
+        }
+
+        /// <summary>왼손잡이 모드 · 입력 방식을 알린다 — 지난 전투부터 켜져 있던 추적기에도 적용되도록 주기적으로 다시 보낸다</summary>
+        private void SendHandedness()
+        {
+            if (_handsJson != null) Send(_handsJson);
         }
 
         /// <summary>손이 안 닿을 때를 위한 키 — 1~8 슬롯 · A/D 이동 (Alt 조합은 봇 수동 조종 전용)</summary>
@@ -364,8 +378,10 @@ namespace SpellboundVR.Input
                     IsDrawing = false;
                     LastRune = e.rune;
                     if (e.rune != null) OnRuneRecognized?.Invoke(e.rune);
+                    // 궤적은 화면 비율 좌표라 16:9 화면에서 가로로 찌그러져 있다 — 그린 모양 그대로 인식하도록 가로세로를 맞춘다
+                    float aspect = e.aspect > 0f ? e.aspect : 1f;
                     var points = new Vector2[e.points?.Length ?? 0];
-                    for (int i = 0; i < points.Length; i++) points[i] = new Vector2(e.points[i].x, e.points[i].y);
+                    for (int i = 0; i < points.Length; i++) points[i] = new Vector2(e.points[i].x * aspect, e.points[i].y);
                     OnPinchEnded?.Invoke(points);
                     break;
                 case "pinch_cancel":
@@ -458,6 +474,7 @@ namespace SpellboundVR.Input
             public bool tooShort;
             public string spell;
             public PointDto[] points;
+            public float aspect;
             public RuneResult rune;
             public string reason;
         }

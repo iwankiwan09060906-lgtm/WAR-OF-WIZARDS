@@ -22,7 +22,8 @@ namespace SpellboundVR.Spells.Executor
             switch (_def.Behavior)
             {
                 case SpellBehaviorType.FreezeAll:
-                    FreezeAll.Apply(_def, _world, casterTeam, focus);
+                    if (_def.FromOffMap) FreezeComets.Launch(_def, _world, casterTeam, focus);
+                    else FreezeAll.Apply(_def, _world, casterTeam, focus);
                     break;
             }
         }

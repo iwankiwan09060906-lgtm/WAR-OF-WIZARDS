@@ -76,5 +76,7 @@ namespace SpellboundVR.Network
         public void RequestMove(in MoveRequest request) => _sim.SubmitMove(_localTeam, request);
 
         public void ReportActivity() => _sim.ReportActivity(_localTeam);
+
+        public void ReportCastPreview(in CastPreview preview) => _sim.SetCastPreview(_localTeam, preview);
     }
 }
