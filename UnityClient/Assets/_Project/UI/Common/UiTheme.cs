@@ -298,6 +298,92 @@ namespace SpellboundVR.UI
         public static Sprite SkillCircle(string code) => LoadArt("SkillArt/circle/" + code);
         public static Sprite SkillRune(string code) => LoadArt("SkillArt/rune/" + code);
 
+        private static readonly Dictionary<int, Vector2[]> s_guideStarts = new Dictionary<int, Vector2[]>();
+
+        /// <summary>
+        /// 룬 그리는 방법 그림 (RuneDesigns 의 획) — 획마다 시작은 초록 점, 진행할수록 흐린 청록 → 흰색, 끝에 화살표.
+        /// starts = 획 시작점 (0~1, 번호 표시용). 밉맵을 만들어 VR 에서 작게 보여도 반짝이지 않게 한다. 디자인이 없으면 null
+        /// </summary>
+        public static Sprite RuneGuide(int spellId, out Vector2[] starts)
+        {
+            string key = "guide" + spellId;
+            starts = null;
+            if (s_sprites.TryGetValue(key, out var cached))
+            {
+                s_guideStarts.TryGetValue(spellId, out starts);
+                return cached;
+            }
+            if (!Gesture.RuneDesigns.TryGet(spellId, out var design)) return null;
+
+            const int size = 128;
+            const float margin = 0.2f;
+            var px = new Color32[size * size];
+            Vector2 ToPx(Vector2 p) => new Vector2(margin + p.x * (1f - 2f * margin), margin + p.y * (1f - 2f * margin)) * size;
+
+            // 원판 안을 칠하는 둥근 붓 (가장 진한 값만 남긴다)
+            void Stamp(Vector2 c, float r, Color col)
+            {
+                int x0 = Mathf.Max(0, (int)(c.x - r - 1)), x1 = Mathf.Min(size - 1, (int)(c.x + r + 1));
+                int y0 = Mathf.Max(0, (int)(c.y - r - 1)), y1 = Mathf.Min(size - 1, (int)(c.y + r + 1));
+                for (int y = y0; y <= y1; y++)
+                    for (int x = x0; x <= x1; x++)
+                    {
+                        float a = Mathf.Clamp01(r - Vector2.Distance(new Vector2(x + 0.5f, y + 0.5f), c) + 0.5f) * col.a;
+                        int i = y * size + x;
+                        if (a * 255f <= px[i].a) continue;
+                        px[i] = new Color(col.r, col.g, col.b, a);
+                    }
+            }
+            void Line(Vector2 a, Vector2 b, float r, Color ca, Color cb)
+            {
+                int steps = Mathf.Max(1, Mathf.CeilToInt(Vector2.Distance(a, b) * 2f));
+                for (int s = 0; s <= steps; s++) Stamp(Vector2.Lerp(a, b, s / (float)steps), r, Color.Lerp(ca, cb, s / (float)steps));
+            }
+
+            Color dim = Alpha(CyanLight, 0.55f), bright = Color.white, startCol = Hex(0x4ade80);
+            var startList = new Vector2[design.Strokes.Length];
+            for (int k = 0; k < design.Strokes.Length; k++)
+            {
+                var stroke = design.Strokes[k];
+                if (stroke == null || stroke.Length < 2) continue;
+                for (int i = 1; i < stroke.Length; i++)
+                {
+                    float t0 = (i - 1) / (float)(stroke.Length - 1), t1 = i / (float)(stroke.Length - 1);
+                    Line(ToPx(stroke[i - 1]), ToPx(stroke[i]), 3.2f, Color.Lerp(dim, bright, t0), Color.Lerp(dim, bright, t1));
+                }
+                // 끝 화살표: 마지막 점에서 몇 px 뒤 방향 기준 ±30°
+                Vector2 tip = ToPx(stroke[stroke.Length - 1]);
+                Vector2 back = tip;
+                for (int i = stroke.Length - 2; i >= 0 && Vector2.Distance(back, tip) < 6f; i--) back = ToPx(stroke[i]);
+                Vector2 dir = (tip - back).sqrMagnitude > 1e-4f ? (tip - back).normalized : Vector2.right;
+                for (int side = -1; side <= 1; side += 2)
+                {
+                    Vector2 wing = (Vector2)(Quaternion.Euler(0f, 0f, 150f * side) * dir);
+                    Line(tip, tip + wing * 13f, 3f, bright, bright);
+                }
+                startList[k] = ToPx(stroke[0]) / size;
+            }
+            // 시작 점은 선 위에 (나중에 그려서 덮는다)
+            for (int k = 0; k < startList.Length; k++)
+            {
+                Vector2 c = startList[k] * size;
+                for (int i = 0; i < px.Length; i++)
+                {
+                    float d = Vector2.Distance(new Vector2(i % size + 0.5f, i / size + 0.5f), c);
+                    if (d < 10.5f) px[i] = Color32.Lerp(px[i], startCol, Mathf.Clamp01(10.5f - d));
+                }
+            }
+
+            var tex = new Texture2D(size, size, TextureFormat.RGBA32, true) { wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Trilinear, name = key };
+            tex.SetPixels32(px);
+            tex.Apply(true, true);
+            var sprite = Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), 100f);
+            s_sprites[key] = sprite;
+            s_guideStarts[spellId] = startList;
+            starts = startList;
+            return sprite;
+        }
+
         private static Sprite LoadArt(string path)
         {
             if (s_sprites.TryGetValue(path, out var cached)) return cached;

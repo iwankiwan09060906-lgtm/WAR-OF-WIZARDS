@@ -11,7 +11,7 @@
 //     경기가 끝나거나 경기 메뉴에서 "결과 보기"를 고르면 C13. 기권은 관전 없이 바로 C13.
 //   · 다시 로비 · 다시 대전은 씬을 다시 불러와 전투 상태를 깨끗이 지운다 (로그인 · 덱 · 설정은 MetaState에 남는다).
 //   · 경기 종류별 접속: 봇 연습 · 스킬 테스트 = 항상 이 기기 안에서 (PC 서버 불필요),
-//     랭킹전 · 친선전 = FusionClient 빌드면 PC 게임 서버, 아니면 이 기기의 봇. PC 서버에 25초 안에 붙지 못하면 로비로 돌아간다.
+//     랭킹전 · 친선전 = 어느 빌드든(에디터 · PC · Quest) PC 게임 서버. PC 서버에 25초 안에 붙지 못하면 로비로 돌아간다.
 //   · 경기 중 메뉴: 왼손 메뉴 제스처(손바닥을 보며 엄지 · 검지 집기) · 컨트롤러 ☰ 버튼 · Esc → 계속 / 기권 (BattleMenuScreen)
 
 using SpellboundVR.Backend;
@@ -168,7 +168,11 @@ namespace SpellboundVR.UI
             var ctx = MetaState.Match ?? new MatchContext { Mode = MatchResultService.ModeBot, OpponentName = "Bot", OpponentBot = true };
             bool skillTest = string.IsNullOrEmpty(ctx.Mode);
             bool pvpMode = ctx.Mode == MatchResultService.ModeRanked || ctx.Mode == MatchResultService.ModeFriendly;
-            _online = pvpMode && _boot.ResolvedMode == BootMode.FusionClient;
+            // 서버가 잡아 준 경기는 빌드 모드와 상관없이 PC 게임 서버로 — 상대(Quest 등)가 서버에서 기다린다.
+            // 백엔드가 꺼져 대신 잡힌 오프라인 봇 매칭 · 오프라인 방은 CurrentMode 가 비어 있어 이 기기의 봇전.
+            var backend = BackendSessionService.Existing;
+            bool serverMatch = backend != null && !string.IsNullOrEmpty(backend.CurrentMode);
+            _online = pvpMode && serverMatch && _boot.ResolvedMode != BootMode.DedicatedServer;
             if (!pvpMode) BackendSessionService.Existing?.ClearMatch(); // 앞 경기의 매칭 정보가 봇전 기록에 섞이지 않게
 
             _reporter = FindAnyObjectByType<MatchResultReporter>();

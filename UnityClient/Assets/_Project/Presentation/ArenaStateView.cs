@@ -13,6 +13,7 @@
 
 using System.Collections.Generic;
 using SpellboundVR.Arena;
+using SpellboundVR.Audio;
 using SpellboundVR.Combat;
 using SpellboundVR.Contracts;
 using SpellboundVR.Core;
@@ -682,7 +683,11 @@ namespace SpellboundVR.Presentation
                     };
                     _units.Add(u.Id, view);
                     isNew = true;
-                    if (IsSummonKind(kind)) PlayUnitFx("VFX_Unit_Spawn", _arena.ToWorld(u.U, u.V, 0.05f), Quaternion.identity, 2f);
+                    if (IsSummonKind(kind))
+                    {
+                        PlayUnitFx("VFX_Unit_Spawn", _arena.ToWorld(u.U, u.V, 0.05f), Quaternion.identity, 2f);
+                        PlaySpawnSound(kind, (Team)team, target);
+                    }
                 }
                 view.SeenFrame = _frame;
 
@@ -774,10 +779,46 @@ namespace SpellboundVR.Presentation
             if (_vfx != null) _vfx.PlayNamed(prefabName, position, rotation, lifetime);
         }
 
+        /// <summary>소환 · 설치 소리 (스킬 소리 — 상대 것은 작게). 해골은 소환탑 공격 소리로 대신한다</summary>
+        private void PlaySpawnSound(MinionKind kind, Team team, Vector3 at)
+        {
+            float v = team == LocalTeam ? SoundVolume.MySkill : SoundVolume.EnemySkill;
+            switch (kind)
+            {
+                case MinionKind.AxeOrc:
+                    if (SoundManager.Play("SFX_S11OrcSpawn", v, at, 0.3f)) SoundManager.PlayLater(0.5f, "SFX_S11OrcRoar", v * 0.8f, at);
+                    break;
+                case MinionKind.Dragon:
+                    SoundManager.StartKeyed("dragon" + (int)team, "SFX_S12DragonWingLoop", v * 0.7f, at, 3f);
+                    break;
+                case MinionKind.Turret:
+                    SoundManager.Play("SFX_S13TurretDeploy", v, at, 0.3f);
+                    break;
+                case MinionKind.SummonHut:
+                    SoundManager.Play("SFX_H06SpawnTowerDeploy", v, at, 0.3f);
+                    break;
+            }
+        }
+
+        /// <summary>유닛 공격 소리 — 전장 유닛이라 아주 작게 (같은 소리는 0.3초에 한 번)</summary>
+        private static string AttackSound(MinionKind kind)
+        {
+            switch (kind)
+            {
+                case MinionKind.AxeOrc: return "SFX_S11OrcAxeAttack";
+                case MinionKind.Dragon: return "SFX_S12DragonFireBreath";
+                case MinionKind.Turret: return "SFX_S13TurretArrowFire";
+                case MinionKind.SummonHut: return "SFX_H06SkeletonBoneRattle";
+                default: return null;
+            }
+        }
+
         /// <summary>유닛 공격 연출 (서버가 공격 횟수를 올렸을 때)</summary>
         private void PlayAttackFx(UnitView view, int targetId)
         {
             Transform t = view.Go.transform;
+            string sound = AttackSound(view.Kind);
+            if (sound != null) SoundManager.Play(sound, SoundVolume.Unit, t.position, 0.3f);
             float k = ModelScale(view.Kind);
             bool hasTarget = TryGetTargetPosition(targetId, out Vector3 targetPos);
             switch (view.Kind)
@@ -898,7 +939,12 @@ namespace SpellboundVR.Presentation
                 if (alive != view.WasAlive)
                 {
                     view.WasAlive = alive;
-                    if (!alive) PlayStructureDestroyFx(view);
+                    if (!alive)
+                    {
+                        PlayStructureDestroyFx(view);
+                        if (st.IsNexus != 0) SoundManager.Play("SFX_NexusDestroyRubble", SoundVolume.Flow, view.Root.position, 0.5f);
+                        else SoundManager.Play("SFX_TowerDestroy", SoundVolume.Flow * 0.7f, view.Root.position, 0.3f);
+                    }
                     view.Root.gameObject.SetActive(alive);
                     SetActive(view.Rubble, !alive);
                     if (view.HpFill != null) view.HpFill.parent.gameObject.SetActive(alive);
@@ -946,6 +992,7 @@ namespace SpellboundVR.Presentation
             Vector3 from = tower.Root.position + Vector3.up * tower.MuzzleHeight;
             Vector3 to = target.Go.transform.position + Vector3.up * 0.6f;
             FireShot(_shotPools[tower.Team == LocalTeam ? 0 : 1], from, to, targetId, 0f, towerShotSpeed);
+            SoundManager.Play("SFX_TowerAttack", SoundVolume.Unit, from, 0.3f);
         }
 
         private void FireShot(ObjectPool pool, Vector3 from, Vector3 to, int targetId, float arc, float speed)

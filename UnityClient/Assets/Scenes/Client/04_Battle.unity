@@ -1058,6 +1058,7 @@ MonoBehaviour:
   playerPrefab: {fileID: 846135977548872242, guid: 62f0b77128f0cab4288653ef5292f698, type: 3}
   inputMode: 0
   desktopViewPitch: 28
+  webcamRuneFinishSeconds: 1.2
   serverArenaMode: 1
   localTeam: 0
   localAfkEnabled: 1
@@ -8720,7 +8721,7 @@ MonoBehaviour:
   commanderPlatformHeight: 0.52243906
   ffaNexusDepth: 4
   ffaTowerDepth: 9
-  ffaViewLift: 3.5
+  ffaViewLift: 2
   ffaModelScale: 0.65
   homeTowerVisual: {fileID: 572280587}
   homeNexusVisual: {fileID: 269228009}

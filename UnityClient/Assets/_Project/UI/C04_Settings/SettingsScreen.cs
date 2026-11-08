@@ -52,7 +52,7 @@ namespace SpellboundVR.UI
                 R("인식 민감도", null, 0, 100, "%", s => s.gestureSensitivity, (s, v) => s.gestureSensitivity = v),
                 R("유지 시간 (손 모양)", "룬 그리기를 끄면 손 모양을 이 프레임 수만큼 유지해 스킬을 고릅니다 (30프레임 = 약 1초)", 5, 45, "", s => s.holdFrames, (s, v) => s.holdFrames = v),
                 S("햅틱 피드백", "시전 · 피격 때 컨트롤러 진동", s => s.haptics, (s, v) => s.haptics = v),
-                S("웹캠 손 입력 (MediaPipe)", "헤드셋 없는 PC 에서 웹캠으로 손동작을 인식해 플레이합니다. 끄면 마우스 · 키보드로 플레이합니다.", s => s.webcamInput, (s, v) => s.webcamInput = v),
+                S("PC 게임 방식: 웹캠 손동작 (MediaPipe)", "끄면(기본) 마우스로 룬을 그립니다. 켜면 헤드셋 없는 PC 에서 웹캠으로 손동작을 인식합니다. 다음 경기부터 적용.", s => s.webcamInput, (s, v) => s.webcamInput = v),
                 S("웹캠으로 룬 그리기", "엄지 · 검지를 붙인 채 허공에 룬을 그립니다. 끄면 손 모양으로 스킬을 고릅니다.", s => s.webcamDrawRunes, (s, v) => s.webcamDrawRunes = v),
             }),
             ("접근성", "Accessibility", UiTheme.Purple, new[]

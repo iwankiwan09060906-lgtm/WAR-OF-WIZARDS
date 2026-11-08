@@ -3,7 +3,7 @@
 //     · 위: 나(보라) / 상대(빨강) HP 카드 + 에너지 막대 (EnergyBar), 가운데 TIME · STAGE · 강화까지 판 (Wave/Time/Kills 자리)
 //     · 둘째 줄: 방어 계층 — 타워 · 넥서스 알약(살아 있음 청록 / 파괴 빨강, TargetingScreen의 상태 색), 받는 피해 · 회복 · 공격 배율
 //     · 셋째 줄: 다음 웨이브(+Brute) · 내 위치 L / C / R 칸 · 상태 효과
-//     · 8슬롯 (2 × 4, 키보드 1~8 순서): 발동 마법진 그림 + 원형 쿨타임 가림(SkillHUD) + 번호 배지 + 이름 · 상태,
+//     · 8슬롯 (2 × 4, 키보드 1~8 순서): 룬 그리는 방법 그림(시작 점 · 획 번호 · 화살표) + 원형 쿨타임 가림(SkillHUD) + 번호 배지 + 이름 · 상태,
 //       고위력은 호박색 테두리 + 남은 횟수 (프로토타입 궁극기 게이지 자리)
 //     · 시전 거절 사유 · AFK 경고 · 돌파 알림 · 가운데 큰 글자(카운트다운 · FIGHT · 결과)
 //   프로토타입의 마나 · 킬 수 · 궁극기 충전은 이 게임 규칙에 없어서 옮기지 않았다.
@@ -156,7 +156,8 @@ namespace SpellboundVR.UI
             var canvas = root.AddComponent<Canvas>();
             canvas.renderMode = RenderMode.WorldSpace;
             var scaler = root.AddComponent<CanvasScaler>();
-            scaler.dynamicPixelsPerUnit = 4f;
+            // 글자 래스터 배율 — 4 처럼 크면 밉맵 없는 글자 텍스처가 2~3배 축소돼 Quest 에서 반짝거린다 (1캔버스px ≈ 0.8화면px)
+            scaler.dynamicPixelsPerUnit = 1.5f;
             var rt = (RectTransform)root.transform;
             rt.sizeDelta = new Vector2(CanvasWidth, CanvasHeight);
 
@@ -339,9 +340,9 @@ namespace SpellboundVR.UI
             var card = Sliced(rt, "Slot" + (i + 1), pos, size, null);
             var crt = card.rectTransform;
 
-            // 발동 마법진 (원 안으로 잘림) + 원형 쿨타임 가림
+            // 룬 그리는 방법 (시작 점 · 획 번호 · 방향 화살표) + 원형 쿨타임 가림
             float icon = size.y - 22f;
-            var art = string.IsNullOrEmpty(code) ? null : UiKit.SkillIcon(crt, code, icon);
+            var art = string.IsNullOrEmpty(code) ? null : UiKit.RuneGuide(crt, spellId, code, icon);
             Image mask = null;
             Text sec = null;
             if (art != null)

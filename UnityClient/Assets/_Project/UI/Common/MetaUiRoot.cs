@@ -289,6 +289,31 @@ namespace SpellboundVR.UI
             }
             next.Open(_body);
             OnNavigated?.Invoke(id);
+            PlayScreenMusic(id);
+        }
+
+        /// <summary>화면별 배경음 (전투 · 카운트다운 · 경기 메뉴는 BattleAudio 가 정한다)</summary>
+        private static void PlayScreenMusic(MetaScreenId id)
+        {
+            switch (id)
+            {
+                case MetaScreenId.Countdown:
+                case MetaScreenId.BattleMenu:
+                    break;
+                case MetaScreenId.Spellbook:
+                    Audio.SoundManager.Music("BGM_SpellbookDeck");
+                    break;
+                case MetaScreenId.Queue:
+                    Audio.SoundManager.Music("BGM_MatchQueue");
+                    break;
+                case MetaScreenId.Result:
+                    var r = MetaState.LastMatch != null ? MetaState.LastMatch.Result : Contracts.MatchResult.Draw;
+                    Audio.SoundManager.Music(r == Contracts.MatchResult.Win ? "BGM_ResultVictory" : r == Contracts.MatchResult.Lose ? "BGM_ResultDefeat" : "BGM_ResultDraw");
+                    break;
+                default:
+                    Audio.SoundManager.Music("BGM_LobbyMystic");
+                    break;
+            }
         }
 
         public T Screen<T>(MetaScreenId id) where T : MetaScreen => _screens.TryGetValue(id, out var s) ? s as T : null;
@@ -405,6 +430,7 @@ namespace SpellboundVR.UI
                 Debug.Log("[MetaUI] " + message);
                 return;
             }
+            if (tone == Tone.Enemy) Audio.SoundManager.PlayUi("SFX_UIError");
             Color c = tone == Tone.Enemy ? UiTheme.Enemy : tone == Tone.Play ? UiTheme.PlayHi : tone == Tone.Cyan ? UiTheme.Cyan : UiTheme.Line2;
             var b = UiKit.Button(ui._toasts, message, BtnStyle.Default, null, -1, 64, UiTheme.FontSmall);
             b.GetComponent<Image>().sprite = UiTheme.Cut(UiTheme.Panel2, c, 10, 3);

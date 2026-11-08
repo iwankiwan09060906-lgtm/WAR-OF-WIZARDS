@@ -174,7 +174,7 @@ namespace SpellboundVR.Core
         public void BeginBattle(int[] deck) => BeginBattle(deck, _resolvedMode == BootMode.FusionClient, recognizeAllRunes);
 
         /// <summary>
-        /// online: PC 서버(Fusion) 경기 (FusionClient 빌드의 랭킹전 · 친선전) / false: 이 기기 안에서 봇과 (봇 연습 · 스킬 테스트).
+        /// online: PC 서버(Fusion) 경기 (서버가 잡아 준 랭킹전 · 친선전 — 빌드 모드 무관) / false: 이 기기 안에서 봇과 (봇 연습 · 스킬 테스트).
         /// allowAllRunes: 덱 밖 룬 19종도 시전 (스킬 테스트 전용 — 로컬 경기에서만 동작).
         /// </summary>
         public void BeginBattle(int[] deck, bool online, bool allowAllRunes, ArenaMode mode = ArenaMode.Duel)
@@ -457,6 +457,7 @@ namespace SpellboundVR.Core
             hud.localPosition += head.parent != null ? head.localPosition : Vector3.zero; // 시작 시 머리 높이 기준
             hud.Initialize(_session, head.parent != null ? head.parent : playerRig);
             gameObject.AddComponent<BattleCoach>().Initialize(_session, hud);
+            gameObject.AddComponent<SpellboundVR.Audio.BattleAudio>().Initialize(_session, input, cast, platform, head);
             if (input is MediaPipeHandInput tracker)
             {
                 var settings = SpellboundVR.UI.MetaState.Settings;
@@ -513,7 +514,7 @@ namespace SpellboundVR.Core
 
             var inputGo = new GameObject("[Input]");
             inputGo.transform.SetParent(transform, false);
-            // 헤드셋 없는 PC 의 기본 입력: 웹캠 + MediaPipe 손 추적기 (환경설정 "웹캠 손 입력"을 끄면 마우스 · 키보드)
+            // 헤드셋 없는 PC: 환경설정 "PC 게임 방식"을 켜면 웹캠 + MediaPipe 손 추적기, 끄면(기본) 마우스 · 키보드
             bool webcam = inputMode == InputMode.MediaPipe || (inputMode != InputMode.Keyboard && SpellboundVR.UI.MetaState.Settings.webcamInput);
             if (!useHands && webcam && !Application.isBatchMode && WebcamTracker.Available)
             {
@@ -546,6 +547,7 @@ namespace SpellboundVR.Core
         {
             Application.targetFrameRate = 60;
             Application.runInBackground = true;
+            SpellboundVR.Audio.SoundManager.Enabled = false; // 서버 창은 소리를 내지 않는다
 
             SetArenaMode(serverArenaMode);
             _serverSim = CreateSimulation(localMode: false);

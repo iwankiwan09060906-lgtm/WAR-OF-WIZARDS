@@ -136,6 +136,7 @@ namespace SpellboundVR.UI
             _found = s;
             _foundAt = Time.unscaledTime;
             _foundSent = false;
+            Audio.SoundManager.Play("SFX_UIMatchFound", Audio.SoundVolume.Flow, null, 2f);
             if (_title != null) _title.text = s.bot ? "봇 매칭 완료" : "매칭 완료!";
             if (_sub != null)
             {

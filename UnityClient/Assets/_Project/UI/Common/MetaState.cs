@@ -70,8 +70,8 @@ namespace SpellboundVR.UI
         public int pointerSize = 40;
         /// <summary>손에서 나오는 레이 선도 보일지 (기본 꺼짐 — 점만)</summary>
         public bool showRayLine;
-        /// <summary>헤드셋 없는 PC 에서 웹캠 손 추적(MediaPipe)으로 플레이 (끄면 마우스 · 키보드)</summary>
-        public bool webcamInput = true;
+        /// <summary>PC 게임 방식 — true = 웹캠 손 추적(MediaPipe), false = 마우스로 룬 그리기 (기본)</summary>
+        public bool webcamInput;
         /// <summary>웹캠 입력을 허공에 룬 그리기로 (끄면 손 모양으로 스킬 고르기)</summary>
         public bool webcamDrawRunes = true;
         /// <summary>왼손잡이 모드 — 왼손으로 스킬, 오른손으로 이동 (웹캠 · 헤드셋 손 추적)</summary>
@@ -88,8 +88,9 @@ namespace SpellboundVR.UI
     public static class MetaState
     {
         private const string SettingsKey = "wow.settings.v1";
-        /// <summary>2: 웹캠 기본 입력을 룬 그리기로 (손 모양이 기본이던 때의 false 는 고른 값이 아니다)</summary>
-        private const int SettingsVersion = 2;
+        /// <summary>2: 웹캠 기본 입력을 룬 그리기로 (손 모양이 기본이던 때의 false 는 고른 값이 아니다)
+        /// 3: PC 게임 방식 기본을 마우스 그리기로 (웹캠이 기본이던 때의 true 는 고른 값이 아니다)</summary>
+        private const int SettingsVersion = 3;
 
         public static AuthResponseDto User => AuthService.CurrentUser;
         public static PlayerDto Profile;
@@ -240,7 +241,8 @@ namespace SpellboundVR.UI
                 if (!string.IsNullOrEmpty(json))
                 {
                     try { JsonUtility.FromJsonOverwrite(json, s_settings); } catch (Exception) { /* 손상된 값은 기본값 */ }
-                    if (s_settings.version < SettingsVersion) s_settings.webcamDrawRunes = true;
+                    if (s_settings.version < 2) s_settings.webcamDrawRunes = true;
+                    if (s_settings.version < 3) s_settings.webcamInput = false;
                 }
                 return s_settings;
             }
@@ -261,10 +263,10 @@ namespace SpellboundVR.UI
             SaveSettings();
         }
 
-        /// <summary>게임에 바로 반영되는 항목: 효과음 크기, 멀미 방지 비네팅</summary>
+        /// <summary>게임에 바로 반영되는 항목: 멀미 방지 비네팅 (효과음 · 배경음 크기는 SoundManager 가 재생할 때 읽는다)</summary>
         public static void ApplySettings()
         {
-            AudioListener.volume = Mathf.Clamp01(Settings.sfx / 100f);
+            AudioListener.volume = 1f;
             var vignette = UnityEngine.Object.FindAnyObjectByType<Presentation.SnapVignette>();
             if (vignette != null) vignette.enabled = Settings.comfortVignette;
         }

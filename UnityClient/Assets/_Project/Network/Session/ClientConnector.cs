@@ -161,6 +161,7 @@ namespace SpellboundVR.Network
         {
             Status = "Disconnected: " + reason;
             Debug.LogWarning("[ClientConnector] " + Status);
+            Audio.SoundManager.Play("SFX_NetworkDisconnected", Audio.SoundVolume.Flow, null, 3f);
             _session?.Events.RaiseLocalRejection("Disconnected from server");
         }
 

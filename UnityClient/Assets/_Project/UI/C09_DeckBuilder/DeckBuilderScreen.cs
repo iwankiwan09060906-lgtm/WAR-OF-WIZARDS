@@ -238,6 +238,7 @@ namespace SpellboundVR.UI
 
         private void Toggle(string code)
         {
+            Audio.SoundManager.PlayUi("SFX_UIRuneSelect"); // 클릭음 대신 (같은 UI 채널), 덱이 가득 차면 아래 오류음이 덮는다
             _focus = code;
             int i = _draft.IndexOf(code);
             if (i >= 0) _draft.RemoveAt(i);

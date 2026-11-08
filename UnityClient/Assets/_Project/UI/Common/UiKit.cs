@@ -282,7 +282,11 @@ namespace SpellboundVR.UI
             cb.disabledColor = new Color(0.55f, 0.55f, 0.55f, 0.55f);
             cb.fadeDuration = 0.06f;
             b.colors = cb;
-            if (onClick != null) b.onClick.AddListener(onClick);
+            if (onClick != null)
+            {
+                b.onClick.AddListener(() => Audio.SoundManager.PlayUi("SFX_UIClick"));
+                b.onClick.AddListener(onClick);
+            }
             var l = Label(rt, label, fontSize, text, true, TextAnchor.MiddleCenter);
             Stretch((RectTransform)l.transform, 18, 0, 18, 0);
             l.horizontalOverflow = HorizontalWrapMode.Overflow;
@@ -593,6 +597,38 @@ namespace SpellboundVR.UI
             bool high = MetaSkills.IsHigh(code);
             var ring = Panel(rt, high ? UiTheme.Amber : UiTheme.Line2, null, "Ring");
             ring.sprite = UiTheme.Ring(128, high ? 0.07f : 0.04f);
+            Stretch((RectTransform)ring.transform);
+            return rt;
+        }
+
+        /// <summary>룬 그리는 방법 (둥근 슬롯) — 초록 점에서 시작해 화살표 쪽으로, 여러 획이면 점 위 번호 순서. 디자인이 없으면 발동 마법진</summary>
+        public static RectTransform RuneGuide(Transform parent, int spellId, string code, float size)
+        {
+            var sprite = UiTheme.RuneGuide(spellId, out var starts);
+            if (sprite == null) return SkillIcon(parent, code, size);
+            var rt = Node(parent, "Guide_" + code);
+            Size(rt, size, size);
+            var bg = rt.gameObject.AddComponent<Image>();
+            bg.sprite = UiTheme.Circle();
+            bg.color = UiTheme.Bg1;
+            bg.raycastTarget = false;
+            var art = Panel(rt, Color.white, sprite, "Art");
+            art.raycastTarget = false;
+            Stretch((RectTransform)art.transform);
+            if (starts != null && starts.Length > 1)
+                for (int i = 0; i < starts.Length; i++)
+                {
+                    var n = Label(rt, (i + 1).ToString(), Mathf.Max(10, (int)(size * 0.13f)), Color.black, true, TextAnchor.MiddleCenter);
+                    var nrt = n.rectTransform;
+                    nrt.anchorMin = nrt.anchorMax = nrt.pivot = new Vector2(0.5f, 0.5f);
+                    nrt.anchoredPosition = (starts[i] - new Vector2(0.5f, 0.5f)) * size;
+                    nrt.sizeDelta = new Vector2(size * 0.2f, size * 0.2f);
+                    n.raycastTarget = false;
+                }
+            bool high = MetaSkills.IsHigh(code);
+            var ring = Panel(rt, high ? UiTheme.Amber : UiTheme.Line2, null, "Ring");
+            ring.sprite = UiTheme.Ring(128, high ? 0.07f : 0.04f);
+            ring.raycastTarget = false;
             Stretch((RectTransform)ring.transform);
             return rt;
         }
