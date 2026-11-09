@@ -25,8 +25,8 @@ namespace SpellboundVR.Spells.Executor
         Team GetLaneTarget(Team caster, int lane);
 
         /// <summary>
-        /// 시전 순간 그 레인 공격이 노리는 상대 발판의 칸(월드 열) — 1:1 은 조준한 열,
-        /// 4인 개인전은 열이 상대를 고르므로 상대가 지금 선 칸. 도착 때 그 칸을 벗어나면 피한다.
+        /// 그 레인 공격이 노리는 상대 발판의 칸(월드 열) — 1:1 은 조준한 열,
+        /// 4인 개인전은 상대 발판 중 그 레인과 이어진 칸. 도착 때 그 칸에 없으면 피한다.
         /// </summary>
         int GetAimColumn(Team caster, int lane);
 
@@ -115,6 +115,10 @@ namespace SpellboundVR.Spells.Executor
         /// <summary>그 팀의 해당 종류 유닛 하나 (없으면 0) — 설치물 진영당 1기 규칙용</summary>
         int FindTeamUnit(Team team, MinionKind kind);
 
+        /// <summary>그 팀의 해당 종류 유닛 수와 가장 오래된 것의 Id (설치물 최대 수 · 교체용)</summary>
+        int CountTeamUnits(Team team, MinionKind kind, out int oldestId);
+        /// <summary>H04 반사 결계 — 맞은 스킬을 caster 가 target 쪽으로 그대로 다시 쓴다 (쿨타임 · 횟수 소모 없음)</summary>
+        void ReflectCast(Team caster, int spellId, Team target);
         /// <summary>유닛 즉시 제거 (설치물 교체)</summary>
         void RemoveUnit(int unitId);
 

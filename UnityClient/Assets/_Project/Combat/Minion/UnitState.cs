@@ -16,6 +16,12 @@ namespace SpellboundVR.Combat
         public MinionDefinition Def;
         public TargetKind TargetKindSelf;
         public int Lane;
+        /// <summary>
+        /// 4인 개인전 우회: 레인 끝 상대가 탈락해 다른 레인으로 갈아탄 유닛이 땅 위로 돌아가는 단계.
+        /// 0 이상 = 그 (예전) 레인을 따라 내 발판까지 돌아가는 중, Detouring = 새 레인의 내 발판으로 가는 중, -1 = 없음
+        /// </summary>
+        public int ReturnLane = -1;
+        public const int Detouring = -2;
         public Vector2 Position;
         public float Hp;
         public float MaxHp;
@@ -57,6 +63,7 @@ namespace SpellboundVR.Combat
             Kind = def.Kind;
             TargetKindSelf = def.TargetKindSelf;
             Lane = lane;
+            ReturnLane = -1;
             Position = position;
             MaxHp = def.MaxHp * Mathf.Max(0.1f, hpMultiplier);
             Hp = MaxHp;

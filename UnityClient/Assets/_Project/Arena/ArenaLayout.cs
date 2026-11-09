@@ -16,7 +16,8 @@ namespace SpellboundVR.Arena
         public Transform homeBaseAnchor;
 
         [Header("치수 (m)")]
-        public float columnSpacing = 5f;
+        [Tooltip("1:1 열(레인) 간격 = 레인 폭. 씬 아트가 다른 간격으로 만들어져 있으면 DuelArenaView 가 실행 중에 맞춘다")]
+        public float columnSpacing = 7f;
         public float fieldLength = 41f;
         public float nexusDepth = 5f;
         public float towerDepth = 13f;
@@ -25,13 +26,17 @@ namespace SpellboundVR.Arena
         [Tooltip("Commander 발판 윗면 높이 (표시 전용 — 상대 아바타 · 쉴드 링을 이 높이에 올린다)")]
         public float commanderPlatformHeight = 0f;
 
-        [Header("4인 개인전 (발판 4개가 마름모로 놓이는 전장 — 대각선 = fieldLength)")]
+        [Header("4인 개인전 (발판 4개가 마름모로 놓이는 전장 — 대각선 = ffaFieldLength)")]
+        [Tooltip("마주 보는 두 발판 사이 거리 (m)")]
+        public float ffaFieldLength = 56f;
+        [Tooltip("개인전 레인 폭 (m)")]
+        public float ffaColumnSpacing = 5f;
         [Tooltip("넥서스 깊이 — 옆 레인에서도 닿도록 1:1 보다 발판 가까이")]
         public float ffaNexusDepth = 4f;
         [Tooltip("타워 깊이")]
         public float ffaTowerDepth = 9f;
-        [Tooltip("시야를 1:1 보다 이만큼 높인다 (m) — 세 레인이 한눈에 들어오게")]
-        public float ffaViewLift = 2f;
+        [Tooltip("개인전 눈높이 (m, 지면 기준) — 타워(4.8m × ffaModelScale ≈ 3.1m)보다 약간 위")]
+        public float ffaEyeHeight = 4.2f;
         [Tooltip("타워 · 넥서스 · 상대 아바타 크기 배율 (표시 전용, 판정과 무관). 1:1 보다 가까이 있어 그대로 두면 커 보인다")]
         public float ffaModelScale = 0.65f;
 
@@ -64,7 +69,7 @@ namespace SpellboundVR.Arena
 
             if (_mode == ArenaMode.Ffa4)
             {
-                _geometry = new ArenaGeometry(basePos, forward, fieldLength, columnSpacing, ffaNexusDepth, ffaTowerDepth, spawnDepth, ArenaMode.Ffa4);
+                _geometry = new ArenaGeometry(basePos, forward, ffaFieldLength, ffaColumnSpacing, ffaNexusDepth, ffaTowerDepth, spawnDepth, ArenaMode.Ffa4);
                 return _geometry;
             }
 

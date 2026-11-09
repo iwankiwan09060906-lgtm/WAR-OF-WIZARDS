@@ -287,6 +287,18 @@ namespace SpellboundVR.Input
                 Debug.Log($"[CastStateMachine] 룬 인식 → {SpellIds.Code(match.SpellId)} 점수 {match.Distance:0.000} " +
                           $"2위 {SpellIds.Code(match.SecondSpellId)} {(match.SecondDistance < float.MaxValue ? match.SecondDistance.ToString("0.000") : "-")} " +
                           $"(비율 {(match.Ratio < float.MaxValue ? match.Ratio.ToString("0.00") : "-")}) → {reject} ({strokes.Length}획, 후보 {_templates.CandidateCount}종)");
+            // 웹캠 추적기가 이미 인식에 성공한 한 획 룬이면 그 결과를 믿는다 (두 인식기의 기준 차이로 "성공" 후 멈추던 문제)
+            if (reject != GestureRejectReason.None && strokes.Length == 1 && _input is MediaPipeHandInput tracker &&
+                tracker.LastRune != null && tracker.LastRune.recognized)
+            {
+                int trackerSpell = MediaPipeHandInput.SpellNumber(tracker.LastRune.spellId);
+                if (trackerSpell > 0)
+                {
+                    if (logRecognition) Debug.Log($"[CastStateMachine] 추적기 인식 결과 사용 → {tracker.LastRune.spellId}");
+                    match.SpellId = trackerSpell;
+                    reject = GestureRejectReason.None;
+                }
+            }
             if (reject != GestureRejectReason.None)
             {
                 // 애매하면 잘못 시전하지 않고 두 후보를 알려 준다 → 다시 그리기

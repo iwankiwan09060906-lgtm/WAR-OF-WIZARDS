@@ -25,7 +25,7 @@ namespace SpellboundVR.EditorTools
     public static class SpellboundArenaBuilder
     {
         private const string MaterialFolder = "Assets/_Project/Arena/Placeholder";
-        private const float Spacing = 5f;
+        private const float Spacing = 7f;
         /// <summary>전장 길이. 양 타워 사이 = 41 - 13 × 2 = 15m</summary>
         private const float FieldLength = 41f;
         private const float NexusDepth = 3f;

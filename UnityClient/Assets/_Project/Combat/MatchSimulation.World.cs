@@ -158,7 +158,7 @@ namespace SpellboundVR.Combat
 
         public Team GetLaneTarget(Team caster, int lane) => Arena.LaneTarget(caster, lane);
 
-        public int GetAimColumn(Team caster, int lane) => Arena.IsDuel ? lane : Players[(int)Arena.LaneTarget(caster, lane)].WorldColumn;
+        public int GetAimColumn(Team caster, int lane) => Arena.LaneColumn(Arena.LaneTarget(caster, lane), lane);
 
         /// <summary>그 레인의 상대가 살아 있는가 (1:1 은 항상)</summary>
         public bool IsLaneOpen(Team caster, int lane) => Arena.IsDuel || IsPlayerAlive(Arena.LaneTarget(caster, lane));
@@ -365,6 +365,47 @@ namespace SpellboundVR.Combat
                 if (u.Active && !u.Dead && u.Team == team && u.Kind == kind) return u.Id;
             }
             return 0;
+        }
+
+        public int CountTeamUnits(Team team, MinionKind kind, out int oldestId)
+        {
+            int count = 0;
+            oldestId = 0;
+            for (int i = 0; i < Units.Length; i++)
+            {
+                var u = Units[i];
+                if (!u.Active || u.Dead || u.Team != team || u.Kind != kind) continue;
+                count++;
+                if (oldestId == 0 || u.Id < oldestId) oldestId = u.Id; // Id 는 생성 순서대로 커진다
+            }
+            return count;
+        }
+
+        public void ReflectCast(Team caster, int spellId, Team target)
+        {
+            if (!IsPlayerAlive(caster) || !Catalog.TryGet(spellId, out var def) || !_executors.TryGet(spellId, out ISpellExecutor executor)) return;
+            // target 을 노리는 열: 1:1 은 target 이 선 열, 개인전은 target 으로 가는 레인
+            Column column = Column.Center;
+            for (int c = 0; c < TeamUtil.ColumnCount; c++)
+            {
+                int lane = Arena.ResolveLane(caster, (Column)c);
+                if (Arena.IsDuel ? lane == Players[(int)target].WorldColumn : Arena.LaneTarget(caster, lane) == target)
+                {
+                    column = (Column)c;
+                    break;
+                }
+            }
+            var request = new SpellCastRequest { SpellId = spellId, SlotIndex = TestCastSlot, TargetColumn = column, TargetDepth = def.MaxDepth };
+            float saved = _castFocus; // 다른 스킬이 실행되는 도중에 반사될 수 있다
+            _castFocus = 1f;
+            try
+            {
+                executor.Execute(request, caster);
+            }
+            finally
+            {
+                _castFocus = saved;
+            }
         }
 
         public void RemoveUnit(int unitId)

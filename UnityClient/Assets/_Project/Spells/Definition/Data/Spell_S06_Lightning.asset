@@ -29,7 +29,7 @@ MonoBehaviour:
   ShotCount: 3
   ShotInterval: 0.55
   ArcHeight: 0
-  TelegraphDelay: 0.45
+  TelegraphDelay: 1
   TickInterval: 0.5
   TickDamageRamp: 0
   MaxTickDamage: 0
@@ -46,5 +46,4 @@ MonoBehaviour:
   MoveSpeedMultiplier: 1
   IncomingDamageMultiplier: 1
   EffectRatio: 1
-  KnockbackDistance: 0
   SummonKind: 0

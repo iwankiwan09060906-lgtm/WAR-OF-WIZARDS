@@ -166,10 +166,6 @@ namespace SpellboundVR.Spells
         [Tooltip("H04 반사 비율 · H03 회복 비율 · S10 집중 배율")]
         public float EffectRatio = 1f;
 
-        [Header("넉백")]
-        [Tooltip("S05 — 닿은 적 유닛을 시전자 반대쪽으로 밀어내는 거리 (m)")]
-        public float KnockbackDistance = 0f;
-
         [Header("소환 · 설치")]
         public MinionKind SummonKind = MinionKind.Melee;
 
@@ -260,7 +256,7 @@ namespace SpellboundVR.Spells
             d.ArcHeight = 1.5f;
             d.StatusEffectId = "S01_Blind";
             d.EffectDuration = 5f;
-            d.SetOffMap(OffMapOrigin.Flank, 24f, 9f, 2f);   // 맵 밖에서 날아드는 연막탄 — 예전처럼 피할 시간이 있다
+            d.SetOffMap(OffMapOrigin.Flank, 24f, 9f, 2f, 5f); // 맵 밖에서 날아드는 연막탄 (예전 크기의 5배) — 예전처럼 피할 시간이 있다
             return d;
         }
 
@@ -278,7 +274,7 @@ namespace SpellboundVR.Spells
             d.TickDamageRamp = 2f;       // 머무를수록 +2
             d.MaxTickDamage = 30f;       // 틱 상한 → 5초 최대 210
             d.EffectDuration = 5f;
-            d.FieldHalfDepth = 2.5f;     // 깊이 5m × 3열 전체
+            d.FieldHalfDepth = 6f;       // 깊이 12m × 3열 전체 (독병 크기는 그대로, 장판 범위만 넓게)
             d.Radius = 2.5f;
             d.MaxDepth = 1f;
             d.SetOffMap(OffMapOrigin.Flank, 26f, 11f, 1.3f); // 맵 옆에서 독병이 날아든다
@@ -296,8 +292,7 @@ namespace SpellboundVR.Spells
             d.Radius = 2.6f;
             d.MaxDepth = 1f;
             d.ProjectileSpeed = 26f;
-            d.ArcHeight = 4f;
-            d.SetOffMap(OffMapOrigin.Behind, 34f, 22f, 1.3f, 2.5f); // 시전자 등 뒤 맵 밖에서 유성처럼
+            d.SetOffMap(OffMapOrigin.Sky, 4f, 30f, 3.5f, 12.5f); // 큰 불덩이(예전 5배)가 하늘에서 거의 수직으로 천천히 내려온다 (불길은 ArenaStateView 가 1/4로)
             return d;
         }
 
@@ -327,14 +322,12 @@ namespace SpellboundVR.Spells
             d.Executor = SpellExecutorType.Beam;
             d.Behavior = SpellBehaviorType.TornadoLane;
             d.Dodgeable = false;
-            d.BaseDamage = 35f;          // 닿을 때 1회 피해
-            d.EffectDuration = 2.5f;     // 레인을 쓸고 지나가는 시간
-            d.LaneStartDepth = 0.1f;     // OffMap 을 끄면 시전자 앞에서 출발
+            d.BaseDamage = 15f;          // 붙잡혀 밀려가는 동안 TickInterval 마다
+            d.EffectDuration = 3.5f;     // 레인을 따라 나아가는 시간
+            d.LaneStartDepth = 0.04f;    // 시전자 바로 앞에서 출발
             d.LaneEndDepth = 0.85f;      // 상대 진영 앞까지
             d.Radius = 1.6f;             // 회오리 반경 (깊이 방향 판정)
-            d.KnockbackDistance = 7f;    // 뒤로 밀어내는 거리
-            d.EffectRatio = 0.8f;        // 밀려난 뒤 정신 못 차리는 시간 (초)
-            d.SetOffMap(OffMapOrigin.Behind, 14f, 0.05f, 2.5f); // 시전자 등 뒤 맵 밖에서 레인 축을 따라 들어온다
+            d.EffectRatio = 0.8f;        // 붙잡힌 동안 · 풀려난 뒤 정신 못 차리는 시간 (초)
             return d;
         }
 
@@ -348,7 +341,7 @@ namespace SpellboundVR.Spells
             d.BaseDamage = 75f;          // 1회
             d.ShotCount = 3;
             d.ShotInterval = 0.55f;
-            d.TelegraphDelay = 0.45f;
+            d.TelegraphDelay = 1f;       // 먹구름이 사방에서 날아와 자리 잡는 시간
             d.Radius = 2f;               // 조준 링 표시
             d.FieldHalfDepth = 4.5f;     // 범위: 레인 폭 × 깊이 ±4.5m (세로로 긴 직사각형)
             d.MaxDepth = 1f;
@@ -362,10 +355,10 @@ namespace SpellboundVR.Spells
             d.Executor = SpellExecutorType.Projectile;
             d.Behavior = SpellBehaviorType.MultiShotFrontFirst;
             d.Dodgeable = true;
-            d.BaseDamage = 17f;          // 15발 × 17 = 255
+            d.BaseDamage = 4.25f;        // 60발 × 4.25 = 255 (예전 한 발을 4발로 나눔)
             d.ProjectileSpeed = 24f;
-            d.ShotCount = 15;
-            d.ShotInterval = 0.135f;     // 약 2초
+            d.ShotCount = 60;
+            d.ShotInterval = 0.034f;     // 약 2초
             d.Radius = 0.4f;
             return d;
         }
@@ -393,7 +386,7 @@ namespace SpellboundVR.Spells
             d.Behavior = SpellBehaviorType.TowerBuff;
             d.FocusCategory = SpellFocusCategory.Defense;
             d.StatusEffectId = "S09_TowerBuff";
-            d.EffectDuration = 5f;
+            d.EffectDuration = 10f;
             d.AttackMultiplier = 1.6f;
             d.IncomingDamageMultiplier = 0.5f;
             return d;
@@ -423,7 +416,7 @@ namespace SpellboundVR.Spells
             d.Behavior = SpellBehaviorType.SummonUnit;
             d.FocusCategory = SpellFocusCategory.Summon;
             d.SummonKind = MinionKind.AxeOrc;
-            d.SetOffMap(OffMapOrigin.Sky, 6f, 26f, 0.9f); // 하늘에서 떨어져 착지
+            // 전장에서 폭발과 함께 바로 솟아난다 (ArenaStateView 연출)
             return d;
         }
 
@@ -437,7 +430,7 @@ namespace SpellboundVR.Spells
             d.FocusCategory = SpellFocusCategory.Summon;
             d.SummonKind = MinionKind.Dragon;
             d.SetOffMap(OffMapOrigin.Flank, 26f, 12f, 1.5f); // 맵 옆에서 날아 들어온다
-            d.OffMapArrivalHeight = 3f;  // ArenaStateView.dragonFlightHeight
+            d.OffMapArrivalHeight = 5f;  // ArenaStateView.dragonFlightHeight
             return d;
         }
 
@@ -462,8 +455,7 @@ namespace SpellboundVR.Spells
             d.Behavior = SpellBehaviorType.FreezeAll;
             d.FocusCategory = SpellFocusCategory.Defense;
             d.BaseDamage = 150f;
-            d.EffectDuration = 7f;
-            d.SetOffMap(OffMapOrigin.Around, 22f, 18f, 1f, 0.15f); // 맵 둘레 사방에서 얼음 혜성 — 첫 혜성이 떨어질 때 얼어붙는다
+            d.EffectDuration = 10f;
             return d;
         }
 
@@ -490,7 +482,7 @@ namespace SpellboundVR.Spells
             d.Behavior = SpellBehaviorType.DrainLife;
             d.Dodgeable = false;         // 조준한 레인에 서 있으면 명중 (쉴드 · 반사 결계로만 막힘)
             d.BaseDamage = 320f;         // 플레이어 · 레인 유닛 1기당
-            d.EffectDuration = 1.6f;     // 생명력이 돌아오는 시간
+            d.EffectDuration = 1f;       // 흡혈 선이 1초 뒤 사라지며 회복
             d.EffectRatio = 2f;          // 플레이어 실제 피해 × 2 회복 (레인 유닛 · 설치물은 그 절반 비율)
             return d;
         }
@@ -503,7 +495,7 @@ namespace SpellboundVR.Spells
             d.Behavior = SpellBehaviorType.ReflectBarrier;
             d.FocusCategory = SpellFocusCategory.Defense;
             d.StatusEffectId = "H04_Reflect";
-            d.EffectDuration = 9f;       // 6초 × 1.5
+            d.EffectDuration = 10f;
             d.EffectRatio = 1f;          // 피해의 100% 반사
             d.ProjectileSpeed = 30f;
             return d;
@@ -518,7 +510,7 @@ namespace SpellboundVR.Spells
             d.FocusCategory = SpellFocusCategory.Defense;
             d.MaxDepth = 1f;
             d.FieldHalfDepth = 4f;       // 띠 반폭 기본값 — 실제로는 아레나의 (타워 깊이 − 넥서스 깊이) / 2 를 쓴다
-            d.EffectDuration = 8f;
+            d.EffectDuration = 10f;
             d.AttackMultiplier = 2f;
             d.AttackSpeedMultiplier = 1.7f;
             d.MoveSpeedMultiplier = 1.5f;
@@ -529,7 +521,7 @@ namespace SpellboundVR.Spells
         public static SpellDefinition CreateSummonTowerDefault()
         {
             var d = Create(SpellIds.H06_SummonTower, "Summon Tower", "SummonTower", new Color(0.65f, 0.55f, 0.4f));
-            d.Targeting = SpellTargeting.Structure;
+            d.Targeting = SpellTargeting.Area;       // 깊이까지 조준 — 내 발판 앞 ~ 상대 타워 앞 어디든 (StructureExecutor)
             d.Executor = SpellExecutorType.Structure;
             d.Behavior = SpellBehaviorType.PlaceStructure;
             d.FocusCategory = SpellFocusCategory.Summon;

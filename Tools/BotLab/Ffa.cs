@@ -19,7 +19,7 @@ internal static class Ffa
     private static readonly Team[] Seats = { Team.Home, Team.Seat2, Team.Away, Team.Seat4 };
 
     /// <summary>실제 씬과 같은 치수 (ArenaLayout: 전장 41m · 레인 5m · 개인전 구조물 깊이)</summary>
-    public static ArenaGeometry Arena() => new ArenaGeometry(Vector3.zero, Vector3.forward, 41f, 5f, 4f, 9f, 6f, ArenaMode.Ffa4);
+    public static ArenaGeometry Arena() => new ArenaGeometry(Vector3.zero, Vector3.forward, 56f, 5f, 4f, 9f, 6f, ArenaMode.Ffa4);
 
     private static BotConfig Config()
     {
@@ -179,8 +179,8 @@ internal static class Ffa
                 Check(arena.TryLocalColumn(a, lane, out Column back) && back == col, $"레인 {lane} → 열 되돌리기");
                 var f = arena.GetLane(a, lane);
                 var g = arena.GetLane(b, lane);
-                Check((f.Origin - arena.BasePosition(a)).magnitude < 0.01f, "레인 시작 = 내 발판");
-                Check((f.Point(f.Length) - arena.BasePosition(b)).magnitude < 0.01f, "레인 끝 = 상대 발판");
+                Check((f.Origin - arena.PlayerPosition(a, arena.LaneColumn(a, lane))).magnitude < 0.01f, "레인 시작 = 그 레인과 이어진 내 발판");
+                Check((f.Point(f.Length) - arena.PlayerPosition(b, arena.LaneColumn(b, lane))).magnitude < 0.01f, "레인 끝 = 그 레인과 이어진 상대 발판");
                 Near(f.Length, g.Length, "양쪽 레인 길이");
                 // 내 시점 왼쪽 열은 실제로 왼쪽에 있어야 한다
                 float side = Vector2.Dot(f.Dir, arena.SeatRight(a));
@@ -234,6 +234,12 @@ internal static class Ffa
         }
         Check(lanesUsed.Count == 6, $"웨이브가 레인 6개에 나와야 함: {lanesUsed.Count}");
 
+        // 2번에게 가던 1번 유닛 하나를 레인 가운데쯤에 둔다 — 탈락 뒤 우회 경로를 따라가는지 본다
+        int toSeat2 = arena.LaneBetween(Team.Home, Team.Seat2);
+        var oldLane = arena.GetLane(Team.Home, toSeat2);
+        sim.SpawnUnit(Team.Home, sim.GetMinionDefinition(MinionKind.Melee), toSeat2, oldLane.Point(oldLane.Length * 0.5f));
+        UnitState walker = null;
+        foreach (var u in sim.Units) if (u.Active && !u.Dead && u.Team == Team.Home && u.Lane == toSeat2) walker = u;
         sim.DebugSetHp(Team.Seat2, 0f);
         Eliminated(sim, Team.Seat2, 4, rules);
         Check(!sim.Defense.TowerAlive(Team.Seat2) && !sim.Defense.NexusAlive(Team.Seat2), "탈락하면 구조물도 사라짐");
@@ -241,7 +247,24 @@ internal static class Ffa
         {
             if (!u.Active || u.Dead) continue;
             Check(u.Team != Team.Seat2, "탈락한 사람의 유닛이 남아 있음");
-            Check(sim.IsLaneOpen(u.Team, u.Lane), "탈락한 상대의 레인에 유닛이 남아 있음");
+            if (!u.IsStructure) Check(sim.IsLaneOpen(u.Team, u.Lane), "탈락한 상대의 레인에 유닛이 남아 있음"); // 설치물은 자리를 지킨다
+        }
+        Check(walker != null && walker.ReturnLane == toSeat2, "갈아탄 유닛은 예전 레인을 따라 돌아간다");
+        if (walker != null)
+        {
+            var newLane = arena.GetLane(Team.Home, walker.Lane);
+            float worst = 0f;
+            for (int i = 0; i < 900 && walker.Active && !walker.Dead && walker.ReturnLane != -1; i++)
+            {
+                sim.Tick(rules.LocalTickInterval);
+                if (walker.TargetId != 0) continue;                       // 싸우는 중은 길을 벗어날 수 있다
+                Vector2 p = walker.Position;
+                float off = Mathf.Min(SegmentDistance(p, oldLane.Origin, oldLane.Point(oldLane.Length)),
+                            Mathf.Min(SegmentDistance(p, oldLane.Origin, newLane.Origin), SegmentDistance(p, newLane.Origin, newLane.Point(newLane.Length))));
+                worst = Mathf.Max(worst, off);
+            }
+            Check(worst <= arena.LaneHalfWidth + 0.5f, $"우회 중 레인 · 발판 위로만 다닌다 (벗어난 거리 최대 {worst:0.0}m)");
+            Check(!walker.Active || walker.Dead || walker.ReturnLane == -1, "우회를 마치고 새 레인으로 전진");
         }
         Check(!sim.IsLaneOpen(Team.Home, arena.LaneBetween(Team.Home, Team.Seat2)), "탈락한 상대의 레인은 닫힘");
         // 닫힌 레인으로 시전 → 거절
@@ -321,22 +344,41 @@ internal static class Ffa
         for (int i = 0; i < 40; i++) sim4.Tick(rules.LocalTickInterval);
         Check(sim4.Phase == MatchPhase.Playing, "사람이 남아 있으면 경기 계속");
 
-        // ⑦ 투사체: 고른 상대의 지금 칸으로 날아가고, 칸을 옮기면 피한다
-        var sim5 = Started(rules, catalog, cfg, 55u);
+        // ⑦ 발판 = 레인: 1번의 왼쪽 · 가운데 · 오른쪽 발판이 2 · 3 · 4번 레인과 이어지고, 그 레인 공격은 그 발판에서만 맞는다
+        Check(arena.LaneColumn(Team.Home, arena.LaneBetween(Team.Home, Team.Seat2)) == 0 &&
+              arena.LaneColumn(Team.Home, arena.LaneBetween(Team.Home, Team.Away)) == 1 &&
+              arena.LaneColumn(Team.Home, arena.LaneBetween(Team.Home, Team.Seat4)) == 2, "1번 발판 왼쪽 · 가운데 · 오른쪽 = 2 · 3 · 4번 레인");
+        // 2번은 사람 자리 — 봇은 날아오는 탄을 보고 스스로 피하므로 판정만 보려면 가만히 있는 사람이어야 한다
+        var sim5 = NewSim(rules, catalog, cfg, 55u);
+        foreach (var t in Seats)
+            if (t == Team.Seat2) sim5.JoinHuman(t, new[] { SpellIds.S03_Fireball, 0, 0, 0, 0, 0, 0, 0 });
+            else sim5.JoinBot(t);
+        sim5.Tick(0.1f);
+        while (sim5.Phase == MatchPhase.Countdown) sim5.Tick(rules.LocalTickInterval);
         var d = SpellDefinition.CreateDefault(SpellIds.S07_Gatling);
-        var launch = new SpellboundVR.Spells.Executor.ProjectileLaunch
+        int lane2 = arena.LaneBetween(Team.Home, Team.Seat2);
+        int pad = sim5.GetAimColumn(Team.Home, lane2);
+        Check(pad == arena.LaneColumn(Team.Seat2, lane2), "1번 → 2번 공격은 2번 발판 중 1번 레인 칸을 노린다");
+        var frame2 = arena.GetLane(Team.Home, lane2);
+        SpellboundVR.Spells.Executor.ProjectileLaunch Shot() => new SpellboundVR.Spells.Executor.ProjectileLaunch
         {
-            SpellId = d.SpellId, CasterTeam = Team.Home, WorldColumn = arena.LaneBetween(Team.Home, Team.Seat2),
-            TargetTeam = Team.Seat2, AimColumn = sim5.GetPlayer(Team.Seat2).WorldColumn,
-            From = arena.PlayerPosition(Team.Seat2, 1) + Vector2.right * 3f, Height = 1.5f, Speed = 10f, Damage = 100f, Dodgeable = true, IsPlayerSkill = true, FocusBonus = 1f,
+            SpellId = d.SpellId, CasterTeam = Team.Home, WorldColumn = lane2, TargetTeam = Team.Seat2, AimColumn = pad,
+            From = frame2.Point(frame2.Length - 6f), Height = 1.5f, Speed = 10f, Damage = 100f, Dodgeable = true, IsPlayerSkill = true, FocusBonus = 1f,
         };
-        sim5.LaunchProjectile(launch);
-        Check(sim5.Projectiles.CountIncoming(sim5, Team.Seat2, out _, out _) == 1, "2번에게 오는 투사체");
-        Check(sim5.Projectiles.CountIncoming(sim5, Team.Seat4, out _, out _) == 0, "4번에게는 안 옴");
-        float hp = sim5.GetPlayer(Team.Seat2).Hp;
-        sim5.SubmitMove(Team.Seat2, new MoveRequest { Direction = 1 });
-        for (int i = 0; i < 30; i++) sim5.Tick(rules.LocalTickInterval);
-        Near(sim5.GetPlayer(Team.Seat2).Hp, hp, "칸을 옮기면 피해 없음");
+        float Volley()                                                      // 5발 (명중률 판정이 있어 한 발은 빗나갈 수 있다)
+        {
+            float before = sim5.GetPlayer(Team.Seat2).Hp;
+            for (int k = 0; k < 5; k++) sim5.LaunchProjectile(Shot());
+            Check(sim5.Projectiles.CountIncoming(sim5, Team.Seat4, out _, out _) == 0, "4번에게는 안 옴");
+            for (int i = 0; i < 60; i++) sim5.Tick(rules.LocalTickInterval);
+            Check(sim5.Projectiles.CountIncoming(sim5, Team.Seat2, out _, out _) == 0, "투사체가 도착했다");
+            return before - sim5.GetPlayer(Team.Seat2).Hp;
+        }
+        sim5.GetPlayer(Team.Seat2).WorldColumn = pad == 1 ? 0 : 1;           // 다른 발판
+        Near(Volley(), 0f, "그 레인 발판이 아니면 피해 없음");
+        sim5.GetPlayer(Team.Seat2).WorldColumn = pad;                        // 그 레인 발판
+        float taken = Volley();
+        Check(taken > 0f, $"그 레인 발판에 서 있으면 맞는다 (피해 {taken:0})");
 
         LaneTowers(rules, catalog, arena, cfg);
 
@@ -441,6 +483,13 @@ internal static class Ffa
         sim.Tick(0.1f);
         while (sim.Phase == MatchPhase.Countdown) sim.Tick(rules.LocalTickInterval);
         return sim;
+    }
+
+    private static float SegmentDistance(Vector2 p, Vector2 a, Vector2 b)
+    {
+        Vector2 ab = b - a;
+        float t = ab.sqrMagnitude > 1e-6f ? Mathf.Clamp01(Vector2.Dot(p - a, ab) / ab.sqrMagnitude) : 0f;
+        return Vector2.Distance(p, a + ab * t);
     }
 
     private static void Eliminated(MatchSimulation sim, Team team, int place, MatchRuleConfig rules)

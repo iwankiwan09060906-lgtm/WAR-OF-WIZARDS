@@ -230,6 +230,16 @@ namespace SpellboundVR.Arena
             return s_ffaLanes[lane, 0] == c || s_ffaLanes[lane, 1] == c;
         }
 
+        /// <summary>
+        /// 그 진영 발판 중 그 레인과 이어진 칸 (월드 열) — 개인전은 왼쪽 발판 = 왼쪽 상대 레인, 가운데 = 맞은편, 오른쪽 = 오른쪽 상대.
+        /// 그 레인으로 오는 공격은 이 칸에 서 있을 때만 맞는다. 1:1 은 레인 = 열
+        /// </summary>
+        public int LaneColumn(Team team, int lane)
+        {
+            if (IsDuel) return lane;
+            return TeamUtil.ToWorldColumn(team, TeamUtil.ColumnToward(team, LaneTarget(team, lane)));
+        }
+
         /// <summary>레인이 viewer 시점 몇 열인가. 4인 개인전에서 viewer 와 이어지지 않은 레인이면 false</summary>
         public bool TryLocalColumn(Team viewer, int lane, out Column local)
         {
@@ -254,9 +264,11 @@ namespace SpellboundVR.Arena
                 float baseV = caster == Team.Away ? FieldLength : 0f;
                 return new LaneFrame(new Vector2(ColumnU(lane), baseV), dir, FieldLength);
             }
+            // 개인전 레인은 양쪽 진영에서 그 레인과 이어진 발판끼리 잇는다
             Team from = TouchesLane(caster, lane) ? caster : LaneTarget(caster, lane);
-            Vector2 a = BasePosition(from);
-            Vector2 d = BasePosition(LaneTarget(from, lane)) - a;
+            Team to = LaneTarget(from, lane);
+            Vector2 a = PlayerPosition(from, LaneColumn(from, lane));
+            Vector2 d = PlayerPosition(to, LaneColumn(to, lane)) - a;
             float length = d.magnitude;
             return new LaneFrame(a, d / length, length);
         }

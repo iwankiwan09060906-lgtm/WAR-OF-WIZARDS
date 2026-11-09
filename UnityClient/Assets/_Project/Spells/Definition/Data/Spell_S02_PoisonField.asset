@@ -39,7 +39,7 @@ MonoBehaviour:
   TickInterval: 0.5
   TickDamageRamp: 2
   MaxTickDamage: 30
-  FieldHalfDepth: 2.5
+  FieldHalfDepth: 6
   LaneStartDepth: 0
   LaneEndDepth: 1
   StatusEffectId: 
@@ -52,5 +52,4 @@ MonoBehaviour:
   MoveSpeedMultiplier: 1
   IncomingDamageMultiplier: 1
   EffectRatio: 1
-  KnockbackDistance: 0
   SummonKind: 0

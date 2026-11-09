@@ -19,9 +19,15 @@ namespace SpellboundVR.Bot
         private readonly ManualKeyBrain _manualBrain;
         private readonly bool _manualKeysEnabled;
         private readonly float _windup;
+        private readonly float _windupJitter;
+        private readonly float _failChance;
+        private readonly DeterministicRandom _rng;
         private bool _hasPendingCast;
         private SpellCastRequest _pendingCast;
         private float _pendingCastAt;
+        private float _pendingWindup;
+        /// <summary>이 진행률에서 룬 그리기를 실패한다 (실패하지 않으면 1 초과)</summary>
+        private float _pendingFailAt;
 
         public BotPlayer(Team team, int[] deck, SpellCatalog catalog, BotConfig config, uint seed,
                          bool manualKeysEnabled, bool requireAlt, IBotBrain brainOverride = null)
@@ -29,6 +35,9 @@ namespace SpellboundVR.Bot
             Team = team;
             Deck = deck;
             _windup = config != null ? Mathf.Max(0f, config.CastWindupSeconds) : 0f;
+            _windupJitter = config != null ? config.CastWindupJitter : 0f;
+            _failChance = config != null ? config.CastFailChance : 0f;
+            _rng = new DeterministicRandom(seed ^ 0x5bd1e995u);
             _autoBrain = brainOverride ?? CreateBrain(team, deck, catalog, config, seed);
             _manualBrain = new ManualKeyBrain(team, deck) { RequireAlt = requireAlt };
             _manualKeysEnabled = manualKeysEnabled;
@@ -81,7 +90,10 @@ namespace SpellboundVR.Bot
             {
                 _hasPendingCast = true;
                 _pendingCast = cmd.CastRequest;
-                _pendingCastAt = sim.MatchTime + _windup;
+                _pendingWindup = _windup * (1f + _rng.Range(0f, _windupJitter));
+                _pendingCastAt = sim.MatchTime + _pendingWindup;
+                // 실패는 다 그리기 전에 멈춘다 — 그린 정도가 ReleaseProgress 아래라 시전 폭발도 안 보인다
+                _pendingFailAt = _rng.NextFloat() < _failChance ? _rng.Range(0.35f, 0.8f) : 2f;
             }
             if (cmd.HasMoveRequest) sim.SubmitMove(Team, cmd.MoveRequest);
             if (_hasPendingCast) TickPendingCast(sim);
@@ -91,6 +103,13 @@ namespace SpellboundVR.Bot
         private void TickPendingCast(MatchSimulation sim)
         {
             float left = _pendingCastAt - sim.MatchTime;
+            float progress = _pendingWindup > 0f ? 1f - left / _pendingWindup : 1f;
+            if (progress >= _pendingFailAt)
+            {
+                _hasPendingCast = false;
+                sim.SetCastPreview(Team, default);
+                return;
+            }
             if (left > 0f)
             {
                 sim.SetCastPreview(Team, new CastPreview
@@ -99,7 +118,7 @@ namespace SpellboundVR.Bot
                     SpellId = _pendingCast.SpellId,
                     Aiming = true,
                     TargetColumn = _pendingCast.TargetColumn,
-                    Progress = 1f - left / _windup,
+                    Progress = progress,
                 });
                 return;
             }

@@ -30,7 +30,7 @@ MonoBehaviour:
   ShotInterval: 0.1
   ArcHeight: 0
   TelegraphDelay: 0
-  OffMap: 4
+  OffMap: 0
   OffMapDistance: 22
   OffMapHeight: 18
   OffMapArrivalHeight: 0
@@ -43,7 +43,7 @@ MonoBehaviour:
   LaneStartDepth: 0
   LaneEndDepth: 1
   StatusEffectId: 
-  EffectDuration: 7
+  EffectDuration: 10
   ShieldAmount: 0
   RegenDelay: 3
   RegenPerSecond: 0
@@ -52,5 +52,4 @@ MonoBehaviour:
   MoveSpeedMultiplier: 1
   IncomingDamageMultiplier: 1
   EffectRatio: 1
-  KnockbackDistance: 0
   SummonKind: 0

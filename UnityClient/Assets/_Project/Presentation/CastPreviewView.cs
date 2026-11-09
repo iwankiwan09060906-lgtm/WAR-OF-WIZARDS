@@ -25,6 +25,8 @@ namespace SpellboundVR.Presentation
         private const int GlowTextureHeight = 32;
         /// <summary>이만큼 그린 룬이 사라지면 시전된 것으로 본다</summary>
         private const float ReleaseProgress = 0.9f;
+        /// <summary>봇 룬 획의 흔들림 (룬 칸 비율) — 정해진 모양 그대로가 아니라 사람 손처럼 삐뚤게</summary>
+        private const float StrokeNoise = 0.16f;
         /// <summary>펜 끝 불꽃 크기 (프리팹 지름 10m 기준)</summary>
         private const float PenScale = 0.07f;
         /// <summary>룬 선 재질을 빌려 올 프리팹 — 트레일에 파티클 빛 재질을 쓴다</summary>
@@ -58,6 +60,8 @@ namespace SpellboundVR.Presentation
             public int Stroke;
             public Vector3 PenLocal;
             public Vector2 Min, Max;
+            /// <summary>이번 룬의 흔들림 시드 (그릴 때마다 다르다)</summary>
+            public float Noise;
         }
 
         [Tooltip("허공에 그리는 룬 크기 (m) — 멀리서도 보이도록 몸보다 크게")]
@@ -206,6 +210,7 @@ namespace SpellboundVR.Presentation
             seat.Stroke = -1;
             seat.PenLocal = Vector3.zero;
             seat.Min = seat.Max = Vector2.zero;
+            seat.Noise = Random.Range(0f, 1000f);
             seat.Strokes.localPosition = Vector3.zero;
             seat.Strokes.localScale = Vector3.one;
             seat.Label.text = "";
@@ -300,11 +305,19 @@ namespace SpellboundVR.Presentation
                 for (int i = line.positionCount; i < count; i++)
                 {
                     line.positionCount = i + 1;
-                    line.SetPosition(i, points[i] * runeSize);
+                    line.SetPosition(i, (points[i] + Jitter(seat, s, i)) * runeSize);
                 }
-                seat.PenLocal = points[Mathf.Max(0, count - 1)] * runeSize;
+                int last = Mathf.Max(0, count - 1);
+                seat.PenLocal = (points[last] + Jitter(seat, s, last)) * runeSize;
                 remaining -= points.Length;
             }
+        }
+
+        /// <summary>획을 따라 부드럽게 변하는 오차 + 획마다 조금 어긋난 시작점</summary>
+        private static Vector3 Jitter(Seat seat, int stroke, int index)
+        {
+            float t = index * 0.18f, k = seat.Noise + stroke * 3.7f;
+            return new Vector3(Mathf.PerlinNoise(k, t) - 0.5f, Mathf.PerlinNoise(t + 31f, k) - 0.5f, 0f) * StrokeNoise;
         }
 
         private Vector3[][] ShapeOf(int spellId)

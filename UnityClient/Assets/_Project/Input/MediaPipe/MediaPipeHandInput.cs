@@ -371,7 +371,7 @@ namespace SpellboundVR.Input
                     if (right && _cast != null) _cast.SelectSpell(SpellNumber(e.spell));
                     break;
                 case "pinch_start":
-                    if (right) { IsDrawing = true; _drawCount = 0; OnPinchStarted?.Invoke(); }
+                    if (right) { IsDrawing = true; _drawCount = 0; LastRune = null; OnPinchStarted?.Invoke(); }
                     break;
                 case "pinch_end":
                     if (!right) break;

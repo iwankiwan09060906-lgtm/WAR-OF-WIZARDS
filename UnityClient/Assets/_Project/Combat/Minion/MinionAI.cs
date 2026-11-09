@@ -80,6 +80,10 @@ namespace SpellboundVR.Combat
                     }
                 }
             }
+            else if (u.ReturnLane != -1)
+            {
+                Detour(sim, u, def.MoveSpeed * moveMul * dt);
+            }
             else
             {
                 // 전진: 상대 진영 방향 + 레인 중심 복귀
@@ -92,6 +96,17 @@ namespace SpellboundVR.Combat
             }
 
             u.Position = sim.Arena.ClampToField(u.Position);
+        }
+
+        /// <summary>4인 개인전 우회 — 예전 레인을 따라 내 발판으로 돌아가고, 새 레인의 내 발판으로 옮긴 뒤 평소처럼 전진한다</summary>
+        private static void Detour(MatchSimulation sim, UnitState u, float step)
+        {
+            Vector2 goal = u.ReturnLane >= 0 ? sim.Arena.GetLane(u.Team, u.ReturnLane).Origin : sim.Arena.GetLane(u.Team, u.Lane).Origin;
+            u.Position = Vector2.MoveTowards(u.Position, goal, step);
+            u.State = UnitVisualState.Moving;
+            u.AttackTimer = Mathf.Min(u.AttackTimer, u.Def.AttackInterval * 0.5f);
+            if ((u.Position - goal).sqrMagnitude > 0.04f) return;
+            u.ReturnLane = u.ReturnLane >= 0 ? UnitState.Detouring : -1;
         }
 
         /// <summary>설치물: 소환(H06) · 고정 사격(S13)</summary>

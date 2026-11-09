@@ -22,12 +22,12 @@ MonoBehaviour:
   Behavior: 1
   FocusCategory: 0
   Dodgeable: 1
-  BaseDamage: 17
+  BaseDamage: 4.25
   Radius: 0.4
   MaxDepth: 1
   ProjectileSpeed: 24
-  ShotCount: 15
-  ShotInterval: 0.135
+  ShotCount: 60
+  ShotInterval: 0.034
   ArcHeight: 0
   TelegraphDelay: 0
   TickInterval: 0.5
@@ -46,5 +46,4 @@ MonoBehaviour:
   MoveSpeedMultiplier: 1
   IncomingDamageMultiplier: 1
   EffectRatio: 1
-  KnockbackDistance: 0
   SummonKind: 0

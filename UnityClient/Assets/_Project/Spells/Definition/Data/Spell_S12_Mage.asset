@@ -34,7 +34,7 @@ MonoBehaviour:
   OffMap: 2
   OffMapDistance: 26
   OffMapHeight: 12
-  OffMapArrivalHeight: 3
+  OffMapArrivalHeight: 5
   OffMapFlightSeconds: 1.5
   OffMapVisualScale: 1
   TickInterval: 0.5
@@ -53,5 +53,4 @@ MonoBehaviour:
   MoveSpeedMultiplier: 1
   IncomingDamageMultiplier: 1
   EffectRatio: 1
-  KnockbackDistance: 0
   SummonKind: 4

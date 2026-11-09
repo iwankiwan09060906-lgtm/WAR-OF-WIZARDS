@@ -472,7 +472,7 @@ namespace SpellboundVR.Combat
                 : ServerSpellValidator.Validate(_phase, caster, request, Catalog, _executors, out def);
             if (reason == CastRejectReason.None && NeedsOpenLane(def) && !IsLaneOpen(team, Arena.ResolveLane(team, request.TargetColumn)))
                 reason = CastRejectReason.LaneClosed;
-            if (reason == CastRejectReason.None && !CanPlaceUnits(team, def)) reason = CastRejectReason.UnitCapReached;
+            if (reason == CastRejectReason.None && !CanPlaceUnits(team, def, request)) reason = CastRejectReason.UnitCapReached;
             if (reason != CastRejectReason.None || !_executors.TryGet(request.SpellId, out ISpellExecutor executor))
             {
                 if (reason == CastRejectReason.None) reason = CastRejectReason.NotImplemented;
@@ -527,12 +527,13 @@ namespace SpellboundVR.Combat
         }
 
         /// <summary>§14.5 소환 · 설치: 진영 생존 상한이면 거절 (쿨타임 미소모). 설치물 교체는 자리가 생기므로 허용.</summary>
-        private bool CanPlaceUnits(Team team, SpellDefinition def)
+        private bool CanPlaceUnits(Team team, SpellDefinition def, in SpellCastRequest request)
         {
             if (def == null) return true;
             if (def.Executor == SpellExecutorType.Summon) return AliveUnitLimiter.CanSpawn(this, team);
             if (def.Executor == SpellExecutorType.Structure)
-                return FindTeamUnit(team, def.SummonKind) != 0 || AliveUnitLimiter.CanSpawn(this, team);
+                return (CountTeamUnits(team, def.SummonKind, out _) >= StructureExecutor.MaxCount(def.SummonKind) || AliveUnitLimiter.CanSpawn(this, team)) &&
+                       StructureExecutor.TryPlace(this, def, request, team, out _); // 겹치지 않는 빈자리가 있어야 한다
             return true;
         }
 
@@ -679,18 +680,23 @@ namespace SpellboundVR.Combat
             Debug.Log($"[MatchSimulation] {team} 탈락 → {place}위 t={_matchTime:0.0}");
         }
 
-        /// <summary>탈락한 상대에게 가던 유닛은 살아 있는 다음 상대의 레인으로 갈아탄다</summary>
+        /// <summary>
+        /// 탈락한 상대에게 가던 유닛은 살아 있는 다음 상대의 레인으로 갈아탄다 — 레인 사이는 낭떠러지라
+        /// 가로질러 가지 않고 예전 레인을 따라 내 발판까지 돌아간 뒤 새 레인으로 나간다 (MinionAI 우회).
+        /// 설치물은 자리를 지키고, 소환탑이 그 뒤로 내보낸 해골은 다음 틱에 같은 방식으로 갈아탄다.
+        /// </summary>
         private void ReassignLanes()
         {
             for (int i = 0; i < Units.Length; i++)
             {
                 var u = Units[i];
-                if (!u.Active || u.Dead || IsLaneOpen(u.Team, u.Lane)) continue;
+                if (!u.Active || u.Dead || u.IsStructure || IsLaneOpen(u.Team, u.Lane)) continue;
                 Team from = Arena.LaneTarget(u.Team, u.Lane);
                 for (int step = 1; step < 4; step++)
                 {
                     Team next = TeamUtil.TeamAtClock(TeamUtil.ClockIndex(from) + step);
                     if (next == u.Team || !IsPlayerAlive(next)) continue;
+                    if (u.ReturnLane < 0) u.ReturnLane = u.Lane; // 이미 우회 중이면 처음 레인으로 돌아가는 길을 그대로 쓴다
                     u.Lane = Arena.LaneBetween(u.Team, next);
                     u.TargetId = 0;
                     break;

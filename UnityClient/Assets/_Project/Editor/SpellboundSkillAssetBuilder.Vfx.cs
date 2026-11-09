@@ -306,102 +306,11 @@ namespace SpellboundVR.EditorTools
             Save(root);
         }
 
-        // ── S05 토네이도 (Eric VFX Studio 연기 · 메시로 만든 회색 회오리) ─────────
+        // ── S05 토네이도 (시전 바람 — 회오리 자체는 EzTornado 프리팹, VFXCatalog 별칭) ─────────
 
         private static void BuildS05Tornado()
         {
-            var grey = new Color(0.5f, 0.52f, 0.56f, 0.6f);
-            var smoke = MatVariant(LightSmokeMat, "Mat_S05_TornadoSmoke", m =>
-            {
-                if (m.HasProperty("_TintColor")) m.SetColor("_TintColor", new Color(0.6f, 0.62f, 0.66f, 1f));
-                if (m.HasProperty("_Brightness")) m.SetFloat("_Brightness", 1f);
-            });
-            var root = NewRoot("VFX_S05_Tornado_Field");
-
-            // 깔때기: 위로 올라가며 넓어지고(원뿔) 축을 중심으로 돈다(Orbital)
-            var funnel = NewPs(root, "Funnel", smoke, euler: new Vector3(-90f, 0f, 0f));
-            var fm = funnel.main;
-            fm.loop = true;
-            fm.startLifetime = Range(1.4f, 1.8f);
-            fm.startSpeed = Range(4.5f, 5.5f);
-            fm.startSize = Range(1.4f, 2.2f);
-            fm.startRotation = Range(0f, 6.28f);
-            fm.startColor = grey;
-            fm.maxParticles = 400;
-            Rate(funnel, 110f);
-            var fs = funnel.shape;
-            fs.enabled = true;
-            fs.shapeType = ParticleSystemShapeType.Cone;
-            fs.angle = 26f;
-            fs.radius = 0.5f;
-            var vel = funnel.velocityOverLifetime;
-            vel.enabled = true;
-            vel.space = ParticleSystemSimulationSpace.Local;
-            vel.orbitalX = 0f;
-            vel.orbitalY = 0f;
-            vel.orbitalZ = new ParticleSystem.MinMaxCurve(5.5f);
-            vel.radial = new ParticleSystem.MinMaxCurve(1.2f);
-            SizeCurve(funnel, 0.5f, 2.6f);
-            FadeInOut(funnel, 0.1f, 0.7f);
-            var rol = funnel.rotationOverLifetime;
-            rol.enabled = true;
-            rol.z = Range(2f, 4f);
-
-            var inner = Object.Instantiate(funnel.gameObject, root.transform);
-            inner.name = "FunnelInner";
-            var ip = inner.GetComponent<ParticleSystem>();
-            var im = ip.main;
-            im.startColor = new Color(0.35f, 0.36f, 0.4f, 0.7f);
-            im.startSize = Range(0.8f, 1.3f);
-            var ish = ip.shape;
-            ish.angle = 14f;
-            ish.radius = 0.25f;
-            var iv = ip.velocityOverLifetime;
-            iv.orbitalZ = new ParticleSystem.MinMaxCurve(8f);
-            iv.radial = new ParticleSystem.MinMaxCurve(0.4f);
-
-            // 바닥 먼지 고리
-            var ring = NewPs(root, "DustRing", LightSmokeMat, new Vector3(0f, 0.2f, 0f), new Vector3(-90f, 0f, 0f));
-            var rm = ring.main;
-            rm.loop = true;
-            rm.startLifetime = Range(0.8f, 1.2f);
-            rm.startSize = Range(1.2f, 2f);
-            rm.startColor = new Color(0.55f, 0.53f, 0.5f, 0.55f);
-            rm.startRotation = Range(0f, 6.28f);
-            Rate(ring, 40f);
-            var rs = ring.shape;
-            rs.enabled = true;
-            rs.shapeType = ParticleSystemShapeType.Circle;
-            rs.radius = 1.6f;
-            var rv = ring.velocityOverLifetime;
-            rv.enabled = true;
-            rv.orbitalZ = new ParticleSystem.MinMaxCurve(4f);
-            rv.radial = new ParticleSystem.MinMaxCurve(0.8f);
-            FadeInOut(ring, 0.15f, 0.6f);
-
-            // 휘말린 돌 조각
-            var debris = NewPs(root, "Debris", LoadMat(EricMat + "stone02_3.mat"), euler: new Vector3(-90f, 0f, 0f));
-            var dm = debris.main;
-            dm.loop = true;
-            dm.startLifetime = Range(1.2f, 1.6f);
-            dm.startSpeed = Range(3f, 5f);
-            dm.startSize = Range(0.12f, 0.3f);
-            dm.startRotation = Range(0f, 6.28f);
-            dm.startColor = new Color(0.55f, 0.5f, 0.45f, 1f);
-            Rate(debris, 25f);
-            var dsh = debris.shape;
-            dsh.enabled = true;
-            dsh.shapeType = ParticleSystemShapeType.Cone;
-            dsh.angle = 22f;
-            dsh.radius = 0.6f;
-            var dv = debris.velocityOverLifetime;
-            dv.enabled = true;
-            dv.orbitalZ = new ParticleSystem.MinMaxCurve(6f);
-            dv.radial = new ParticleSystem.MinMaxCurve(0.5f);
-            FadeInOut(debris, 0.05f, 0.8f);
-            Save(root);
-
-            root = NewRoot("VFX_S05_Tornado_Cast");
+            var root = NewRoot("VFX_S05_Tornado_Cast");
             var gust = DarkSmoke(root, "Gust", 0.9f, 0.7f, 0f, 0.2f, new Color(0.7f, 0.72f, 0.75f, 0.6f));
             gust.GetComponent<ParticleSystemRenderer>().sharedMaterial = LightSmokeMat;
             var gm = gust.main;

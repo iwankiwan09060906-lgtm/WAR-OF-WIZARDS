@@ -438,7 +438,8 @@ namespace SpellboundVR.Core
             lineGo.AddComponent<MagicLineRenderer>().Initialize(input, cast, input is KeyboardInput ? 0.004f : 0.006f);
             gameObject.AddComponent<RuneReadyDisplay>().Initialize(cast, input, head, runeLibrary);
             var presentation = new GameObject("[Presentation]");
-            if (_arenaMode == ArenaMode.Ffa4) presentation.AddComponent<FfaArenaView>().Initialize(_session); // 구조물 · 팀 아트를 쓰기 전에
+            if (_arenaMode == ArenaMode.Ffa4) presentation.AddComponent<FfaArenaView>().Initialize(_session, vfxCatalog); // 구조물 · 팀 아트를 쓰기 전에
+            else presentation.AddComponent<DuelArenaView>().Initialize(_session);
             presentation.AddComponent<VFXPlayer>().Initialize(_session, vfxCatalog);
             _arenaView = presentation.AddComponent<ArenaStateView>();
             _arenaView.Initialize(_session, vfxCatalog, head);
@@ -558,7 +559,8 @@ namespace SpellboundVR.Core
             _session = new ClientSession(_matchRules, spellCatalog, runeLibrary, arenaLayout, view, new DeckData(localDeck));
             view.SetLocalTeam(Team.Home);
             var presentation = new GameObject("[Server View]");
-            if (_arenaMode == ArenaMode.Ffa4) presentation.AddComponent<FfaArenaView>().Initialize(_session);
+            if (_arenaMode == ArenaMode.Ffa4) presentation.AddComponent<FfaArenaView>().Initialize(_session, vfxCatalog);
+            else presentation.AddComponent<DuelArenaView>().Initialize(_session);
             presentation.AddComponent<VFXPlayer>().Initialize(_session, vfxCatalog);
             var serverArena = presentation.AddComponent<ArenaStateView>();
             serverArena.Initialize(_session, vfxCatalog, head);

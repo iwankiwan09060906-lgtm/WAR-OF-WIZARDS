@@ -7,7 +7,7 @@ Shader "Spellbound/RuneIcon"
     {
         _MainTex ("Icon", 2D) = "white" {}
         _Color ("Line Color", Color) = (1, 1, 1, 1)
-        _Backdrop ("Backdrop", Color) = (0.05, 0.04, 0.08, 0.55)
+        _Backdrop ("Backdrop", Color) = (0.05, 0.04, 0.08, 0.35)
     }
     SubShader
     {

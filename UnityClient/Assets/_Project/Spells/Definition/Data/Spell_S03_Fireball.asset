@@ -28,14 +28,14 @@ MonoBehaviour:
   ProjectileSpeed: 26
   ShotCount: 1
   ShotInterval: 0.1
-  ArcHeight: 4
+  ArcHeight: 0
   TelegraphDelay: 0
-  OffMap: 1
-  OffMapDistance: 34
-  OffMapHeight: 22
+  OffMap: 3
+  OffMapDistance: 4
+  OffMapHeight: 30
   OffMapArrivalHeight: 0
-  OffMapFlightSeconds: 1.3
-  OffMapVisualScale: 2.5
+  OffMapFlightSeconds: 3.5
+  OffMapVisualScale: 12.5
   TickInterval: 0.5
   TickDamageRamp: 0
   MaxTickDamage: 0
@@ -52,5 +52,4 @@ MonoBehaviour:
   MoveSpeedMultiplier: 1
   IncomingDamageMultiplier: 1
   EffectRatio: 1
-  KnockbackDistance: 0
   SummonKind: 0

@@ -10,6 +10,7 @@ using SpellboundVR.Core;
 using SpellboundVR.Gesture;
 using SpellboundVR.Network;
 using SpellboundVR.Spells;
+using SpellboundVR.Spells.Executor;
 using UnityEngine;
 using Random = System.Random;
 
@@ -24,7 +25,7 @@ internal static class SkillTest
     }
 
     /// <summary>실제 씬과 같은 치수</summary>
-    private static ArenaGeometry Duel() => new ArenaGeometry(Vector3.zero, Vector3.forward, 41f, 5f, 5f, 13f, 6f);
+    private static ArenaGeometry Duel() => new ArenaGeometry(Vector3.zero, Vector3.forward, 41f, 7f, 5f, 13f, 6f);
 
     private static BotConfig Config(float windup)
     {
@@ -32,6 +33,8 @@ internal static class SkillTest
         cfg.UseServerStrategy = false;
         cfg.ReportExperience = false;
         cfg.CastWindupSeconds = windup;
+        cfg.CastWindupJitter = 0f; // 시간 검사가 흔들리지 않게 — 실패 · 흔들림은 BotFailsSometimes 에서
+        cfg.CastFailChance = 0f;
         return cfg;
     }
 
@@ -69,7 +72,9 @@ internal static class SkillTest
             sim.Tick(dt);
             var shot = FirstProjectile(sim);
             string mode = arena.IsDuel ? "1:1" : "개인전";
-            Check(shot != null && OutsideField(arena, shot.Position), $"{name} ({mode}): 맵 밖에서 출발 {(shot != null ? shot.Position.ToString() : "투사체 없음")}");
+            bool fromSky = def.OffMap == OffMapOrigin.Sky;
+            Check(shot != null && (fromSky ? shot.Height > 20f : OutsideField(arena, shot.Position)),
+                  $"{name} ({mode}): {(fromSky ? "하늘 높이" : "맵 밖")}에서 출발 {(shot != null ? shot.Position + " 높이 " + shot.Height.ToString("0") : "투사체 없음")}");
             if (shot == null) continue;
             int id = shot.Id;
             float flown = dt;
@@ -92,7 +97,7 @@ internal static class SkillTest
         sim.Defense.Tower(Team.Away, Column.Center).Alive = false; // 타워 감쇄 없이 재기
         // 상대 발판 = 깊이 1, 가운데 열
         Cast(sim, Team.Home, SpellIds.S03_Fireball, Column.Center, 1f);
-        for (int i = 0; i < 90; i++) sim.Tick(rules.LocalTickInterval);
+        for (int i = 0; i < 150; i++) sim.Tick(rules.LocalTickInterval); // 파이어볼이 천천히(3.5초) 내려온다
         Check(enemy.Hp < before, $"파이어볼: 맵 밖에서 날아와 조준 지점 상대에게 피해 ({before:0} → {enemy.Hp:0})");
     }
 
@@ -127,7 +132,9 @@ internal static class SkillTest
             Cast(sim, Team.Home, SpellIds.S05_Tornado, Column.Left, 0f);
             sim.Tick(dt);
             var shot = FirstProjectile(sim);
-            Check(shot != null && lane.Along(shot.Position) < -5f, $"토네이도 ({mode}): 시전자 뒤 맵 밖에서 출발 (레인 {(shot != null ? lane.Along(shot.Position) : 0f):0.0}m)");
+            float startAlong = shot != null ? lane.Along(shot.Position) : -1f;
+            Check(startAlong >= 0f && startAlong < lane.Length * 0.1f, $"토네이도 ({mode}): 시전자 바로 앞에서 출발 (레인 {startAlong:0.0}m)");
+            float unitBefore = lane.Along(onLane.Position);
             float worst = 0f;
             int id = shot != null ? shot.Id : 0;
             for (int i = 0; i < 100; i++)
@@ -136,6 +143,7 @@ internal static class SkillTest
                 if (shot != null && shot.Active && shot.Id == id) worst = Mathf.Max(worst, Mathf.Abs(lane.Lateral(shot.Position)));
             }
             Check(worst < 0.1f, $"토네이도 ({mode}): 레인 가운데를 따라간다 (옆으로 벗어난 거리 {worst:0.00}m)");
+            Check(lane.Along(onLane.Position) > unitBefore + 3f, $"토네이도 ({mode}): 붙잡힌 유닛을 같이 밀고 간다 ({unitBefore:0.0}m → {lane.Along(onLane.Position):0.0}m)");
             Check(onLane.Hp < hpOn && offLane.Hp >= hpOff, $"토네이도 ({mode}): 조준한 레인의 유닛만 맞는다 ({hpOn:0}→{onLane.Hp:0} / 옆 레인 {hpOff:0}→{offLane.Hp:0})");
         }
     }
@@ -180,24 +188,29 @@ internal static class SkillTest
         Check(worstFlight <= half && worstFx <= half, $"개인전 {name}: 레인 안 (반폭 {half:0.0}m · 경로 최대 {worstFlight:0.0}m · 효과 {fx}개 최대 {worstFx:0.0}m)");
     }
 
-    private static void FfaCometsLandOnLanes()
+    /// <summary>개인전 프리즈: 물결이 세 상대의 유닛 · 타워에 모두 닿고, 내 유닛은 얼리지 않는다</summary>
+    private static void FfaFreezeReachesEveryone()
     {
         var arena = Ffa.Arena();
         var sim = Start(arena, SpellIds.H01_Freeze, out var rules);
-        Cast(sim, Team.Home, SpellIds.H01_Freeze, Column.Center, 0f);
-        sim.Tick(rules.LocalTickInterval);
-        int onLane = 0, comets = 0;
-        foreach (var p in sim.Projectiles.Pool)
+        var melee = sim.GetMinionDefinition(MinionKind.Melee);
+        for (int t = 0; t < arena.TeamCount; t++)
         {
-            if (!p.Active) continue;
-            comets++;
-            for (int c = 0; c < 3; c++)
-            {
-                var lane = arena.GetLane(Team.Home, arena.ResolveLane(Team.Home, (Column)c));
-                if (Mathf.Abs(lane.Lateral(p.TargetPoint)) < 0.1f) { onLane++; break; }
-            }
+            int lane = arena.ResolveLane((Team)t, Column.Center);
+            sim.SpawnUnit((Team)t, melee, lane, arena.GetLane((Team)t, lane).Point(4f));
         }
-        Check(comets == 6 && onLane == 6, $"개인전 프리즈: 혜성 {onLane}/{comets}개가 내 레인 위로 떨어진다");
+        Cast(sim, Team.Home, SpellIds.H01_Freeze, Column.Center, 0f);
+        for (int i = 0; i < 120; i++) sim.Tick(rules.LocalTickInterval);
+        int frozenEnemies = 0;
+        bool ownFrozen = false;
+        foreach (var u in sim.Units)
+        {
+            if (!u.Active || u.Dead) continue;
+            bool frozen = u.FrozenUntil > sim.MatchTime;
+            if (u.Team == Team.Home) ownFrozen |= frozen;
+            else if (frozen) frozenEnemies++;
+        }
+        Check(frozenEnemies == 3 && !ownFrozen, $"개인전 프리즈: 세 상대 유닛이 모두 언다 ({frozenEnemies}/3, 내 유닛 {(ownFrozen ? "얼음" : "정상")})");
     }
 
     /// <summary>
@@ -274,11 +287,8 @@ internal static class SkillTest
         float dt = rules.LocalTickInterval;
         Cast(sim, Team.Home, SpellIds.S11_AxeWarrior, Column.Center, 0f);
         sim.Tick(dt);
-        Check(sim.FindTeamUnit(Team.Home, MinionKind.AxeOrc) == 0, "도끼 전사: 날아오는 동안에는 아직 유닛이 아니다");
-        var shot = FirstProjectile(sim);
-        Check(shot != null && shot.Height > 10f, $"도끼 전사: 하늘 높이에서 출발 ({(shot != null ? shot.Height : 0f):0}m)");
-        for (int i = 0; i < 60; i++) sim.Tick(dt);
-        Check(sim.FindTeamUnit(Team.Home, MinionKind.AxeOrc) != 0, "도끼 전사: 착지하면 유닛이 된다");
+        Check(FirstProjectile(sim) == null, "도끼 전사: 하늘에서 떨어지지 않는다");
+        Check(sim.FindTeamUnit(Team.Home, MinionKind.AxeOrc) != 0, "도끼 전사: 전장에서 바로 솟아난다");
     }
 
     private static void FreezeWaits()
@@ -286,19 +296,26 @@ internal static class SkillTest
         var arena = Duel();
         var sim = Start(arena, SpellIds.H01_Freeze, out var rules);
         float dt = rules.LocalTickInterval;
-        sim.SpawnUnit(Team.Away, sim.GetMinionDefinition(MinionKind.Melee), 1, new Vector2(0f, 20f));
-        UnitState unit = null;
-        foreach (var u in sim.Units) if (u.Active) unit = u;
+        var melee = sim.GetMinionDefinition(MinionKind.Melee);
+        sim.SpawnUnit(Team.Away, melee, 1, new Vector2(0f, 6f));
+        sim.SpawnUnit(Team.Away, melee, 1, new Vector2(0f, 36f));
+        UnitState near = null, far = null;
+        foreach (var u in sim.Units) if (u.Active) { if (u.Position.y < 20f) near = u; else far = u; }
+        float nearHp = near.Hp, farHp = far.Hp;
         Cast(sim, Team.Home, SpellIds.H01_Freeze, Column.Center, 0f);
-        sim.Tick(dt);
-        int comets = 0;
-        foreach (var p in sim.Projectiles.Pool) if (p.Active) comets++;
-        float hp = unit.Hp;
-        Check(comets == 6, $"프리즈: 혜성 6개가 사방에서 ({comets}개)");
-        for (int i = 0; i < 10; i++) sim.Tick(dt);
-        Check(unit.Hp == hp, "프리즈: 혜성이 닿기 전에는 아직 피해 없음");
-        for (int i = 0; i < 40; i++) sim.Tick(dt);
-        Check(unit.Hp < hp, $"프리즈: 혜성이 닿으면 피해 ({hp:0} → {unit.Hp:0})");
+        for (int i = 0; i < 12; i++) sim.Tick(dt);
+        Check(near.Hp < nearHp && far.Hp == farHp, $"프리즈: 내 앞부터 얼어붙는다 (가까운 {nearHp:0}→{near.Hp:0} / 먼 {farHp:0}→{far.Hp:0})");
+        for (int i = 0; i < 60; i++) sim.Tick(dt);
+        Check(far.Hp < farHp, $"프리즈: 물결이 끝까지 퍼진다 ({farHp:0} → {far.Hp:0})");
+        Check(far.FrozenUntil > sim.MatchTime + 7f, $"프리즈: 10초 동안 언다 (남은 {far.FrozenUntil - sim.MatchTime:0.0}초)");
+        var enemy = sim.GetPlayer(Team.Away);
+        float enemyHp = enemy.Hp;
+        Cast(sim, Team.Home, SpellIds.H01_Freeze, Column.Center, 0f);
+        for (int i = 0; i < 120; i++) sim.Tick(dt);
+        float firstHit = enemyHp - enemy.Hp;
+        Check(firstHit > 0f, $"프리즈: 상대 플레이어도 피해 ({enemyHp:0} → {enemy.Hp:0})");
+        for (int i = 0; i < 60; i++) sim.Tick(dt);
+        Check(Mathf.Approximately(enemyHp - enemy.Hp, firstHit), "프리즈: 상대 플레이어 피해는 한 번만");
     }
 
     private static void LaneSpellsStayInLane()
@@ -350,6 +367,112 @@ internal static class SkillTest
         for (int i = 0; i < 5; i++) sim.Tick(dt);
         sim.WriteSnapshot(snap);
         Check(snap.Players[(int)Team.Away].CastPhase == 0, "봇: 시전하면 준비 표시가 사라진다");
+    }
+
+    /// <summary>실패 확률 100% 봇은 룬을 그리다 멈추고 시전하지 않는다</summary>
+    private static void BotFailsSometimes()
+    {
+        var rules = MatchRuleConfig.CreateDefault();
+        var cfg = Config(2f);
+        cfg.CastFailChance = 1f;
+        var sim = new MatchSimulation(rules, SpellCatalog.CreateDefault(), Duel(), cfg, null, null, null, 78u) { LogCasts = false };
+        sim.JoinHuman(Team.Home, new[] { SpellIds.S03_Fireball, 0, 0, 0, 0, 0, 0, 0 });
+        sim.JoinBot(Team.Away, new OneCastBrain(sim.GetDeck(Team.Away)));
+        float dt = rules.LocalTickInterval;
+        for (int i = 0; i < 2000 && sim.Phase != MatchPhase.Playing; i++) sim.Tick(dt);
+        var snap = new MatchSnapshot();
+        bool shown = false;
+        for (int i = 0; i < 300; i++)
+        {
+            sim.Tick(dt);
+            sim.WriteSnapshot(snap);
+            shown |= snap.Players[(int)Team.Away].CastPhase != 0;
+        }
+        Check(shown, "봇 실패: 실패하기 전에 룬을 그리는 모습은 보인다");
+        Check(sim.GetPlayer(Team.Away).Slots[0].State == SlotState.Ready, "봇 실패: 시전하지 않아 쿨타임이 돌지 않는다");
+        Check(snap.Players[(int)Team.Away].CastPhase == 0, "봇 실패: 준비 표시가 사라진다");
+    }
+
+    private static int CountUnits(MatchSimulation sim, Team team, MinionKind kind, System.Collections.Generic.List<Vector2> at = null)
+    {
+        int n = 0;
+        foreach (var u in sim.Units)
+            if (u.Active && !u.Dead && u.Team == team && u.Kind == kind) { n++; at?.Add(u.Position); }
+        return n;
+    }
+
+    /// <summary>터렛 최대 3기 · 소환탑 최대 4기, 소환탑은 조준한 깊이에, 구조물끼리 겹치지 않는다</summary>
+    private static void StructureLimits()
+    {
+        var arena = Duel();
+        var sim = Start(arena, SpellIds.S13_Turret, out var rules);
+        float dt = rules.LocalTickInterval;
+        for (int i = 0; i < 4; i++) { Cast(sim, Team.Home, SpellIds.S13_Turret, Column.Center, 0f); sim.Tick(dt); }
+        var turrets = new System.Collections.Generic.List<Vector2>();
+        Check(CountUnits(sim, Team.Home, MinionKind.Turret, turrets) == 3, $"터렛: 최대 3기 ({turrets.Count}기)");
+        for (int i = 0; i < 5; i++) { Cast(sim, Team.Home, SpellIds.H06_SummonTower, Column.Center, 0.5f); sim.Tick(dt); }
+        var huts = new System.Collections.Generic.List<Vector2>();
+        Check(CountUnits(sim, Team.Home, MinionKind.SummonHut, huts) == 4, $"소환탑: 최대 4기 ({huts.Count}기)");
+        var lane = arena.GetLane(Team.Home, 1);
+        bool nearAim = false;
+        foreach (var h in huts) nearAim |= Mathf.Abs(lane.Along(h) - lane.Length * 0.5f) < 3f;
+        Check(nearAim, "소환탑: 조준한 깊이(레인 가운데)에 설치된다");
+        var all = new System.Collections.Generic.List<Vector2>(turrets);
+        all.AddRange(huts);
+        float closest = float.MaxValue;
+        for (int i = 0; i < all.Count; i++)
+        {
+            for (int j = i + 1; j < all.Count; j++) closest = Mathf.Min(closest, (all[i] - all[j]).magnitude);
+            closest = Mathf.Min(closest, Mathf.Min((all[i] - arena.StructurePosition(Team.Home, false)).magnitude, (all[i] - arena.StructurePosition(Team.Away, false)).magnitude));
+        }
+        Check(closest >= StructureExecutor.Spacing - 0.01f, $"설치물: 서로 · 타워와 겹치지 않는다 (가장 가까운 {closest:0.0}m)");
+        Cast(sim, Team.Home, SpellIds.H06_SummonTower, Column.Center, 0.98f);
+        sim.Tick(dt);
+        float maxAlong = 0f;
+        huts.Clear();
+        CountUnits(sim, Team.Home, MinionKind.SummonHut, huts);
+        foreach (var h in huts) maxAlong = Mathf.Max(maxAlong, lane.Along(h));
+        Check(maxAlong < lane.Length - arena.TowerDepth, $"소환탑: 상대 타워 앞까지만 ({maxAlong:0.0}m < {lane.Length - arena.TowerDepth:0.0}m)");
+    }
+
+    /// <summary>흡혈은 다른 칸에 선 상대 플레이어와 조준한 레인 유닛을 함께 흡수한다</summary>
+    private static void DrainHitsPlayerAndLane()
+    {
+        var arena = Duel();
+        var sim = Start(arena, SpellIds.H03_Drain, out var rules);
+        float dt = rules.LocalTickInterval;
+        sim.SpawnUnit(Team.Away, sim.GetMinionDefinition(MinionKind.Melee), 0, arena.GetLane(Team.Home, 0).Point(15f));
+        UnitState unit = null;
+        foreach (var u in sim.Units) if (u.Active) unit = u;
+        var enemy = sim.GetPlayer(Team.Away);
+        float playerHp = enemy.Hp, unitHp = unit.Hp;
+        int laneColumn = 0;
+        Column aim = TeamUtil.ToLocalColumn(Team.Home, laneColumn);
+        Check(enemy.WorldColumn != laneColumn, "흡혈: 상대가 다른 칸에 서 있다");
+        Cast(sim, Team.Home, SpellIds.H03_Drain, aim, 0f);
+        sim.Tick(dt);
+        Check(enemy.Hp < playerHp, $"흡혈: 상대 플레이어는 확정으로 흡수 ({playerHp:0} → {enemy.Hp:0})");
+        Check(unit.Hp < unitHp, $"흡혈: 조준한 레인 유닛도 함께 ({unitHp:0} → {unit.Hp:0})");
+    }
+
+    /// <summary>반사 결계: 맞은 스킬을 공격자에게 그대로 다시 쓴다 (총난사 60발이어도 한 번만)</summary>
+    private static void ReflectRecasts()
+    {
+        var arena = Duel();
+        var sim = Start(arena, SpellIds.H04_ReflectBarrier, out var rules);
+        float dt = rules.LocalTickInterval;
+        for (int t = 0; t < arena.TeamCount; t++) sim.Defense.Tower((Team)t, Column.Center).Alive = false;
+        Cast(sim, Team.Home, SpellIds.H04_ReflectBarrier, Column.Center, 0f);
+        sim.Tick(dt);
+        var home = sim.GetPlayer(Team.Home);
+        var away = sim.GetPlayer(Team.Away);
+        float homeHp = home.Hp, awayHp = away.Hp;
+        Column atHome = TeamUtil.ToLocalColumn(Team.Away, home.WorldColumn);
+        Cast(sim, Team.Away, SpellIds.S07_Gatling, atHome, 0f);
+        for (int i = 0; i < 300; i++) sim.Tick(dt);
+        Check(home.Hp >= homeHp, $"반사: 결계를 켠 쪽은 피해가 없다 ({homeHp:0} → {home.Hp:0})");
+        Check(away.Hp < awayHp, $"반사: 공격자가 같은 스킬을 되돌려 맞는다 ({awayHp:0} → {away.Hp:0})");
+        Check(awayHp - away.Hp < 300f, $"반사: 여러 발이어도 한 번만 되돌린다 (피해 {awayHp - away.Hp:0})");
     }
 
     /// <summary>경기 시작 0.5초 뒤 슬롯 0 을 한 번 쓴다 (봇 덱은 랜덤)</summary>
@@ -414,13 +537,17 @@ internal static class SkillTest
         FfaSkillsStayInLane(SpellIds.S06_Lightning, "번개", Column.Left, 0.5f);
         FfaSkillsStayInLane(SpellIds.H05_Rage, "분노", Column.Center, 0.5f);
         FfaSkillsStayInLane(SpellIds.S12_Mage, "드래곤", Column.Left, 0f);
-        FfaCometsLandOnLanes();
+        FfaFreezeReachesEveryone();
         WebcamRunes();
         SummonLands();
         FreezeWaits();
         LaneSpellsStayInLane();
         BotShowsWindup();
+        BotFailsSometimes();
         HumanPreview();
+        StructureLimits();
+        DrainHitsPlayerAndLane();
+        ReflectRecasts();
         Console.WriteLine(s_failed == 0 ? "■ 맵 밖 스킬 · 시전 준비 검사 통과" : $"■ 실패 {s_failed}개");
         return s_failed == 0 ? 0 : 1;
     }

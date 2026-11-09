@@ -22,7 +22,7 @@ MonoBehaviour:
   Behavior: 8
   FocusCategory: 0
   Dodgeable: 0
-  BaseDamage: 35
+  BaseDamage: 15
   Radius: 1.6
   MaxDepth: 1
   ProjectileSpeed: 20
@@ -30,7 +30,7 @@ MonoBehaviour:
   ShotInterval: 0.1
   ArcHeight: 0
   TelegraphDelay: 0
-  OffMap: 1
+  OffMap: 0
   OffMapDistance: 14
   OffMapHeight: 0.05
   OffMapArrivalHeight: 0
@@ -40,10 +40,10 @@ MonoBehaviour:
   TickDamageRamp: 0
   MaxTickDamage: 0
   FieldHalfDepth: 2.5
-  LaneStartDepth: 0.1
+  LaneStartDepth: 0.04
   LaneEndDepth: 0.85
   StatusEffectId: 
-  EffectDuration: 2.5
+  EffectDuration: 3.5
   ShieldAmount: 0
   RegenDelay: 3
   RegenPerSecond: 0
@@ -52,5 +52,4 @@ MonoBehaviour:
   MoveSpeedMultiplier: 1
   IncomingDamageMultiplier: 1
   EffectRatio: 0.8
-  KnockbackDistance: 7
   SummonKind: 0

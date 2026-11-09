@@ -17,7 +17,7 @@ MonoBehaviour:
   VfxName: SummonTower
   ThemeColor: {r: 0.65, g: 0.55, b: 0.4, a: 1}
   Tier: 1
-  Targeting: 4
+  Targeting: 1
   Executor: 4
   Behavior: 13
   FocusCategory: 2
@@ -46,5 +46,4 @@ MonoBehaviour:
   MoveSpeedMultiplier: 1
   IncomingDamageMultiplier: 1
   EffectRatio: 1
-  KnockbackDistance: 0
   SummonKind: 7

@@ -28,7 +28,7 @@ namespace SpellboundVR.Presentation
             { "VFX_S04_ArrowRain_Cast", "VFX_S05_arrow_Cast" },
             { "VFX_S04_ArrowRain_Projectile", "VFX_S05_arrow_Projectile" },
             { "VFX_S05_Tornado_Cast", "VFX_S06_tornado_Cast" },
-            { "VFX_S05_Tornado_Projectile", "VFX_S06_tornado_Projectile" },
+            { "VFX_S05_Tornado_Projectile", "TornadoWithWindEfc" }, // EzTornado (ArenaStateView 가 크기를 맞춘다)
             { "VFX_S06_Lightning_Cast", "VFX_S07_thunde_Cast" },
             { "VFX_S06_Lightning_Impact", "VFX_S07_thunde_Impact" },
             { "VFX_S07_Gatling_Cast", "VFX_S09_shootingr_Cast" },

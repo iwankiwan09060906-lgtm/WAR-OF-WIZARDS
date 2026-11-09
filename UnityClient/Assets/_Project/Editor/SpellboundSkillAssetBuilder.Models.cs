@@ -141,6 +141,11 @@ namespace SpellboundVR.EditorTools
             var model = Add(root, OrcDir + "orc.prefab", 1f, name: "Orc");
             if (model == null) return;
             FitHeight(model, 2.2f);
+            // 도끼 뼈(Axe1_R)는 휴머노이드 뼈가 아니라 애니메이션이 움직이지 않는다 — 바인드 자세에선 손에서 1m 넘게 떨어져 있으므로
+            // 원본 애니메이션이 쓰는 고정 손잡이 자세(FBX Lcl T(-17.2, -9.25, -40.4) · R(91.2, 7.34, -25.7), 모든 클립에서 일정)를 Unity 좌표로 넣는다
+            var axe = FindDeep(model.transform, "Axe1_R");
+            if (axe != null) axe.SetLocalPositionAndRotation(new Vector3(0.08611996f, -0.0462503f, -0.2018643f),
+                                                             new Quaternion(0.9197706f, -0.18055548f, -0.34561247f, 0.044427747f));
             var ac = BuildStateController("Summon_AxeOrc", new[]
             {
                 new StateSpec { Name = "Walk", Clip = LoadClip(OrcDir + "orc/WalkWalk.fbx", "Walk"), Speed = 1f },

@@ -8713,7 +8713,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SpellboundVR.Arena.ArenaLayout
   homeBaseAnchor: {fileID: 928773789}
-  columnSpacing: 5
+  columnSpacing: 7
   fieldLength: 41
   nexusDepth: 3
   towerDepth: 13
@@ -8721,7 +8721,7 @@ MonoBehaviour:
   commanderPlatformHeight: 0.52243906
   ffaNexusDepth: 4
   ffaTowerDepth: 9
-  ffaViewLift: 2
+  ffaEyeHeight: 4.2
   ffaModelScale: 0.65
   homeTowerVisual: {fileID: 572280587}
   homeNexusVisual: {fileID: 269228009}

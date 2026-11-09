@@ -37,7 +37,7 @@ MonoBehaviour:
   LaneStartDepth: 0
   LaneEndDepth: 1
   StatusEffectId: S09_TowerBuff
-  EffectDuration: 5
+  EffectDuration: 10
   ShieldAmount: 0
   RegenDelay: 3
   RegenPerSecond: 0
@@ -46,5 +46,4 @@ MonoBehaviour:
   MoveSpeedMultiplier: 1
   IncomingDamageMultiplier: 0.5
   EffectRatio: 1
-  KnockbackDistance: 0
   SummonKind: 0

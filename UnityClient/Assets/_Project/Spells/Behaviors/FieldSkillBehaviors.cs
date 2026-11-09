@@ -1,8 +1,8 @@
 // 장판 · 레인 계열 스킬 동작 (§14.4, §11.2 지속 장판 = 매 틱 판정)
 //   S02 독 장판  : 파이어볼처럼 조준 지점(열 + 깊이)으로 독병이 포물선 비행 → 떨어진 깊이를 중심으로 띠 장판 (1:1 은 3열 전체, 개인전은 그 레인 안).
 //                  틱마다 피해, 머문 틱 수만큼 피해 증가(상한)
-//   S05 토네이도 : 조준한 레인을 따라 회오리가 상대 진영 쪽으로 쓸고 지나간다 (OffMap 이면 시전자 등 뒤 맵 밖에서 레인 축을 따라 들어온다).
-//                  닿은 적 유닛은 피해 + KnockbackDistance만큼 뒤로(상대 진영 쪽) 밀려나고 잠시 정지 (유닛마다 1회, 설치물은 피해만)
+//   S05 토네이도 : 시전자 바로 앞에서 생긴 회오리가 조준한 레인을 따라 상대 진영 쪽으로 나아간다.
+//                  닿은 적 유닛은 회오리 앞에 붙잡혀 함께 밀려가며 TickInterval 마다 피해 (설치물은 움직이지 않고 피해만)
 //   S06 번개     : 조준 지점(열 + 깊이) 중심, 레인 폭 × 깊이 ±FieldHalfDepth(세로로 긴 직사각형)에 예고 후 ShotCount번 낙뢰.
 //                  매 낙뢰마다 범위 안 적 유닛 전부 + 범위 안에 서 있는 상대 플레이어 (그 순간 위치 판정)
 //   H02 레이저 빔 : 0.5초 예고선 후 EffectDuration 동안 레인 전체를 태우는 빔. 틱마다 레인 안 유닛 + 그 열에 선 상대 플레이어
@@ -160,6 +160,7 @@ namespace SpellboundVR.Spells.Behaviors
         private readonly float _endDepth;
         private readonly float _duration;
         private readonly int[] _hitIds = new int[MaxTracked];
+        private readonly float[] _nextHit = new float[MaxTracked];
         private int _hitCount;
         private float _elapsed;
 
@@ -169,8 +170,8 @@ namespace SpellboundVR.Spells.Behaviors
             _team = team;
             _lane = world.Arena.GetLane(team, worldColumn);
             _focus = SpellDamage.DamageFocus(def, focus);
-            // 깊이(m, 시전자 발판 기준)로 계산 — 진영 방향과 무관. 맵 밖 출발은 레인 축의 시전자 뒤쪽
-            _startDepth = def.FromOffMap ? -def.OffMapDistance : Mathf.Clamp01(def.LaneStartDepth) * _lane.Length;
+            // 깊이(m, 시전자 발판 기준)로 계산 — 진영 방향과 무관. 시전자 바로 앞에서 출발
+            _startDepth = Mathf.Clamp01(def.LaneStartDepth) * _lane.Length;
             _endDepth = Mathf.Max(_startDepth + 1f, Mathf.Clamp01(def.LaneEndDepth) * _lane.Length);
             _duration = Mathf.Max(0.3f, def.EffectDuration);
 
@@ -204,27 +205,34 @@ namespace SpellboundVR.Spells.Behaviors
             for (int i = 0; i < s_buffer.Count; i++)
             {
                 int id = s_buffer[i];
-                if (AlreadyHit(id)) continue;
-                MarkHit(id);
-                SpellDamage.HitUnit(world, _def.SpellId, _team, id, _def.BaseDamage, _focus);
-                // 회오리 앞쪽(상대 진영 방향)으로 밀어낸다 — 회오리가 다시 잡지 않도록 반경 밖까지
+                if (TakeHit(id)) SpellDamage.HitUnit(world, _def.SpellId, _team, id, _def.BaseDamage, _focus);
+                // 회오리 앞에 붙잡아 같이 밀고 간다 (회오리가 지나가는 동안 계속 붙잡힘)
                 if (!world.TryGetUnitInfo(id, out Vector2 pos, out _, out _)) continue;
                 float depth = _lane.Along(pos);
-                float target = Mathf.Max(depth, front) + r + Mathf.Max(0f, _def.KnockbackDistance);
-                world.PushUnit(id, _lane.Dir * (target - depth), Mathf.Max(0f, _def.EffectRatio));
+                float target = front + r * 0.6f;
+                if (target > depth) world.PushUnit(id, _lane.Dir * (target - depth), Mathf.Max(0f, _def.EffectRatio));
             }
             return _elapsed < _duration;
         }
 
-        private bool AlreadyHit(int id)
+        /// <summary>그 유닛에게 지금 피해를 줄 차례인가 (유닛마다 TickInterval 간격)</summary>
+        private bool TakeHit(int id)
         {
-            for (int i = 0; i < _hitCount; i++) if (_hitIds[i] == id) return true;
-            return false;
-        }
-
-        private void MarkHit(int id)
-        {
-            if (_hitCount < MaxTracked) _hitIds[_hitCount++] = id;
+            float interval = Mathf.Max(0.1f, _def.TickInterval);
+            for (int i = 0; i < _hitCount; i++)
+            {
+                if (_hitIds[i] != id) continue;
+                if (_elapsed < _nextHit[i]) return false;
+                _nextHit[i] = _elapsed + interval;
+                return true;
+            }
+            if (_hitCount < MaxTracked)
+            {
+                _hitIds[_hitCount] = id;
+                _nextHit[_hitCount] = _elapsed + interval;
+                _hitCount++;
+            }
+            return true;
         }
     }
 
@@ -283,9 +291,11 @@ namespace SpellboundVR.Spells.Behaviors
 
         private void Strike(ISpellWorld world, int index)
         {
-            // 낙뢰 2줄기: 범위 안에서 매번 다른 자리 (표시 전용 — 피해는 범위 전체)
+            // 낙뢰 4줄기: 먹구름 아래 범위 안에서 매번 다른 자리 (표시 전용 — 피해는 범위 전체)
             world.PublishFx(_def.SpellId, VfxPart.Impact, Mark(world, s_marks[index % s_marks.Length]), 0f, _worldColumn);
             world.PublishFx(_def.SpellId, VfxPart.Impact, Mark(world, s_marks[(index + 2) % s_marks.Length] * 0.7f), 0f, _worldColumn);
+            world.PublishFx(_def.SpellId, VfxPart.Impact, Mark(world, s_marks[(index + 1) % s_marks.Length] * 0.4f), 0f, _worldColumn);
+            world.PublishFx(_def.SpellId, VfxPart.Impact, Mark(world, -s_marks[index % s_marks.Length] * 0.85f), 0f, _worldColumn);
 
             float half = world.Arena.LaneHalfWidth;
             float min = _along - _halfDepth, max = _along + _halfDepth;

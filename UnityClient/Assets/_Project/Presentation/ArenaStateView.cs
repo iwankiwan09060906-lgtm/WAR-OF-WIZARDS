@@ -10,6 +10,9 @@
 //     내 쉴드 · 결계는 눈높이 아래에만 두어 시야를 가리지 않는다.
 //   · 아트 프리팹(MDL_* / VFX_*)이 카탈로그에 있으면 쓰고, 없으면 캡슐 · 큐브 대체 비주얼을 쓴다 (§25.4).
 //   · 전투 중 생성 · 파괴 대신 풀을 쓴다 (§17).
+//   · S11 도끼 전사: 전장에서 폭발과 함께 솟아나고 충격파 + 돌 파편 10개 (3초 뒤 삭제) · S12 드래곤: 내려앉으면 바람이 인다
+//   · S03 파이어볼: 용암 바위 구체(Lavabrick)가 앞장서 떨어지고 그 뒤로 이펙트 팩 불길(짧게) + 튀는 불씨
+//   · S13 터렛: StoneKeep Tower_c 탑 (예전 탑의 1.5배 높이) 위에 궁수 · S04 화살은 전장 바닥에 꽂힌다 · S05 토네이도 = EzTornado
 
 using System.Collections.Generic;
 using SpellboundVR.Arena;
@@ -41,7 +44,26 @@ namespace SpellboundVR.Presentation
             public int LastTint = -1;
             public float Spin;
             public Renderer[] ModelRenderers;
+            /// <summary>솟아나는 등장 연출 시작 시각 (-1 = 없음)</summary>
+            public float PopStart = -1f;
         }
+
+        /// <summary>날아가는 돌 파편 · 퍼지는 충격파 · 바닥에 꽂힌 화살 (표시 전용)</summary>
+        private sealed class Debris
+        {
+            public Transform T;
+            public Vector3 Velocity;
+            public Vector3 Spin;
+            public float Start;
+            public float End;
+            /// <summary>충격파 고리 (null 이면 파편 · 화살)</summary>
+            public Material Wave;
+            /// <summary>바닥에 꽂힌 화살 — 움직이지 않고 시간이 되면 풀로 돌려보낸다</summary>
+            public bool Stuck;
+        }
+
+        /// <summary>도끼 전사 등장 파편에 쓰는 AEGIS 돌 (VFXCatalog)</summary>
+        private static readonly string[] DebrisRocks = { "Small Rock1", "Small Rock4", "Small Rock5", "Small Rock7", "Rock1", "Rock2" };
 
         /// <summary>Animator int 파라미터: 0 이동 · 1 공격 · 2 돌파(이동) · 3 빙결 · 4 회오리 (UnitVisualState)</summary>
         private static readonly int AnimStateHash = Animator.StringToHash("State");
@@ -88,13 +110,17 @@ namespace SpellboundVR.Presentation
         [Tooltip("타워 총알 속도 (m/s) — 마법 불꽃이 날아가는 게 보이도록 느리게 (사거리 약 10m → 약 0.8초)")]
         public float towerShotSpeed = 12f;
         [Tooltip("드래곤 비행 높이 (m)")]
-        public float dragonFlightHeight = 3f;
+        public float dragonFlightHeight = 5f;
+        [Tooltip("S05 토네이도 (EzTornado 프리팹) 크기 배율 — 원본은 수십 m 크기")]
+        public float tornadoScale = 0.1f;
+        [Tooltip("S07 총난사 탄 크기 배율")]
+        public float gatlingShotScale = 2f;
 
         [Header("소환수 · 설치물 모델 크기 배율 (MDL_* 프리팹 기준)")]
         [Tooltip("S11 도끼 전사 — 미니언 사이에서 눈에 띄게 크게")]
-        public float axeOrcScale = 1.5f;
-        [Tooltip("S12 드래곤 — 날개 폭 6m 프리팹을 줄여서")]
-        public float dragonScale = 0.55f;
+        public float axeOrcScale = 2.25f;
+        [Tooltip("S12 드래곤 — 날개 폭 6m 프리팹 기준")]
+        public float dragonScale = 1.65f;
         [Tooltip("S13 터렛")]
         public float turretScale = 0.6f;
         [Tooltip("H06 소환탑")]
@@ -117,6 +143,9 @@ namespace SpellboundVR.Presentation
         private readonly Dictionary<int, GameObject> _projectiles = new Dictionary<int, GameObject>(64);
         private readonly Dictionary<GameObject, Renderer[]> _modelRenderers = new Dictionary<GameObject, Renderer[]>(128);
         private readonly List<int> _removeBuffer = new List<int>(64);
+        private readonly List<Debris> _debris = new List<Debris>(32);
+        /// <summary>바닥에 꽂힐 화살 투사체 Id → 마지막 서버 위치</summary>
+        private readonly Dictionary<int, Vector3> _arrows = new Dictionary<int, Vector3>(16);
         private readonly ObjectPool[,] _unitPools = new ObjectPool[TeamUtil.TeamCount, MinionDefinition.KindCount];
         private readonly Dictionary<int, ObjectPool> _projectilePools = new Dictionary<int, ObjectPool>();
         private Transform _poolRoot;
@@ -196,7 +225,7 @@ namespace SpellboundVR.Presentation
                 case MinionKind.AxeOrc: return 2.9f;
                 case MinionKind.Dragon: return 2.6f;
                 case MinionKind.Skeleton: return 1.3f;
-                case MinionKind.Turret: return 5.6f;
+                case MinionKind.Turret: return 8.2f; // Tower_c 탑 (예전 탑의 1.5배)
                 case MinionKind.SummonHut: return 4.4f;
                 default: return 1.4f;
             }
@@ -274,6 +303,7 @@ namespace SpellboundVR.Presentation
                 body.transform.localScale = size;
                 body.transform.localPosition = new Vector3(0f, shape == PrimitiveType.Cube ? size.y * 0.5f : size.y, 0f);
             }
+            if (kind == MinionKind.Turret) RebuildTurretTower(go.transform);
             // 모델 크기 배율: 자식(모델)만 키우고 줄인다 — HP바 두께 · 폭은 그대로
             float scale = ModelScale(kind);
             if (!Mathf.Approximately(scale, 1f))
@@ -290,6 +320,31 @@ namespace SpellboundVR.Presentation
             ApplyTint(renderers, BaseTint(team, kind));
             AttachHpBar(go.transform, ScaledHpBarHeight(kind), IsStructureKind(kind) ? 1.4f : 0.6f);
             return go;
+        }
+
+        /// <summary>
+        /// S13 터렛 탑을 StoneKeep Tower_c 로 바꾼다 — 예전 탑(StoneTower, 꼭대기 17 × 0.23)보다 1.5배 높게, 궁수(ArcherMount)는 새 꼭대기로.
+        /// Tower_c 가 카탈로그에 없으면 예전 탑 그대로.
+        /// </summary>
+        private void RebuildTurretTower(Transform model)
+        {
+            const float sink = -0.46f;          // 예전 탑과 같이 바닥에 살짝 묻는다
+            const float oldTop = 17f * 0.23f + sink;
+            const float newTopLocal = 22f;      // Tower_c 의 Top_b 높이 (원본 단위)
+            var oldTower = model.Find("StoneTower");
+            var archer = model.Find("ArcherMount");
+            if (oldTower == null || archer == null || _catalog == null || !_catalog.TryGet("Tower_c", out var towerPrefab)) return;
+            float top = oldTop * 1.5f;
+            var tower = Instantiate(towerPrefab, model, false).transform;
+            tower.name = "StoneTower";
+            tower.localPosition = new Vector3(0f, sink, 0f);
+            tower.localScale = Vector3.one * ((top - sink) / newTopLocal);
+            foreach (var t in tower.GetComponentsInChildren<Transform>(true))
+                if (t.name.StartsWith("Rubble")) t.gameObject.SetActive(false); // 무너진 돌무더기 장식은 빼고
+            foreach (var c in tower.GetComponentsInChildren<Collider>(true)) Destroy(c);
+            oldTower.SetParent(null, false); // 렌더러 목록 · 크기 배율에서 빠지게
+            Destroy(oldTower.gameObject);
+            archer.localPosition = new Vector3(archer.localPosition.x, top, archer.localPosition.z);
         }
 
         /// <summary>진영색 틴트 — 소환수 · 설치물은 원래 텍스처가 살도록 더 연하게</summary>
@@ -329,12 +384,28 @@ namespace SpellboundVR.Presentation
             var def = _session.Catalog.Get(spellId);
             GameObject prefab = null;
             bool hasPrefab = def != null && _catalog != null &&
-                             (_catalog.TryGet(def.GetVfxPrefabName(VfxPart.Projectile), out prefab) ||
-                              // S05 토네이도: 움직이는 회오리 = 장판(Field) 프리팹을 투사체처럼 이동
-                              (def.Behavior == SpellBehaviorType.TornadoLane && _catalog.TryGet(def.GetVfxPrefabName(VfxPart.Field), out prefab)) ||
+                             (_catalog.TryGet(def.GetVfxPrefabName(VfxPart.Projectile), out prefab) || // S05 토네이도 = EzTornado (카탈로그 별칭)
                               // 맵 밖에서 날아오는 소환수: 유닛 모델이 그대로 날아온다
                               (IsFlyingSummon(def) && _catalog.TryGet(ModelName(def.SummonKind), out prefab)));
-            if (hasPrefab)
+            if (hasPrefab && def.SpellId == SpellIds.S03_Fireball)
+            {
+                var source = prefab;
+                pool = new ObjectPool(() => CreateFireball(source), _poolRoot, 2, "Projectile_" + spellId);
+            }
+            else if (hasPrefab && def.Behavior == SpellBehaviorType.TornadoLane && !prefab.name.StartsWith("VFX_"))
+            {
+                // EzTornado: 월드 공간 · 수십 m 크기로 만든 파티클 — 로컬 · 계층 스케일로 바꾸고 줄여서 부모째 움직인다
+                var source = prefab;
+                pool = new ObjectPool(() =>
+                {
+                    var root = new GameObject("Tornado");
+                    var inner = Instantiate(source, root.transform, false);
+                    inner.transform.localScale = Vector3.one * tornadoScale;
+                    VFXPlayer.MakeScalable(inner);
+                    return root;
+                }, _poolRoot, 2, "Projectile_" + spellId);
+            }
+            else if (hasPrefab)
             {
                 pool = new ObjectPool(prefab, _poolRoot, def.ShotCount > 4 ? projectilePrewarm : 4);
             }
@@ -350,6 +421,92 @@ namespace SpellboundVR.Presentation
             }
             _projectilePools.Add(spellId, pool);
             return pool;
+        }
+
+        /// <summary>S03 파이어볼 불길(월드 공간 파티클)이 뒤로 남는 길이 비율 — 길이 = 낙하 속도 × 파티클 수명</summary>
+        private const float FireballTrailRatio = 0.25f;
+
+        /// <summary>파이어볼 용암 구체 지름 · 진행 방향으로 앞선 거리 (프리팹 단위 — 불꽃 입자 1.5 기준, 경기에서는 OffMapVisualScale 배)</summary>
+        private const float FireballCoreSize = 0.6f;
+        private const float FireballCoreLead = 0.35f;
+        /// <summary>이펙트 팩 불길 묶음을 탄 중심에서 뒤로 미는 거리 (프리팹 단위) — 구체 뒤에서 타오르게</summary>
+        private const float FireballFlameBack = 0.6f;
+        private static Material s_fireballEmber;
+
+        /// <summary>
+        /// S03 파이어볼 탄 — 용암 바위 구체(MDL_Fireball_Core = Lavabrick 재질)가 진행 방향 앞에 서고, 이펙트 팩 불길 묶음은 그 뒤로 민다.
+        /// 구체는 불투명이라 뒤쪽 불길을 가린다. 크게 키우면 불길이 길게 늘어지므로 뒤에 남는 불의 수명을 줄인다. 둘레에 불씨가 튄다.
+        /// </summary>
+        private GameObject CreateFireball(GameObject prefab)
+        {
+            var go = new GameObject("Fireball");
+            var flames = Instantiate(prefab, go.transform, false);
+            flames.transform.localPosition = new Vector3(0f, 0f, -FireballFlameBack); // 탄은 진행 방향(+Z)을 본다 — 불길은 뒤
+            foreach (var ps in flames.GetComponentsInChildren<ParticleSystem>(true))
+            {
+                var main = ps.main;
+                if (main.simulationSpace == ParticleSystemSimulationSpace.World) main.startLifetimeMultiplier *= FireballTrailRatio;
+                // 예전엔 불길 프리팹이 탄 루트라 자기 스케일로 키워졌다 — 자식이 된 루트 입자만 부모 크기를 따르게 (나머지는 예전과 같은 크기)
+                if (ps.gameObject == flames) main.scalingMode = ParticleSystemScalingMode.Hierarchy;
+            }
+            if (_catalog != null && _catalog.TryGet("MDL_Fireball_Core", out var rock))
+            {
+                var core = Instantiate(rock, go.transform, false);
+                core.name = "Core";
+                core.transform.localPosition = new Vector3(0f, 0f, FireballCoreLead); // 탄은 진행 방향(+Z)을 본다 — 구체가 앞, 불길이 뒤
+                core.transform.localRotation = Random.rotation;                        // 탄마다 다른 균열 무늬
+                core.transform.localScale = Vector3.one * FireballCoreSize;
+            }
+            AddEmbers(go.transform);
+            return go;
+        }
+
+        /// <summary>구체 둘레에서 튀어 날아가는 자리 뒤에 흩어지는 작은 불씨</summary>
+        private static void AddEmbers(Transform parent)
+        {
+            if (s_fireballEmber == null)
+            {
+                const int n = 32;
+                var dot = new Texture2D(n, n, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp, name = "FireballEmber" };
+                for (int y = 0; y < n; y++)
+                    for (int x = 0; x < n; x++)
+                    {
+                        float u = (x + 0.5f) / n * 2f - 1f, v = (y + 0.5f) / n * 2f - 1f;
+                        float a = Mathf.Clamp01(1f - Mathf.Sqrt(u * u + v * v));
+                        dot.SetPixel(x, y, new Color(1f, 1f, 1f, a * a));
+                    }
+                dot.Apply();
+                s_fireballEmber = new Material(FallbackVisuals.Transparent(Color.white)) { mainTexture = dot, name = "FireballEmber" };
+            }
+            var embers = new GameObject("Embers").AddComponent<ParticleSystem>();
+            embers.transform.SetParent(parent, false);
+            embers.transform.localPosition = new Vector3(0f, 0f, FireballCoreLead);
+            embers.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+            var em = embers.main;
+            em.loop = true;
+            em.simulationSpace = ParticleSystemSimulationSpace.World;   // 날아가며 뒤에 흩뿌려진다
+            em.scalingMode = ParticleSystemScalingMode.Hierarchy;
+            em.startLifetime = new ParticleSystem.MinMaxCurve(0.4f, 0.8f);
+            em.startSpeed = new ParticleSystem.MinMaxCurve(0.3f, 0.9f);
+            em.startSize = new ParticleSystem.MinMaxCurve(0.03f, 0.08f);
+            em.startColor = new ParticleSystem.MinMaxGradient(new Color(1f, 0.85f, 0.35f), new Color(1f, 0.4f, 0.05f));
+            em.maxParticles = 60;
+            var rate = embers.emission;
+            rate.rateOverTime = 30f;
+            var shape = embers.shape;
+            shape.shapeType = ParticleSystemShapeType.Sphere;
+            shape.radius = FireballCoreSize * 0.5f;
+            var fade = embers.colorOverLifetime;
+            fade.enabled = true;
+            var g = new Gradient();
+            g.SetKeys(new[] { new GradientColorKey(Color.white, 0f), new GradientColorKey(Color.white, 1f) },
+                      new[] { new GradientAlphaKey(1f, 0f), new GradientAlphaKey(1f, 0.6f), new GradientAlphaKey(0f, 1f) });
+            fade.color = g;
+            var r = embers.GetComponent<ParticleSystemRenderer>();
+            r.sharedMaterial = s_fireballEmber;
+            r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            r.receiveShadows = false;
+            embers.Play(true);
         }
 
         private void OnDestroy()
@@ -658,6 +815,7 @@ namespace SpellboundVR.Presentation
             UpdateStructures(s);
             UpdateTowerShots();
             UpdatePlayers(s);
+            UpdateDebris();
         }
 
         private void UpdateUnits(MatchSnapshot s)
@@ -685,8 +843,15 @@ namespace SpellboundVR.Presentation
                     isNew = true;
                     if (IsSummonKind(kind))
                     {
-                        PlayUnitFx("VFX_Unit_Spawn", _arena.ToWorld(u.U, u.V, 0.05f), Quaternion.identity, 2f);
+                        Vector3 ground = _arena.ToWorld(u.U, u.V, 0.05f);
+                        PlayUnitFx("VFX_Unit_Spawn", ground, Quaternion.identity, 2f);
                         PlaySpawnSound(kind, (Team)team, target);
+                        if (kind == MinionKind.AxeOrc)
+                        {
+                            AxeOrcEntrance(ground);
+                            view.PopStart = Time.time;
+                        }
+                        else if (kind == MinionKind.Dragon) DragonWind(ground);
                     }
                 }
                 view.SeenFrame = _frame;
@@ -726,6 +891,7 @@ namespace SpellboundVR.Presentation
                 }
                 if (view.Spin > 0f) rot = Quaternion.Euler(0f, view.Spin, 0f);
                 view.Go.transform.SetPositionAndRotation(next, rot);
+                if (view.PopStart >= 0f) PopIn(view);
 
                 SetFill(view.HpFill, u.MaxHp > 0 ? (float)u.Hp / u.MaxHp : 0f);
                 Billboard(view.HpFill);
@@ -745,7 +911,7 @@ namespace SpellboundVR.Presentation
                 if (tint != view.LastTint && view.ModelRenderers != null)
                 {
                     view.LastTint = tint;
-                    Color c = tint == 1 ? new Color(0.55f, 0.85f, 1f) : (tint == 2 ? new Color(1f, 0.45f, 0.4f) : BaseTint(view.Team, kind));
+                    Color c = tint == 1 ? FrozenTint : (tint == 2 ? new Color(1f, 0.45f, 0.4f) : BaseTint(view.Team, kind));
                     ApplyTint(view.ModelRenderers, c);
                 }
 
@@ -774,9 +940,123 @@ namespace SpellboundVR.Presentation
             }
         }
 
-        private void PlayUnitFx(string prefabName, Vector3 position, Quaternion rotation, float lifetime)
+        private void PlayUnitFx(string prefabName, Vector3 position, Quaternion rotation, float lifetime, float scale = 1f)
         {
-            if (_vfx != null) _vfx.PlayNamed(prefabName, position, rotation, lifetime);
+            if (_vfx == null) return;
+            if (Mathf.Approximately(scale, 1f)) _vfx.PlayNamed(prefabName, position, rotation, lifetime);
+            else _vfx.PlayScaled(prefabName, position, rotation, lifetime, scale);
+        }
+
+        private static readonly Color FrozenTint = new Color(0.3f, 0.55f, 1f);
+
+        /// <summary>S11: 전장에서 폭발 → 전사가 솟아나며 충격파 + 돌 파편 10개 (3초 뒤 삭제)</summary>
+        private void AxeOrcEntrance(Vector3 ground)
+        {
+            if (_vfx != null)
+            {
+                _vfx.PlayScaled("VFX_S03_Fireball_Impact", ground + Vector3.up * 0.4f, Quaternion.identity, 2.5f, 2f);
+                _vfx.PlayScaled("VFX_Unit_Death", ground + Vector3.up * 0.2f, Quaternion.identity, 2f, 2.5f); // 흙먼지
+            }
+            SoundManager.Play("SFX_TowerDestroy", SoundVolume.Unit, ground, 0.3f);
+
+            var wave = new Material(FallbackVisuals.Transparent(Color.white)) { name = "Shockwave" };
+            var ring = FallbackVisuals.Primitive(PrimitiveType.Cylinder, "Shockwave", wave);
+            ring.transform.SetParent(transform, false);
+            ring.transform.position = ground + Vector3.up * 0.05f;
+            _debris.Add(new Debris { T = ring.transform, Wave = wave, Start = Time.time, End = Time.time + 0.6f });
+
+            if (_catalog == null) return;
+            for (int i = 0; i < 10; i++)
+            {
+                if (!_catalog.TryGet(DebrisRocks[i % DebrisRocks.Length], out var rockPrefab)) continue;
+                var rock = Instantiate(rockPrefab, transform);
+                foreach (var c in rock.GetComponentsInChildren<Collider>(true)) Destroy(c);
+                // 돌 크기가 제각각이라 렌더러 크기로 0.35 ~ 0.8m 에 맞춘다
+                float size = 1f;
+                var renderers = rock.GetComponentsInChildren<Renderer>();
+                if (renderers.Length > 0)
+                {
+                    var b = renderers[0].bounds;
+                    for (int r = 1; r < renderers.Length; r++) b.Encapsulate(renderers[r].bounds);
+                    size = Mathf.Max(0.01f, Mathf.Max(b.size.x, Mathf.Max(b.size.y, b.size.z)));
+                }
+                rock.transform.localScale = rock.transform.localScale * (Random.Range(0.35f, 0.8f) / size);
+                float angle = (i + Random.Range(-0.3f, 0.3f)) / 10f * Mathf.PI * 2f;
+                Vector3 dir = new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle));
+                rock.transform.position = ground + dir * 0.8f + Vector3.up * 0.6f;
+                rock.transform.rotation = Random.rotation;
+                _debris.Add(new Debris
+                {
+                    T = rock.transform,
+                    Velocity = dir * Random.Range(4f, 9f) + Vector3.up * Random.Range(5f, 10f),
+                    Spin = Random.insideUnitSphere * 540f,
+                    Start = Time.time,
+                    End = Time.time + 3f,
+                });
+            }
+        }
+
+        /// <summary>S12: 드래곤이 내려앉으면 날갯짓 바람이 바닥을 휩쓴다 (EzTornado 바람을 납작하게, 효과 없음)</summary>
+        private void DragonWind(Vector3 ground)
+        {
+            if (_vfx == null) return;
+            _vfx.PlayNamed("TornadoWithWindEfc", ground, Quaternion.identity, 1.8f, new Vector3(0.16f, 0.035f, 0.16f));
+            _vfx.PlayScaled("VFX_Unit_Death", ground + Vector3.up * 0.2f, Quaternion.identity, 1.5f, 2f); // 흙먼지
+        }
+
+        /// <summary>솟아나는 등장 — 0.35초 동안 0 → 살짝 넘쳤다가 1</summary>
+        private static void PopIn(UnitView view)
+        {
+            float t = (Time.time - view.PopStart) / 0.35f;
+            if (t >= 1f)
+            {
+                view.PopStart = -1f;
+                view.Go.transform.localScale = Vector3.one;
+                return;
+            }
+            const float c1 = 1.70158f, c3 = c1 + 1f;
+            float k = 1f + c3 * Mathf.Pow(t - 1f, 3f) + c1 * Mathf.Pow(t - 1f, 2f); // easeOutBack
+            view.Go.transform.localScale = Vector3.one * Mathf.Max(0.01f, k);
+        }
+
+        private void UpdateDebris()
+        {
+            float now = Time.time, dt = Time.deltaTime, ground = _arena.GroundY;
+            for (int i = _debris.Count - 1; i >= 0; i--)
+            {
+                var d = _debris[i];
+                if (d.T == null) { _debris.RemoveAt(i); continue; }
+                if (now >= d.End)
+                {
+                    if (d.Stuck) d.T.gameObject.SetActive(false); // 화살은 풀로
+                    else
+                    {
+                        Destroy(d.T.gameObject);
+                        if (d.Wave != null) Destroy(d.Wave);
+                    }
+                    _debris.RemoveAt(i);
+                    continue;
+                }
+                if (d.Stuck) continue;
+                if (d.Wave != null)
+                {
+                    float t = (now - d.Start) / (d.End - d.Start);
+                    float r = Mathf.Lerp(1f, 10f, 1f - (1f - t) * (1f - t));
+                    d.T.localScale = new Vector3(r * 2f, 0.01f, r * 2f);
+                    d.Wave.color = new Color(0.85f, 0.75f, 0.55f, 0.55f * (1f - t));
+                    continue;
+                }
+                d.Velocity += Vector3.down * 9.8f * dt;
+                Vector3 p = d.T.position + d.Velocity * dt;
+                if (p.y < ground + 0.1f)
+                {
+                    p.y = ground + 0.1f;
+                    d.Velocity = new Vector3(d.Velocity.x * 0.5f, -d.Velocity.y * 0.3f, d.Velocity.z * 0.5f);
+                    d.Spin *= 0.5f;
+                }
+                d.T.position = p;
+                d.T.Rotate(d.Spin * dt, Space.World);
+            }
         }
 
         /// <summary>소환 · 설치 소리 (스킬 소리 — 상대 것은 작게). 해골은 소환탑 공격 소리로 대신한다</summary>
@@ -824,15 +1104,15 @@ namespace SpellboundVR.Presentation
             switch (view.Kind)
             {
                 case MinionKind.AxeOrc:
-                    PlayUnitFx("VFX_Unit_AxeOrc_Attack", t.position + (t.forward * 1.1f + Vector3.up * 1.1f) * k, t.rotation, 1.2f);
+                    PlayUnitFx("VFX_Unit_AxeOrc_Attack", t.position + (t.forward * 1.1f + Vector3.up * 1.1f) * k, t.rotation, 1.2f, k / 1.5f); // 모델과 같이 커진다
                     break;
                 case MinionKind.Dragon:
                 {
                     Vector3 mouth = t.position + (t.forward * 1.6f + Vector3.up * 0.6f) * k;
                     Vector3 dir = hasTarget ? (targetPos + Vector3.up * 0.5f - mouth) : t.forward;
                     if (dir.sqrMagnitude < 1e-4f) dir = t.forward;
-                    PlayUnitFx("VFX_Unit_Dragon_Attack", mouth, Quaternion.LookRotation(dir, Vector3.up), 1.6f);
-                    if (hasTarget) PlayUnitFx("VFX_Unit_Dragon_Impact", targetPos + Vector3.up * 0.1f, Quaternion.identity, 1.5f);
+                    PlayUnitFx("VFX_Unit_Dragon_Attack", mouth, Quaternion.LookRotation(dir, Vector3.up), 1.6f, 3f); // 브레스 3배
+                    if (hasTarget) PlayUnitFx("VFX_Unit_Dragon_Impact", targetPos + Vector3.up * 0.1f, Quaternion.identity, 1.5f, 2f);
                     break;
                 }
                 case MinionKind.Turret:
@@ -888,9 +1168,11 @@ namespace SpellboundVR.Presentation
                     var trail = go.GetComponentInChildren<TrailRenderer>();
                     if (trail != null) trail.Clear();
                     if (summon) go.transform.localScale = Vector3.one * ModelScale(def.SummonKind);
+                    else if (def != null && def.SpellId == SpellIds.S07_Gatling) go.transform.localScale = Vector3.one * gatlingShotScale;
                     else if (def != null && def.FromOffMap && !Mathf.Approximately(def.OffMapVisualScale, 1f)) go.transform.localScale = Vector3.one * def.OffMapVisualScale;
                     _projectiles.Add(p.Id, go);
                 }
+                if (def != null && def.Behavior == SpellBehaviorType.ArrowVolley) _arrows[p.Id] = pos;
                 Vector3 next = Vector3.Lerp(go.transform.position, pos, 0.6f);
                 Vector3 dir = next - go.transform.position;
                 if (summon) dir.y = 0f; // 머리부터 떨어지지 않게 — 서서 날아온다
@@ -914,9 +1196,21 @@ namespace SpellboundVR.Presentation
             }
             for (int i = 0; i < _removeBuffer.Count; i++)
             {
-                var go = _projectiles[_removeBuffer[i]];
-                if (go != null) go.SetActive(false);
-                _projectiles.Remove(_removeBuffer[i]);
+                int id = _removeBuffer[i];
+                var go = _projectiles[id];
+                if (go != null)
+                {
+                    // 화살은 도착한 자리 바닥에 꽂혀 잠시 남는다 (보간이 늦어 공중에서 사라져 보이지 않게)
+                    if (_arrows.TryGetValue(id, out Vector3 last))
+                    {
+                        last.y = _arena.GroundY + 0.25f;
+                        go.transform.position = last;
+                        _debris.Add(new Debris { T = go.transform, Stuck = true, Start = Time.time, End = Time.time + 1.2f });
+                    }
+                    else go.SetActive(false);
+                }
+                _arrows.Remove(id);
+                _projectiles.Remove(id);
             }
         }
 
@@ -966,7 +1260,7 @@ namespace SpellboundVR.Presentation
                 {
                     view.WasFrozen = frozen;
                     var renderers = view.Root.GetComponentsInChildren<Renderer>();
-                    if (frozen) ApplyTint(renderers, new Color(0.6f, 0.85f, 1f));
+                    if (frozen) ApplyTint(renderers, FrozenTint);
                     else for (int k = 0; k < renderers.Length; k++) renderers[k].SetPropertyBlock(null);
                 }
             }

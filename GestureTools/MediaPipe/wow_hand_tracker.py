@@ -91,6 +91,15 @@ def open_capture(args):
     return cap
 
 
+def set_swap(st, swap, args):
+    """손 역할을 바꾸면 손 판정기를 새로 만든다 — 이전 손의 핀치 · 자세 · 휘두르기 기록이 다른 손에 이어지면 인식이 꼬인다."""
+    if st["swap"] == swap:
+        return
+    st["swap"] = swap
+    st["right"], st["left"] = skill_hand(args), hg.LeftHand()
+    print(f"[MediaPipe] 손 역할 {'왼손잡이' if swap else '오른손잡이'} — 손 판정 초기화")
+
+
 def split_hands(result, swap=False, mirrored=True):
     """
     MediaPipe 결과 → (오른손 랜드마크, 왼손 랜드마크).
@@ -490,10 +499,10 @@ def main(argv=None):
                         print(f"[MediaPipe] Unity 가 룬 후보를 바꿈 ({len(cs)}개): {','.join(cs) or '없음'}")
                     st["candidates"] = cs
                 elif m.get("type") == "hands":   # 환경설정 "왼손잡이 모드" · "웹캠으로 룬 그리기" — 켜져 있는 추적기에도 바로 반영
-                    st["swap"] = bool(m.get("swap"))
                     if m.get("input") in ("shape", "rune") and m["input"] != args.input:
                         args.input = m["input"]
                         st["right"] = skill_hand(args)
+                    set_swap(st, bool(m.get("swap")), args)
                 elif m.get("type") == "hello":
                     link.send({"type": "hello", "from": "tracker", "candidates": st["candidates"]})
 
@@ -542,7 +551,7 @@ def main(argv=None):
                 if key in (ord("q"), 27):
                     break
                 if key == ord("h"):
-                    st["swap"] = not st["swap"]
+                    set_swap(st, not st["swap"], args)
                 elif key == ord("a"):
                     args.aim = "angle" if args.aim == "position" else "position"
                     hg.Settings.aim_mode = args.aim

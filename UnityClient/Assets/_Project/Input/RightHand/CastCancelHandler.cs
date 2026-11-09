@@ -33,11 +33,9 @@ namespace SpellboundVR.Input
         {
             bool cancellable = state == CastState.RuneReady || state == CastState.Armed || state == CastState.Aiming;
             bool active = cancellable || state == CastState.Drawing;
-            if (!active)
-            {
-                _palmOpenRequested = false;
-                return CastCancelReason.None;
-            }
+            // 그리기를 끝내며 손을 펴는 건 자연스러운 동작 — 이때 들어온 손바닥이 남아 조준 시작 즉시 취소하지 않게 버린다
+            if (!cancellable) _palmOpenRequested = false;
+            if (!active) return CastCancelReason.None;
 
             if (!rightTracked) return CastCancelReason.TrackingLost;
 
