@@ -45,7 +45,7 @@ namespace SpellboundVR.Combat
         private readonly MinionDefinition[] _minionDefs = new MinionDefinition[MinionDefinition.KindCount];
         private readonly BotPlayer[] _bots = new BotPlayer[TeamUtil.TeamCount];
         private readonly IBotBrain[] _botBrainOverrides = new IBotBrain[TeamUtil.TeamCount];
-        private readonly int[][] _decks = { new int[DeckData.SlotCount], new int[DeckData.SlotCount], new int[DeckData.SlotCount], new int[DeckData.SlotCount] };
+        private readonly int[][] _decks = new int[TeamUtil.TeamCount][];
         private readonly List<ISpellRoutine> _routines = new List<ISpellRoutine>(16);
         private readonly PendingRequest[] _queue = new PendingRequest[QueueCapacity];
         private readonly TargetRuleValidator _targetRules;
@@ -78,6 +78,13 @@ namespace SpellboundVR.Combat
         private int _stormTicks;
         /// <summary>4인 개인전 탈락 처리용 (할당 없이)</summary>
         private readonly bool[] _fallen = new bool[TeamUtil.TeamCount];
+        /// <summary>다인전: 탈락으로 링을 다시 잡는 중</summary>
+        private bool _rebuilding;
+        /// <summary>다인전 재구성 전 유닛마다: 주인 시점 좌 · 우 열, 레인 위 깊이(0 ~ 1) · 옆 거리 (재구성 뒤 같은 쪽 새 레인에 다시 놓는다)</summary>
+        private readonly Column[] _keepColumn = new Column[MatchSnapshot.MaxUnits];
+        private readonly float[] _keepDepth = new float[MatchSnapshot.MaxUnits];
+        private readonly float[] _keepLateral = new float[MatchSnapshot.MaxUnits];
+        private readonly bool[] _keepValid = new bool[MatchSnapshot.MaxUnits];
 
         /// <summary>덱 밖 룬 테스트 시전 슬롯 번호 (AllowTestCasts일 때만 허용)</summary>
         public const int TestCastSlot = -1;
@@ -97,6 +104,7 @@ namespace SpellboundVR.Combat
             _rng = new DeterministicRandom(seed);
 
             for (int t = 0; t < TeamUtil.TeamCount; t++) Players[t] = new PlayerState((Team)t);
+            for (int t = 0; t < TeamUtil.TeamCount; t++) _decks[t] = new int[DeckData.SlotCount];
             for (int t = 0; t < TeamUtil.TeamCount; t++)
             {
                 var nexus = new StructureState((Team)t, true);
@@ -177,7 +185,7 @@ namespace SpellboundVR.Combat
         public bool IsSlotFree(Team team) => !Players[(int)team].Present;
 
         /// <summary>자리별 표시 이름 (사람만, 봇은 빈 문자열)</summary>
-        public readonly string[] Names = { "", "", "", "" };
+        public readonly string[] Names = { "", "", "", "", "", "" }; // 진영 수 (TeamUtil.TeamCount)
 
         public void SetPlayerName(Team team, string name) => Names[(int)team] = name ?? "";
 
@@ -201,6 +209,7 @@ namespace SpellboundVR.Combat
             p.Connected = true;
             _bots[(int)team] = null;
             SetDeck(team, deck);
+            RefreshRing();
             Debug.Log($"[MatchSimulation] 사람 플레이어 입장: {team}, 덱 {new DeckData(_decks[(int)team])}");
         }
 
@@ -221,6 +230,7 @@ namespace SpellboundVR.Combat
             _bots[t] = new BotPlayer(team, _decks[t], Catalog, BotConfig, _rng.NextUInt(),
                                      _botManualKeys, _botRequireAlt, _botBrainOverrides[t]);
             _bots[t].SetManualMode(wasManual);
+            RefreshRing();
             Debug.Log($"[MatchSimulation] 봇 입장: {team}, 덱 {new DeckData(_decks[t])}");
         }
 
@@ -270,6 +280,7 @@ namespace SpellboundVR.Combat
                 p.Present = false;
                 _bots[(int)team] = null;
                 if (_phase == MatchPhase.Countdown) _phase = MatchPhase.WaitingForPlayers;
+                RefreshRing();
             }
             Debug.Log($"[MatchSimulation] {team} 연결 끊김 (phase {_phase})");
         }
@@ -306,6 +317,7 @@ namespace SpellboundVR.Combat
             p.Connected = false;
             _bots[(int)team] = null;
             if (_phase == MatchPhase.Countdown) _phase = MatchPhase.WaitingForPlayers;
+            RefreshRing();
         }
 
         // ── 요청 (사람 · 봇 공용 경로) ─────────────────────────
@@ -352,7 +364,7 @@ namespace SpellboundVR.Combat
             }
             p.Preview = preview;
             if (!Catalog.TryGet(preview.SpellId, out _)) p.Preview.SpellId = 0;
-            p.PreviewLane = preview.Aiming && (int)preview.TargetColumn <= 2 ? (byte)Arena.ResolveLane(team, preview.TargetColumn) : PlayerSnap.NoCastLane;
+            p.PreviewLane = preview.Aiming && Arena.ColumnValid(team, preview.TargetColumn) ? (byte)Arena.ResolveLane(team, preview.TargetColumn) : PlayerSnap.NoCastLane;
             p.PreviewUntil = _matchTime + CastPreviewTimeout;
         }
 
@@ -470,8 +482,7 @@ namespace SpellboundVR.Combat
             var reason = testCast
                 ? ValidateTestCast(caster, request, out def)
                 : ServerSpellValidator.Validate(_phase, caster, request, Catalog, _executors, out def);
-            if (reason == CastRejectReason.None && NeedsOpenLane(def) && !IsLaneOpen(team, Arena.ResolveLane(team, request.TargetColumn)))
-                reason = CastRejectReason.LaneClosed;
+            if (reason == CastRejectReason.None && NeedsOpenLane(def)) reason = ValidateLane(team, def, request.TargetColumn);
             if (reason == CastRejectReason.None && !CanPlaceUnits(team, def, request)) reason = CastRejectReason.UnitCapReached;
             if (reason != CastRejectReason.None || !_executors.TryGet(request.SpellId, out ISpellExecutor executor))
             {
@@ -516,7 +527,21 @@ namespace SpellboundVR.Combat
             def = null;
             if (!caster.Alive) return CastRejectReason.CasterDead;
             if (!Catalog.TryGet(request.SpellId, out def) || !_executors.Has(request.SpellId)) return CastRejectReason.NotImplemented;
-            if ((int)request.TargetColumn > 2 || float.IsNaN(request.TargetDepth)) return CastRejectReason.InvalidTarget;
+            if ((int)request.TargetColumn > 4 || float.IsNaN(request.TargetDepth)) return CastRejectReason.InvalidTarget;
+            return CastRejectReason.None;
+        }
+
+        /// <summary>
+        /// 레인을 고르는 스킬: 그 열이 지금 상대를 가리키고(다인전은 인원마다 0 ~ 4), 상대가 살아 있어야 하며,
+        /// 다인전의 소환 · 설치는 이웃과 잇는 변(좌 · 우 레인)에만 놓인다 (대각선은 직접 공격 전용)
+        /// </summary>
+        private CastRejectReason ValidateLane(Team team, SpellDefinition def, Column column)
+        {
+            if (!Arena.ColumnValid(team, column)) return CastRejectReason.InvalidTarget;
+            int lane = Arena.ResolveLane(team, column);
+            if (!IsLaneOpen(team, lane)) return CastRejectReason.LaneClosed;
+            bool placement = def.Executor == SpellExecutorType.Summon || def.Executor == SpellExecutorType.Structure;
+            if (placement && !Arena.IsSpawnLane(team, lane)) return CastRejectReason.InvalidTarget;
             return CastRejectReason.None;
         }
 
@@ -642,7 +667,14 @@ namespace SpellboundVR.Combat
             {
                 for (int t = 0; t < Arena.TeamCount; t++)
                     if (_fallen[t]) Eliminate((Team)t, alive + 1);
-                ReassignLanes();
+                if (!Arena.IsPolygon) ReassignLanes();
+                else if (alive >= 2)
+                {
+                    RememberLanes();
+                    _rebuilding = true;
+                    if (RefreshRing()) RebuildPolygon();
+                    _rebuilding = false;
+                }
             }
 
             if (alive == 0)
@@ -704,6 +736,72 @@ namespace SpellboundVR.Combat
             }
         }
 
+        // ── 다인전 링 ─────────────────────────────────────────
+
+        /// <summary>다인전: 링 = 자리에 있는 사람 중 탈락하지 않은 사람 (진영 번호 순). 바뀌면 true</summary>
+        private bool RefreshRing()
+        {
+            if (!Arena.IsPolygon) return false;
+            if (_phase == MatchPhase.Playing && !_rebuilding) return false; // 경기 중 링은 탈락으로만 바뀐다
+            int mask = 0;
+            for (int t = 0; t < TeamUtil.TeamCount; t++)
+                if (Players[t].Present && !Players[t].Eliminated) mask |= 1 << t;
+            return Arena.SetRing(mask);
+        }
+
+        /// <summary>다인전 재구성 직전 (옛 링): 유닛마다 주인 시점 좌 · 우 열과 레인 위 자리를 적어 둔다</summary>
+        private void RememberLanes()
+        {
+            for (int i = 0; i < Units.Length; i++)
+            {
+                var u = Units[i];
+                _keepValid[i] = u.Active && !u.Dead && Arena.TryLocalColumn(u.Team, u.Lane, out _keepColumn[i]);
+                if (!_keepValid[i]) continue;
+                var frame = Arena.GetLane(u.Team, u.Lane);
+                _keepDepth[i] = frame.Depth01(u.Position);
+                _keepLateral[i] = frame.Lateral(u.Position);
+            }
+        }
+
+        /// <summary>
+        /// 다인전: 탈락으로 링이 바뀌면 전장을 N-1각형(2명이면 1:1)으로 다시 짠다. 레인은 주인 시점 같은 쪽(좌 · 우)의 새 레인으로 —
+        /// 설치물(터렛 · 소환탑)은 HP 그대로 레인 위 같은 깊이 · 옆 자리에 다시 서고, 미니언 · 소환수는 HP 그대로 출발 지점부터 다시 나간다.
+        /// 날아가던 투사체 · 진행 중인 스킬은 지우고, 넥서스는 HP 그대로 새 자리로 옮긴다
+        /// </summary>
+        private void RebuildPolygon()
+        {
+            int order = 0;
+            for (int i = 0; i < Units.Length; i++)
+            {
+                var u = Units[i];
+                if (!u.Active) continue;
+                int lane = _keepValid[i] && Arena.HasTeam(u.Team) ? Arena.ResolveLane(u.Team, _keepColumn[i]) : -1;
+                if (lane < 0 || !Arena.IsSpawnLane(u.Team, lane))
+                {
+                    _status.ClearTarget(u.Id);
+                    u.Deactivate();
+                    continue;
+                }
+                var frame = Arena.GetLane(u.Team, lane);
+                u.Lane = lane;
+                u.ReturnLane = -1;
+                u.TargetId = 0;
+                u.RetargetTimer = 0f;
+                u.Position = u.IsStructure
+                    ? Arena.ClampToField(frame.Point(_keepDepth[i] * frame.Length, _keepLateral[i]))
+                    : Arena.SpawnPosition(u.Team, lane) + Arena.ColumnAxis(u.Team) * (order++ % 2 == 0 ? -0.4f : 0.4f);
+            }
+            _projectiles.Clear();
+            _routines.Clear();
+            for (int i = 0; i < Structures.Length; i++)
+            {
+                var s = Structures[i];
+                if (s.IsNexus && Arena.HasTeam(s.Team)) s.Position = Arena.StructurePosition(s.Team, true); // 무너진 넥서스의 잔해도 새 자리로
+            }
+            for (int t = 0; t < Players.Length; t++) Players[t].ClearPreview();
+            Debug.Log($"[MatchSimulation] 다인전 전장 재구성 → {Arena.RingCount}{(Arena.PolygonDuelStage ? "명 (1:1 전장)" : "각형")} t={_matchTime:0.0}");
+        }
+
         /// <summary>아직 싸우거나, 탈락했어도 접속해서 관전 중인 사람이 있는가</summary>
         private bool AnyHumanWatching()
         {
@@ -738,6 +836,18 @@ namespace SpellboundVR.Combat
         /// <summary>이 경기의 자리가 모두 찼는가 (1:1 = 2자리, 개인전 = 4자리)</summary>
         private bool AllSeatsReady()
         {
+            if (Arena.IsPolygon)
+            {
+                // 다인전: 들어온 사람이 모두 접속해 있고 최소 인원이 모이면 — 카운트다운 중에 들어온 사람도 링에 낀다
+                int ready = 0;
+                for (int t = 0; t < TeamUtil.TeamCount; t++)
+                {
+                    if (!Players[t].Present) continue;
+                    if (!Players[t].Connected) return false;
+                    ready++;
+                }
+                return ready >= Mathf.Max(2, Rules.PolygonMinPlayers);
+            }
             for (int t = 0; t < Arena.TeamCount; t++)
                 if (!Players[t].Present || !Players[t].Connected) return false;
             return true;
@@ -750,6 +860,17 @@ namespace SpellboundVR.Combat
             {
                 int n = 0;
                 for (int t = 0; t < Arena.TeamCount; t++) if (Players[t].IsHuman) n++;
+                return n;
+            }
+        }
+
+        /// <summary>자리에 들어온 수 (사람 + AI)</summary>
+        public int PresentCount
+        {
+            get
+            {
+                int n = 0;
+                for (int t = 0; t < Arena.TeamCount; t++) if (Players[t].Present) n++;
                 return n;
             }
         }
@@ -788,7 +909,14 @@ namespace SpellboundVR.Combat
             _matchTime = 0f;
             for (int t = 0; t < Players.Length; t++) Players[t].LastActivityTime = 0f;
             _hadHuman = HumanCount > 0;
-            Debug.Log($"[MatchSimulation] 경기 #{_matchSerial} 시작 — {Arena.Mode} 사람 {HumanCount}명 · 봇 {Arena.TeamCount - HumanCount}명");
+            if (Arena.IsPolygon)
+            {
+                _rebuilding = true;
+                RefreshRing();
+                _rebuilding = false;
+                ResetStructures(); // 카운트다운 중에 들어온 사람까지 넣은 정N각형 자리로
+            }
+            Debug.Log($"[MatchSimulation] 경기 #{_matchSerial} 시작 — {Arena.Mode} 사람 {HumanCount}명 · 봇 {Arena.RingCount - HumanCount}명");
         }
 
         private void EndMatch(in MatchOutcome outcome)
@@ -829,16 +957,22 @@ namespace SpellboundVR.Combat
             _stormTimer = 0f;
             _stormTicks = 0;
             for (int i = 0; i < Units.Length; i++) Units[i].Deactivate();
+            for (int t = 0; t < Players.Length; t++) Players[t].ResetForMatch(Rules.PlayerMaxHp, Rules.BaseAccuracy);
+            RefreshRing();
+            ResetStructures();
+        }
 
+        /// <summary>구조물을 지금 자리에 새로 세운다 — 1:1 은 가운데 타워 + 넥서스, 4인은 레인마다 타워 + 넥서스, 다인전은 넥서스만</summary>
+        private void ResetStructures()
+        {
             for (int i = 0; i < Structures.Length; i++)
             {
                 var s = Structures[i];
-                bool used = s.IsNexus || s.Column == Column.Center || !Arena.IsDuel; // 왼쪽 · 오른쪽 타워는 개인전 전용
+                bool used = s.IsNexus || (!Arena.IsPolygon && (s.Column == Column.Center || !Arena.IsDuel)); // 왼쪽 · 오른쪽 타워는 4인 개인전 전용
                 s.Reset(!used ? 0f : s.IsNexus ? Rules.NexusMaxHp : Rules.TowerMaxHp,
                         s.IsNexus ? Arena.StructurePosition(s.Team, true) : Arena.TowerPosition(s.Team, s.Column), Rules.StructureRadius);
-                if (!used || !Arena.HasTeam(s.Team)) s.Alive = false; // 1:1 에서 쓰지 않는 자리
+                if (!used || !Arena.HasTeam(s.Team)) s.Alive = false; // 이 경기에서 쓰지 않는 자리
             }
-            for (int t = 0; t < Players.Length; t++) Players[t].ResetForMatch(Rules.PlayerMaxHp, Rules.BaseAccuracy);
         }
 
         // ── 유닛 ─────────────────────────────────────────────

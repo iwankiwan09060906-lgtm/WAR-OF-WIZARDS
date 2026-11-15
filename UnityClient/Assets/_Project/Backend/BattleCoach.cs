@@ -95,9 +95,9 @@ namespace SpellboundVR.Backend
         private string ColumnName(int column)
         {
             var arena = _session.Arena;
-            if (column < 0 || column > 2) return "";
-            string side = column == 0 ? "왼쪽" : column == 1 ? "가운데" : "오른쪽";
-            if (arena.IsDuel) return side + " 열";
+            if (column < 0 || column >= arena.ColumnSlots) return "";
+            string side = column == 0 ? "왼쪽" : column == 2 ? "오른쪽" : arena.IsPolygon ? "건너편" : "가운데";
+            if (arena.DuelLike) return side + " 열";
             return side + " 레인 (" + TeamUtil.SeatNumber(arena.ColumnTarget(_session.Events.LocalTeam, (Column)column)) + "번)";
         }
 
@@ -123,8 +123,8 @@ namespace SpellboundVR.Backend
                 selfNexusAlive = s.Structure(me, true).Alive != 0,
                 opponentTowerAlive = s.TowerFacing(focus, me).Alive != 0,
                 opponentNexusAlive = s.Structure(focus, true).Alive != 0,
-                lanes = new LaneDto[TeamUtil.ColumnCount],
-                players = arena.TeamCount,
+                lanes = new LaneDto[arena.ColumnSlots], // 다인전은 상대 열이 0 ~ 4 (서버는 앞 3개만 읽는다)
+                players = arena.IsPolygon ? s.PresentCount() : arena.TeamCount,
                 opponents = BuildOpponents(s, me),
             };
             for (int i = 0; i < st.deck.Length; i++)
@@ -162,8 +162,9 @@ namespace SpellboundVR.Backend
         {
             var best = TeamUtil.Opponent(me);
             float score = float.MaxValue;
-            for (int c = 0; c < TeamUtil.ColumnCount; c++)
+            for (int c = 0; c < _session.Arena.ColumnSlots; c++)
             {
+                if (!_session.Arena.ColumnValid(me, (Column)c)) continue;
                 Team enemy = _session.Arena.ColumnTarget(me, (Column)c);
                 ref var p = ref s.Players[(int)enemy];
                 if (p.Alive == 0) continue;
@@ -182,8 +183,9 @@ namespace SpellboundVR.Backend
             var arena = _session.Arena;
             if (arena.IsDuel) return Array.Empty<OpponentDto>();
             var list = new List<OpponentDto>(3);
-            for (int c = 0; c < TeamUtil.ColumnCount; c++)
+            for (int c = 0; c < TeamUtil.ColumnCount; c++) // 서버 지도는 3열 (다인전은 왼쪽 이웃 · 첫 건너편 · 오른쪽 이웃)
             {
+                if (!arena.ColumnValid(me, (Column)c)) continue;
                 Team enemy = arena.ColumnTarget(me, (Column)c);
                 ref var p = ref s.Players[(int)enemy];
                 int seat = TeamUtil.SeatNumber(enemy);

@@ -292,6 +292,7 @@ def run_checks(unity):
     check("관리자 기록은 토큰 없이 못 봄", st == 403)
 
     ffa_checks(admin["accessToken"])
+    poly_checks(admin["accessToken"])
     # auto 는 로컬 VLM 서버(8790)가 켜져 있으면 그걸 쓴다 → 검사는 이 PC 의 llama-server 와 상관없게 닿지 않는 주소로
     call("PUT", "/api/admin/configs/ai.local_url", {"value": "http://127.0.0.1:9/v1"}, admin["accessToken"])
     ai_checks(tok)
@@ -316,6 +317,54 @@ def run_checks(unity):
     check("없는 스킬 시전 거부", st == 400)
     st, recent, _ = call("GET", "/api/spells/recent")
     check("최근 시전 기록", recent["recent"][0]["spellId"] == "S06")
+
+
+def poly_checks(admin_tok):
+    print("[다인전 (정N각형): 모인 인원대로 · 3명 미만이면 봇으로 3명까지]")
+    ps = [register(f"다인{i}") for i in range(5)]
+    tk = [p["accessToken"] for p in ps]
+    call("PUT", "/api/admin/configs/matchmaking.bot_timeout", {"value": "30"}, admin_tok)
+    st, r, _ = call("POST", "/api/matchmaking/queue", {"format": "poly"}, tk[0])
+    check("다인전 큐 등록 (format poly → maxPlayers 6)", st == 200 and r["maxPlayers"] == 6 and r["format"] == "poly", str(r))
+    call("POST", "/api/matchmaking/queue", {"players": 4}, tk[1])                         # 4인 큐 사람은 다인전에 섞이지 않는다
+    s0 = call("GET", "/api/matchmaking/status", token=tk[0])[1]
+    check("혼자면 다인전 탐색 중", s0["state"] == "searching" and s0["format"] == "poly")
+    call("DELETE", "/api/matchmaking/queue", token=tk[1])
+
+    call("PUT", "/api/admin/configs/matchmaking.bot_timeout", {"value": "1"}, admin_tok)
+    call("POST", "/api/matchmaking/queue", {"players": 6}, tk[1])
+    time.sleep(1.2)
+    m0 = call("GET", "/api/matchmaking/status", token=tk[0])[1]
+    m1 = call("GET", "/api/matchmaking/status", token=tk[1])[1]
+    check("2명이면 시간 초과 뒤 봇 1명으로 3명 (삼각형)", m0["state"] == "matched" and m1["matchId"] == m0["matchId"]
+          and m0["maxPlayers"] == 6 and m0["format"] == "poly" and len(m0["opponents"]) == 2
+          and sum(1 for x in m0["opponents"] if x["bot"]) == 1, str(m0))
+    cur = call("GET", "/api/match/current", token=tk[0])[1]["match"]
+    check("게임 방도 다인전 · 자리 3개", cur["format"] == "poly" and len(cur["players"]) == 3, str(cur.get("format")))
+    for t in tk[:2]:
+        call("POST", f"/api/match/{m0['matchId']}/join", {}, t)
+    r1 = call("POST", f"/api/match/{m0['matchId']}/result", {"result": "LOSE", "place": 3}, tk[1])[1]["match"]
+    r0 = call("POST", f"/api/match/{m0['matchId']}/result", {"result": "WIN", "place": 1}, tk[0])[1]["match"]
+    check("3명 다인전 결과 (3위 · 1위) → ENDED", r1["place"] == 3 and r0["place"] == 1 and r0["status"] == "ENDED", f"{r1} {r0}")
+
+    for t in tk[:4]:
+        call("POST", "/api/matchmaking/queue", {"format": "poly"}, t)
+    time.sleep(1.2)
+    ms = [call("GET", "/api/matchmaking/status", token=t)[1] for t in tk[:4]]
+    check("4명이 모이면 봇 없이 사각형", all(m["state"] == "matched" for m in ms) and len({m["matchId"] for m in ms}) == 1
+          and all(len(m["opponents"]) == 3 and not any(o["bot"] for o in m["opponents"]) for m in ms), str(ms[0]))
+    for t in tk[:4]:
+        call("POST", f"/api/match/{ms[0]['matchId']}/leave", {}, t)
+
+    st, room, _ = call("POST", "/api/rooms", {"format": "poly"}, tk[0])
+    code = room["code"]
+    check("다인전 친선전 방 (6자리)", st == 200 and room["maxPlayers"] == 6 and room["format"] == "poly", str(room))
+    call("POST", f"/api/rooms/{code}/join", {}, tk[1])
+    call("POST", f"/api/rooms/{code}/ready", {"ready": True}, tk[1])
+    st, r, _ = call("POST", f"/api/rooms/{code}/start", {}, tk[0])
+    cur = call("GET", "/api/match/current", token=tk[1])[1]["match"]
+    check("2명으로 시작하면 봇 1명을 더해 3자리", st == 200 and r["matchId"] > 0 and len(cur["players"]) == 3 and cur["format"] == "poly")
+    call("PUT", "/api/admin/configs/matchmaking.bot_timeout", {"value": "30"}, admin_tok)
 
 
 def ffa_checks(admin_tok):

@@ -77,6 +77,10 @@ namespace SpellboundVR.Contracts
         Seat2 = 2,
         /// <summary>4인 개인전 4번 발판 (Home 의 오른쪽). 1:1 에서는 쓰지 않는다</summary>
         Seat4 = 3,
+        /// <summary>다인전(정N각형) 5번 자리. 1:1 · 4인 개인전에서는 쓰지 않는다</summary>
+        Seat5 = 4,
+        /// <summary>다인전(정N각형) 6번 자리. 1:1 · 4인 개인전에서는 쓰지 않는다</summary>
+        Seat6 = 5,
     }
 
     /// <summary>

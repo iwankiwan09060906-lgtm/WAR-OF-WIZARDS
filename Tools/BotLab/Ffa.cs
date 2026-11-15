@@ -300,6 +300,22 @@ internal static class Ffa
         sim2.Tick(rules.LocalTickInterval);
         Check(sim2.GetPlayer(Team.Home).Place == 3 && sim2.GetPlayer(Team.Away).Place == 3, "같은 틱 탈락은 같은 순위");
 
+        // ⑤-2 유닛은 타워를 통과하지 않고 옆으로 돌아간다 — 내 가운데 레인 타워 바로 앞에서 출발
+        var simT = Started(rules, catalog, cfg, 555u);
+        int centerLane = arena.ResolveLane(Team.Home, Column.Center);
+        var cl = arena.GetLane(Team.Home, centerLane);
+        var tower = simT.GetStructureById(TeamUtil.TowerId(Team.Home, Column.Center));
+        simT.SpawnUnit(Team.Home, simT.GetMinionDefinition(MinionKind.Melee), centerLane, cl.Point(arena.TowerDepth - 2f), 1f, out int walkerId);
+        var w = simT.FindUnit(walkerId);
+        float minGap = float.MaxValue;
+        for (int i = 0; i < 8f / rules.LocalTickInterval && w.Active && !w.Dead; i++)
+        {
+            simT.Tick(rules.LocalTickInterval);
+            minGap = Mathf.Min(minGap, (w.Position - tower.Position).magnitude - tower.Radius - w.Def.BodyRadius);
+        }
+        Check(minGap > -0.05f, $"유닛이 타워를 통과함 (겹친 깊이 {-minGap:0.00}m)");
+        Check(!w.Active || w.Dead || cl.Along(w.Position) > arena.TowerDepth + tower.Radius, "타워를 돌아 계속 전진");
+
         // ⑥ 사람: 나가면 봇이 잇고, 사람이 모두 탈락하면 남은 봇을 HP 순으로 끝낸다
         var sim3 = new MatchSimulation(rules, catalog, Arena(), cfg, null, null, null, 99u) { LogCasts = false };
         sim3.JoinHuman(Team.Home, sim3.GetDeck(Team.Away));

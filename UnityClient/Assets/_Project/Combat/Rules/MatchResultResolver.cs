@@ -75,7 +75,9 @@ namespace SpellboundVR.Combat
                 case Team.Home: return MatchWinner.Home;
                 case Team.Away: return MatchWinner.Away;
                 case Team.Seat2: return MatchWinner.Seat2;
-                default: return MatchWinner.Seat4;
+                case Team.Seat4: return MatchWinner.Seat4;
+                case Team.Seat5: return MatchWinner.Seat5;
+                default: return MatchWinner.Seat6;
             }
         }
 

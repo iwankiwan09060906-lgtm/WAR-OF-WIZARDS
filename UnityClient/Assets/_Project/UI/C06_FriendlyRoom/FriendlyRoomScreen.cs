@@ -118,7 +118,7 @@ namespace SpellboundVR.UI
             UiKit.Heading(make, "룸 만들기");
             UiKit.Label(make, "방을 만들면 6자리 코드가 발급됩니다. 친구를 초대하거나 봇으로 빈 자리를 채울 수 있어요.", UiTheme.FontBody, UiTheme.Text2);
             UiKit.Spacer(make);
-            UiKit.Button(make, MetaState.PreferredPlayers > 2 ? "4인 개인전 룸 생성" : "1:1 룸 생성", BtnStyle.Play, () => { _session.CreateFriendlyRoom(MetaState.PreferredPlayers); Redraw(); }, -1, 66, UiTheme.FontTitle - 2);
+            UiKit.Button(make, MetaState.PreferredPlayers >= MatchContext.PolygonPlayers ? "다인전 룸 생성" : MetaState.PreferredPlayers > 2 ? "4인 개인전 룸 생성" : "1:1 룸 생성", BtnStyle.Play, () => { _session.CreateFriendlyRoom(MetaState.PreferredPlayers); Redraw(); }, -1, 66, UiTheme.FontTitle - 2);
 
             var join = UiKit.Card(two, 32, 18, "Join");
             UiKit.Size(join, -1, 360, 1);
@@ -188,14 +188,15 @@ namespace SpellboundVR.UI
         {
             var room = _session.Room;
             var seats = UiKit.Card(col, 22, 8, "Seats");
-            UiKit.Heading(seats, "4인 개인전 자리", (room != null && room.members != null ? room.members.Length : 1) + " / " + RoomPlayers);
+            UiKit.Heading(seats, RoomPlayers >= MatchContext.PolygonPlayers ? "다인전 자리 (3명 미만이면 AI)" : "4인 개인전 자리", (room != null && room.members != null ? room.members.Length : 1) + " / " + RoomPlayers);
             for (int i = 0; i < RoomPlayers; i++)
             {
                 RoomMemberDto m = room != null && room.members != null && i < room.members.Length ? room.members[i] : null;
                 var r = UiKit.HBox(seats, 14, 0, TextAnchor.MiddleLeft, "Row");
                 UiKit.Size(r, -1, 52);
                 UiKit.Label(r, (i + 1) + "번", UiTheme.FontBody, UiTheme.Text3, true);
-                var n = UiKit.Label(r, m != null ? m.nickname : "빈자리 — 시작하면 AI 가 앉습니다", UiTheme.FontBody, m != null ? UiTheme.Text : UiTheme.Text3, m != null);
+                string empty = RoomPlayers >= MatchContext.PolygonPlayers ? (i < 3 ? "빈자리 — 시작하면 AI 가 앉습니다" : "빈자리 — 비면 이 자리 없이 시작") : "빈자리 — 시작하면 AI 가 앉습니다";
+                var n = UiKit.Label(r, m != null ? m.nickname : empty, UiTheme.FontBody, m != null ? UiTheme.Text : UiTheme.Text3, m != null);
                 UiKit.Size(n, -1, -1, 1);
                 if (m != null) UiKit.Chip(r, m.host ? "방장" : m.bot ? "AI" : m.ready ? "준비 완료" : "입장 완료", m.host || m.ready ? Tone.Cyan : Tone.Neutral);
             }

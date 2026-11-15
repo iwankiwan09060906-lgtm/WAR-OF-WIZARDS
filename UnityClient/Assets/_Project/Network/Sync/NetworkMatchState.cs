@@ -85,7 +85,10 @@ namespace SpellboundVR.Network
 
         private void TickBotFill(float dt)
         {
-            if (_sim.Phase != MatchPhase.WaitingForPlayers || _sim.HumanCount == 0 || !_sim.TryGetFreeTeam(out _))
+            // 다인전은 최소 인원(3)까지만 채운다 — 그 뒤로는 들어온 사람만큼 N 이 된다
+            bool polygon = _sim.Arena.IsPolygon;
+            if (_sim.Phase != MatchPhase.WaitingForPlayers || _sim.HumanCount == 0 || !_sim.TryGetFreeTeam(out _) ||
+                (polygon && _sim.PresentCount >= _sim.Rules.PolygonMinPlayers))
             {
                 _botFillTimer = 0f;
                 _sim.BotFillIn = -1f;
@@ -96,7 +99,7 @@ namespace SpellboundVR.Network
             if (_botFillTimer < _sim.Rules.BotFillWaitSeconds) return;
             _botFillTimer = 0f;
             _sim.BotFillIn = -1f;
-            while (_sim.TryGetFreeTeam(out Team free))
+            while ((!polygon || _sim.PresentCount < _sim.Rules.PolygonMinPlayers) && _sim.TryGetFreeTeam(out Team free))
             {
                 Debug.Log($"[NetworkMatchState] {_sim.Rules.BotFillWaitSeconds:0}초 안에 들어오지 않아 AI 가 자리를 채웁니다 ({free})");
                 _sim.JoinBot(free);
@@ -109,6 +112,8 @@ namespace SpellboundVR.Network
             team = Team.Home;
             if (_sim == null) return false;
             if (_playerTeams.TryGetValue(player, out team)) return true;
+            // 다인전은 경기 중에도 빈자리가 있지만, 링(정N각형)이 정해진 뒤라 끼지 않고 관전한다
+            if (_sim.Arena.IsPolygon && _sim.Phase == MatchPhase.Playing) return false;
 
             // 대기 중 봇이 자리를 차지했다면 사람에게 양보 (§22.1 사람 우선)
             if (!_sim.TryGetFreeTeam(out team))

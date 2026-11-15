@@ -35,10 +35,12 @@ namespace SpellboundVR.UI
 
         private readonly ClientSession _session;
         private readonly EnemyCard[] _cards = new EnemyCard[TeamUtil.ColumnCount];
-        private readonly Image[] _nodes = new Image[TeamUtil.TeamCount];
-        private readonly Text[] _nodeLabels = new Text[TeamUtil.TeamCount];
+        /// <summary>4인 개인전 자리 수 (TeamUtil.TeamCount 는 다인전 6자리)</summary>
+        private const int Seats = 4;
+        private readonly Image[] _nodes = new Image[Seats];
+        private readonly Text[] _nodeLabels = new Text[Seats];
         private readonly Image[] _edges = new Image[6];
-        private readonly Image[] _towers = new Image[TeamUtil.TeamCount * TeamUtil.ColumnCount];
+        private readonly Image[] _towers = new Image[Seats * TeamUtil.ColumnCount];
         private readonly Image[] _dots = new Image[MaxDots];
         private RectTransform _map;
         private float _nextRefresh;

@@ -34,8 +34,8 @@ namespace SpellboundVR.Spells.Behaviors
         private readonly float _dmgFocus;
         private readonly float _maxRadius;
         private readonly HashSet<int> _frozen = new HashSet<int>();
-        private readonly bool[] _towerFrozen = new bool[4];
-        private readonly bool[] _playerHit = new bool[4];
+        private readonly bool[] _towerFrozen = new bool[Core.TeamUtil.TeamCount];
+        private readonly bool[] _playerHit = new bool[Core.TeamUtil.TeamCount];
         private readonly bool[] _fieldShown = new bool[3 * 5];
         private float _radius;
 

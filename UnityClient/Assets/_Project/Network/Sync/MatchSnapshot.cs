@@ -27,6 +27,8 @@ namespace SpellboundVR.Network
         Void = 4,
         Seat2 = 5,
         Seat4 = 6,
+        Seat5 = 7,
+        Seat6 = 8,
     }
 
     public enum UnitVisualState : byte
@@ -216,7 +218,7 @@ namespace SpellboundVR.Network
     /// <summary>클라이언트 쪽 상태 사본. 배열은 한 번만 할당한다(§33 GC 0).</summary>
     public sealed class MatchSnapshot
     {
-        public const int PlayerCount = 4;
+        public const int PlayerCount = Core.TeamUtil.TeamCount;
         public const int SlotsPerPlayer = 8;
         /// <summary>진영마다 가운데 타워 · 넥서스, 그 뒤로 진영마다 왼쪽 · 오른쪽 타워 (개인전 전용)</summary>
         public const int StructureCount = PlayerCount * 4;
@@ -232,7 +234,7 @@ namespace SpellboundVR.Network
         public readonly ProjectileSnap[] Projectiles = new ProjectileSnap[MaxProjectiles];
 
         /// <summary>자리별 표시 이름 (없으면 빈 문자열 — "1번" · "AI 2번" 은 표시 쪽에서)</summary>
-        public readonly string[] Names = { "", "", "", "" };
+        public readonly string[] Names = { "", "", "", "", "", "" }; // 진영 수 (TeamUtil.TeamCount)
 
         public MatchPhase Phase => (MatchPhase)Header.Phase;
         public int UnitCount => Header.UnitCount;
@@ -246,6 +248,31 @@ namespace SpellboundVR.Network
         public static int StructureIndex(Contracts.Team team, bool isNexus) => (int)team * 2 + (isNexus ? 1 : 0);
 
         public ref StructureSnap Structure(Contracts.Team team, bool isNexus) => ref Structures[StructureIndex(team, isNexus)];
+
+        /// <summary>자리에 들어온 수 (사람 + AI) — 다인전은 이것이 경기 인원(N)</summary>
+        public int PresentCount()
+        {
+            int n = 0;
+            for (int t = 0; t < Players.Length; t++) if (Players[t].Present != 0) n++;
+            return n;
+        }
+
+        /// <summary>
+        /// 다인전 링 (진영 비트) — 경기 중이면 탈락하지 않은 사람, 대기 · 카운트다운이면 들어온 사람.
+        /// 경기가 끝났으면 0 (마지막 전장을 그대로 둔다). 클라이언트가 ArenaGeometry.SetRing 에 넣는다
+        /// </summary>
+        public int RingMask()
+        {
+            var phase = (MatchPhase)Header.Phase;
+            if (phase == MatchPhase.Ended) return 0;
+            int mask = 0;
+            for (int t = 0; t < Players.Length; t++)
+            {
+                ref var p = ref Players[t];
+                if (p.Present != 0 && (phase != MatchPhase.Playing || p.Place == 0)) mask |= 1 << t;
+            }
+            return mask;
+        }
 
         public static int TowerIndex(Contracts.Team team, Contracts.Column column) => Core.TeamUtil.TowerId(team, column) - Core.TeamUtil.FirstStructureId;
 

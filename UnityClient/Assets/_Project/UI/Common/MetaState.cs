@@ -22,12 +22,19 @@ namespace SpellboundVR.UI
         public bool OpponentBot = true;
         public long MatchId;
         public string RoomCode;
-        /// <summary>경기 인원 — 2 = 1:1, 3 · 4 = 4인 개인전 (3명이면 남는 자리는 AI)</summary>
+        /// <summary>경기 인원 — 2 = 1:1, 3 · 4 = 4인 개인전 (3명이면 남는 자리는 AI), 6 = 다인전 (모인 인원대로 3 ~ 6각형)</summary>
         public int Players = 2;
         /// <summary>개인전 상대 이름 (대기 화면) — 없으면 자리 번호로 표시</summary>
         public string[] OpponentNames;
 
+        /// <summary>개인전 (4인 · 다인전)</summary>
         public bool IsFfa => Players > 2;
+        public bool IsPolygon => Players >= PolygonPlayers;
+
+        /// <summary>다인전을 뜻하는 인원 값 (백엔드 format "poly" 의 maxPlayers)</summary>
+        public const int PolygonPlayers = 6;
+
+        public Arena.ArenaMode ArenaMode => IsPolygon ? Arena.ArenaMode.Polygon : IsFfa ? Arena.ArenaMode.Ffa4 : Arena.ArenaMode.Duel;
     }
 
     /// <summary>지난 대전 결과 (C13)</summary>
@@ -114,10 +121,14 @@ namespace SpellboundVR.UI
 
         private const string PlayersKey = "wow.players.v1";
 
-        /// <summary>로비에서 고른 경기 인원 2 · 4 (기본 4인 개인전)</summary>
+        /// <summary>로비에서 고른 경기 인원 2 · 4 · 6(다인전) (기본 4인 개인전)</summary>
         public static int PreferredPlayers
         {
-            get => PlayerPrefs.GetInt(PlayersKey, 4) <= 2 ? 2 : 4;
+            get
+            {
+                int v = PlayerPrefs.GetInt(PlayersKey, 4);
+                return v <= 2 ? 2 : v >= MatchContext.PolygonPlayers ? MatchContext.PolygonPlayers : 4;
+            }
             set
             {
                 PlayerPrefs.SetInt(PlayersKey, value);

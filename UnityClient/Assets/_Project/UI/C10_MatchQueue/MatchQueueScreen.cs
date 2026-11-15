@@ -20,6 +20,8 @@ namespace SpellboundVR.UI
             "상대가 허공에 룬을 그리기 시작하면 무슨 스킬인지 보입니다. 다 그리기 전에 옆 칸으로 피하세요.",
             "4인 개인전: 왼쪽 · 가운데 · 오른쪽 레인이 곧 세 상대입니다. 가리키는 쪽이 공격 대상이에요.",
             "4인 개인전: 시간이 지나면 마나 폭풍이 구조물과 마법사를 깎습니다. 숨어만 있으면 집니다.",
+            "다인전: 모인 인원만큼 정다각형 전장이 됩니다. 소환은 양옆 이웃에게, 공격은 누구에게나 할 수 있어요.",
+            "다인전: 누군가 탈락하면 전장이 한 칸 작은 다각형으로 다시 짜이고, 마지막 두 명은 1:1 로 싸웁니다.",
             "적 타워를 부수면 공격력이 영구 +20%, 넥서스를 부수면 +40% 강해집니다.",
         };
 
@@ -64,7 +66,7 @@ namespace SpellboundVR.UI
         {
             var col = UiKit.Stretch(UiKit.VBox(body, 22, 0, TextAnchor.MiddleCenter, "Queue"));
             col.GetComponent<VerticalLayoutGroup>().childForceExpandWidth = false;
-            _title = UiKit.Label(col, _players > 2 ? "4인 개인전 상대를 찾고 있습니다" : "상대를 찾고 있습니다", UiTheme.FontHeadline + 6, UiTheme.Text, true, TextAnchor.MiddleCenter);
+            _title = UiKit.Label(col, _players >= MatchContext.PolygonPlayers ? "다인전 마법사들을 모으고 있습니다" : _players > 2 ? "4인 개인전 상대를 찾고 있습니다" : "상대를 찾고 있습니다", UiTheme.FontHeadline + 6, UiTheme.Text, true, TextAnchor.MiddleCenter);
             _title.horizontalOverflow = HorizontalWrapMode.Overflow;
             var duel = UiKit.HBox(col, 30, 0, TextAnchor.MiddleCenter, "Duel");
             UiKit.Wizard(duel, false, 280);

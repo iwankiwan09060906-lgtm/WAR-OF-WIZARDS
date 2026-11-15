@@ -83,6 +83,8 @@ namespace SpellboundVR.Presentation
             public GameObject BuffFx;
             public GameObject FreezeFx;
             public bool WasFrozen;
+            /// <summary>HP바 · 잔해를 붙인 자리 (다인전에서 넥서스가 새 자리로 옮겨갈 때 같이 옮긴다)</summary>
+            public Transform Holder;
         }
 
         /// <summary>날아가는 표시용 탄 (타워 총알 · 터렛 화살) — 피해는 서버가 발사 순간 이미 줬다</summary>
@@ -118,7 +120,7 @@ namespace SpellboundVR.Presentation
 
         [Header("소환수 · 설치물 모델 크기 배율 (MDL_* 프리팹 기준)")]
         [Tooltip("S11 도끼 전사 — 미니언 사이에서 눈에 띄게 크게")]
-        public float axeOrcScale = 2.25f;
+        public float axeOrcScale = 1.125f;
         [Tooltip("S12 드래곤 — 날개 폭 6m 프리팹 기준")]
         public float dragonScale = 1.65f;
         [Tooltip("S13 터렛")]
@@ -603,6 +605,13 @@ namespace SpellboundVR.Presentation
                 BuildStructure(team, false, Column.Center);
                 BuildStructure(team, true, Column.Center);
                 if (_arena.IsDuel) continue;
+                if (_arena.IsPolygon)
+                {
+                    // 다인전은 넥서스만 — 씬의 1 · 3번 타워는 숨긴다
+                    var tower = _session.Layout != null ? _session.Layout.GetStructureVisual(team, false) : null;
+                    if (tower != null) tower.gameObject.SetActive(false);
+                    continue;
+                }
                 BuildStructure(team, false, Column.Left);
                 BuildStructure(team, false, Column.Right);
             }
@@ -642,6 +651,7 @@ namespace SpellboundVR.Presentation
             var view = new StructureView
             {
                 Root = visual,
+                Holder = holder,
                 HpFill = AttachHpBar(holder, (isNexus ? 3.2f : 5.4f) * ArtScale, 1.6f), // 아트 높이: 넥서스 2.4m · 타워 4.8m
                 Team = team,
                 MuzzleHeight = size.y * 0.8f,
@@ -1216,12 +1226,14 @@ namespace SpellboundVR.Presentation
 
         private void UpdateStructures(MatchSnapshot s)
         {
+            bool polygon = _arena.IsPolygon;
             for (int i = 0; i < _structures.Length; i++)
             {
                 var view = _structures[i];
                 if (view == null || view.Root == null) continue;
                 ref var st = ref s.Structures[i];
                 bool alive = st.Alive != 0;
+                if (polygon && PolygonStructure(view, s, ref st)) continue;
                 SetFill(view.HpFill, st.MaxHp > 0 ? (float)st.Hp / st.MaxHp : 0f);
                 // 타워 발사 횟수가 늘었으면 총알 표시 (첫 스냅샷 · 경기 재시작 때는 기록만)
                 if (st.IsNexus == 0 && st.ShotCount != view.LastShotCount)
@@ -1264,6 +1276,27 @@ namespace SpellboundVR.Presentation
                     else for (int k = 0; k < renderers.Length; k++) renderers[k].SetPropertyBlock(null);
                 }
             }
+        }
+
+        /// <summary>
+        /// 다인전 넥서스: 서버 자리(U · V)를 따라가고 (링이 바뀌면 새 자리로), 링에 없는 자리(빈자리 · 탈락)는 잔해까지 지운다.
+        /// 지운 경우 true — 나머지 표시(파괴 연출 등)는 건너뛴다
+        /// </summary>
+        private bool PolygonStructure(StructureView view, MatchSnapshot s, ref StructureSnap st)
+        {
+            Vector3 pos = _arena.ToWorld(new Vector2(st.U, st.V));
+            if ((view.Holder.position - new Vector3(pos.x, view.Holder.position.y, pos.z)).sqrMagnitude > 0.01f)
+            {
+                view.Root.SetPositionAndRotation(pos, _arena.FacingRotation(view.Team));
+                view.Holder.position = new Vector3(pos.x, pos.y, pos.z);
+            }
+            bool inRing = _arena.HasTeam(view.Team) && st.MaxHp > 0;
+            if (inRing) return false;
+            SetActive(view.Root.gameObject, false);
+            SetActive(view.Rubble, false);
+            if (view.HpFill != null) SetActive(view.HpFill.parent.gameObject, false);
+            view.WasAlive = false;
+            return true;
         }
 
         private void PlayStructureDestroyFx(StructureView view)
@@ -1352,7 +1385,8 @@ namespace SpellboundVR.Presentation
             {
                 var a = _avatars[i];
                 ref var o = ref s.Players[(int)a.Team];
-                bool show = o.Present != 0 && a.Team != local && (int)a.Team != _hiddenAvatar;
+                bool show = o.Present != 0 && a.Team != local && (int)a.Team != _hiddenAvatar &&
+                            (!_arena.IsPolygon || _arena.HasTeam(a.Team)); // 다인전: 탈락한 자리는 전장에서 사라진다
                 if (a.Root.gameObject.activeSelf != show) a.Root.gameObject.SetActive(show);
                 if (!show) continue;
                 Vector3 target = _arena.ToWorld(_arena.PlayerPosition(a.Team, o.WorldColumn), PlatformHeight);

@@ -32,7 +32,7 @@ namespace SpellboundVR.Network
             if (!catalog.TryGet(request.SpellId, out definition)) return CastRejectReason.NotImplemented;
             if (!executors.Has(request.SpellId)) return CastRejectReason.NotImplemented;
 
-            if ((int)request.TargetColumn > 2) return CastRejectReason.InvalidTarget;
+            if ((int)request.TargetColumn > 4) return CastRejectReason.InvalidTarget; // 다인전은 상대 고르기로 0 ~ 4 — 지금 인원에 맞는지는 MatchSimulation 이 본다
             if (float.IsNaN(request.TargetDepth) || request.TargetDepth < -0.01f || request.TargetDepth > 1.01f)
                 return CastRejectReason.InvalidTarget;
 

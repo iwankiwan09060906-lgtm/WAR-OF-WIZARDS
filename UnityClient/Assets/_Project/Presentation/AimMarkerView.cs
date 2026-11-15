@@ -93,10 +93,12 @@ namespace SpellboundVR.Presentation
         public void UpdateMarker(Vector3 position, ArenaGeometry arena, Contracts.Team team, int worldColumn, float progress)
         {
             var frame = arena.GetLane(team, worldColumn);
-            if (_spanAllLanes && arena.IsDuel)
+            if (_spanAllLanes && arena.DuelLike)
             {
+                // 3열 띠: 가운데 레인 중심선 위로 (1:1 은 u = 0, 다인전 마지막 2명은 가운데 1:1 레인)
+                var band = arena.BandFrame(team, worldColumn);
                 Vector2 uv = arena.ToArena(position);
-                position = arena.ToWorld(0f, uv.y, position.y - arena.GroundY);
+                position = arena.ToWorld(band.Point(band.Along(uv)), position.y - arena.GroundY);
             }
             var facing = Quaternion.LookRotation(arena.ToWorldDirection(frame.Dir), Vector3.up);
             if (_halfExtents.x > 0f)

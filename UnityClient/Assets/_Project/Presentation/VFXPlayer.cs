@@ -109,6 +109,8 @@ namespace SpellboundVR.Presentation
         private Color _ambient;
         /// <summary>H01 얼음 덮개 — 전장 모양대로 깐 판 (Spellbound/FreezeCover 셰이더가 반경만큼 부드럽게 드러낸다)</summary>
         private Transform _freezeRoot;
+        /// <summary>얼음 판을 만든 때의 다인전 링</summary>
+        private int _freezeMask;
         private Material _freezeMaterial;
         private float _freezeStart = -1f;
         private float _freezeEnd;
@@ -202,6 +204,7 @@ namespace SpellboundVR.Presentation
                 float best = float.MaxValue;
                 for (int t = 0; t < arena.TeamCount; t++)
                 {
+                    if (!arena.HasTeam((Team)t)) continue; // 다인전: 탈락한 자리의 옛 발판은 빼고
                     float d = (arena.BasePosition((Team)t) - uv).sqrMagnitude;
                     if (d < best)
                     {
@@ -528,6 +531,11 @@ namespace SpellboundVR.Presentation
         /// <summary>H01: 시전자 자리에서 얼음 물결과 같은 속도로 전장(레인 · 발판 자리) 위로만 퍼진다 — 낭떠러지 쪽은 덮지 않는다</summary>
         private void StartFreezeCover(SpellDefinition def, Vector3 position)
         {
+            if (_freezeRoot != null && _freezeMask != _session.Arena.RingMask)
+            {
+                Destroy(_freezeRoot.gameObject); // 다인전: 전장이 다시 짜였으면 지금 레인으로
+                _freezeRoot = null;
+            }
             if (_freezeRoot == null) BuildFreezeCover();
             _freezeStart = Time.time;
             float spread = _session.Arena.FieldLength * 1.5f / FreezeWave.Speed;
@@ -547,9 +555,11 @@ namespace SpellboundVR.Presentation
             _freezeMaterial.SetFloat("_Softness", freezeEdgeSoftness);
             _freezeRoot = new GameObject("FreezeCover").transform;
             _freezeRoot.SetParent(_root, false);
-            float width = arena.IsDuel ? arena.ColumnSpacing : arena.LaneHalfWidth * 2f + 1f;
+            float width = arena.DuelLike ? arena.ColumnSpacing : arena.LaneHalfWidth * 2f + 1f;
+            _freezeMask = arena.RingMask;
             for (int lane = 0; lane < arena.LaneCount; lane++)
             {
+                if (!arena.LaneInUse(lane, false)) continue; // 다인전: 지금 링의 변만 (대각선은 바닥이 없다)
                 var frame = arena.GetLane(Team.Home, lane);
                 FreezeSheet(frame.Point(frame.Length * 0.5f), Mathf.Atan2(frame.Dir.x, frame.Dir.y) * Mathf.Rad2Deg, width, frame.Length);
             }
@@ -557,6 +567,7 @@ namespace SpellboundVR.Presentation
             for (int t = 0; t < arena.TeamCount; t++)
             {
                 var team = (Team)t;
+                if (!arena.HasTeam(team)) continue;
                 Vector2 fwd = arena.SeatForward(team);
                 FreezeSheet(arena.BasePosition(team) + fwd * (arena.NexusDepth * 0.5f), Mathf.Atan2(fwd.x, fwd.y) * Mathf.Rad2Deg,
                             arena.ColumnSpacing * 3f + 3f, arena.NexusDepth + arena.ColumnSpacing + 4f);

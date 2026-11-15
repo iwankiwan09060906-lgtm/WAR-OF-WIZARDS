@@ -74,7 +74,7 @@ namespace SpellboundVR.UI
             Stat(stats, m.Casts.ToString(), "시전 횟수", UiTheme.PurpleLight);
             Stat(stats, m.DamageTaken.ToString(), "받은 피해", UiTheme.CyanLight);
             Stat(stats, MetaState.Mmss(m.DurationSec), "플레이 시간", lose ? UiTheme.Hex(0xf87171) : UiTheme.Green);
-            if (m.Place > 0) Stat(stats, m.Place + " / " + Mathf.Max(m.Players, 4), "순위", UiTheme.Amber);
+            if (m.Place > 0) Stat(stats, m.Place + " / " + Mathf.Max(m.Players, m.Place), "순위", UiTheme.Amber);
 
             var actions = UiKit.HBox(col, 24, 0, TextAnchor.MiddleCenter, "Actions");
             actions.GetComponent<HorizontalLayoutGroup>().childForceExpandWidth = false;

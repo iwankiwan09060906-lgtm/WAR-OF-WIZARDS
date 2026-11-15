@@ -62,14 +62,22 @@ namespace SpellboundVR.UI
         private readonly SlotView[] _slots = new SlotView[DeckData.SlotCount];
         private readonly int[] _hp = new int[TeamUtil.TeamCount];
         private readonly int[] _maxHp = new int[TeamUtil.TeamCount];
-        private readonly bool[] _tower = { true, true, true, true };
-        private readonly bool[] _nexus = { true, true, true, true };
+        private readonly bool[] _tower = Filled(TeamUtil.TeamCount, true);
+        private readonly bool[] _nexus = Filled(TeamUtil.TeamCount, true);
         /// <summary>개인전 레인 타워 — 무너진 것만 알리려고 지난 상태를 둔다 (진영 × 열)</summary>
-        private readonly bool[] _laneTower = { true, true, true, true, true, true, true, true, true, true, true, true };
-        private readonly float[] _mult = { 1f, 1f, 1f, 1f };
+        private readonly bool[] _laneTower = Filled(TeamUtil.TeamCount * TeamUtil.ColumnCount, true);
+        private readonly float[] _mult = Filled(TeamUtil.TeamCount, 1f);
+
+        private static T[] Filled<T>(int n, T value)
+        {
+            var a = new T[n];
+            for (int i = 0; i < n; i++) a[i] = value;
+            return a;
+        }
         private Text _myHp, _enemyHp, _time, _stageText, _upText, _wave, _status, _message, _center, _afk, _coach, _coachTitle;
         private Text _myTitle;
         private FfaHudPanel _ffa;
+        private PolygonHudPanel _poly;
         /// <summary>관전 중 보고 있는 사람 (null = 내 시점)</summary>
         private Team? _spectated;
         /// <summary>관전 안내 한 줄 — 다른 알림이 사라지면 다시 나온다</summary>
@@ -81,6 +89,8 @@ namespace SpellboundVR.UI
         private readonly Text[] _posLabels = new Text[3];
         private DefenseView _myDefense, _enemyDefense;
         private bool Ffa => !_session.Arena.IsDuel;
+        /// <summary>다인전 (정N각형) — 타워가 없고 상대가 5명까지</summary>
+        private bool Polygon => _session.Arena.IsPolygon;
         private float _messageUntil;
         private float _centerUntil = -1f;
         private float _shieldEnd;
@@ -172,7 +182,8 @@ namespace SpellboundVR.UI
 
             // 둘째 줄: 방어 계층
             _myDefense = DefenseGroup(rt, -250f, "내 방어");
-            if (Ffa) _ffa = new FfaHudPanel(rt, _session);
+            if (Polygon) _poly = new PolygonHudPanel(rt, _session);
+            else if (Ffa) _ffa = new FfaHudPanel(rt, _session);
             else _enemyDefense = DefenseGroup(rt, 250f, "상대 방어");
             BuildCoach(rt);
 
@@ -197,7 +208,8 @@ namespace SpellboundVR.UI
             Glow(_afk, UiTheme.Alpha(Color.black, 0.8f));
             var hint = Label(rt, "Hint", new Vector2(Ffa ? 100f : 0f, -280f), new Vector2(Ffa ? 760f : 960f, 30f), Ffa ? 14 : 16, TextAnchor.MiddleCenter, UiTheme.Alpha(UiTheme.PurpleLight, 0.6f), false);
             string moveHand = MetaState.Settings.MoveHandName;
-            hint.text = Ffa ? "왼쪽 · 가운데 · 오른쪽을 가리키면 그쪽 상대를 공격   ·   " + moveHand + " 휘두르기로 피하기   ·   왼손 메뉴 제스처 = 경기 메뉴"
+            hint.text = Polygon ? "가리키는 쪽 상대를 공격 (소환은 양옆 이웃)   ·   " + moveHand + " 휘두르기로 피하기   ·   왼손 메뉴 제스처 = 경기 메뉴"
+                      : Ffa ? "왼쪽 · 가운데 · 오른쪽을 가리키면 그쪽 상대를 공격   ·   " + moveHand + " 휘두르기로 피하기   ·   왼손 메뉴 제스처 = 경기 메뉴"
                             : "핀치 룬 › 주먹 › 검지 3초   ·   손바닥 취소   ·   " + moveHand + " 휘두르기 이동   ·   왼손 메뉴 제스처 = 경기 메뉴";
 
             // 가운데 큰 글자 뒤 어두운 띠 (슬롯 위에 겹쳐도 읽히게, 글자가 있을 때만)
@@ -579,7 +591,7 @@ namespace SpellboundVR.UI
             _tower[t] = towerAlive;
             _nexus[t] = nexusAlive;
             string who = Ffa ? TeamUtil.SeatNumber(team) + "번 " : "상대 ";
-            if (Ffa) AnnounceLaneTowers(team);
+            if (Ffa && !Polygon) AnnounceLaneTowers(team);
             else if (wasTower && !towerAlive) ShowMessage(team == Local ? "내 타워가 무너졌습니다!" : who + "타워 파괴!", UiTheme.Amber);
             var s = _session.Events.Latest;
             bool eliminated = s != null && s.Players[t].Place != 0; // 탈락 알림을 덮지 않는다
@@ -643,6 +655,14 @@ namespace SpellboundVR.UI
             // 타워가 서 있으면 본체는 줄어든 피해만, 넥서스가 서 있으면 HP 회복
             int ratio = Mathf.RoundToInt(_session.Rules.TowerAliveSkillDamageRatio * 100f);
             var s = _session.Events.Latest;
+            if (Polygon)
+            {
+                // 다인전은 넥서스만 — 스킬 피해 감소 없음
+                v.Tower.text = "타워 없음";
+                v.TowerPill.color = UiTheme.Alpha(Color.white, 0.2f);
+                v.Detail.text = "피해 100% · " + (_nexus[t] ? "회복 · 유닛 막음" : "<color=" + UiKit.Hex(UiTheme.Enemy) + ">회복 없음 · 돌파당함</color>");
+                return;
+            }
             if (Ffa && s != null)
             {
                 v.Tower.text = "타워 " + s.TowersAlive((Team)t) + "/3";
@@ -814,6 +834,7 @@ namespace SpellboundVR.UI
             if (_session == null) return;
             float now = Time.time;
             if (_ffa != null) _ffa.Tick(_session.Events.Latest, Viewed);
+            if (_poly != null) _poly.Tick(_session.Events.Latest, Viewed);
 
             for (int i = 0; i < _slots.Length; i++)
             {

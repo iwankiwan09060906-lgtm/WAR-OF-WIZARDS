@@ -34,7 +34,19 @@ namespace SpellboundVR.Arena
             if (playerRig != null && rigHeight < 0f)
                 rigHeight = playerRig.position.y - layout.Geometry.GroundY;
             if (rigHeight < 0f) rigHeight = 0f;
-            if (layout.Mode == ArenaMode.Ffa4) rigHeight = layout.ffaEyeHeight; // 1:1 눈높이(10m) 대신 타워보다 약간 위
+            if (layout.Mode != ArenaMode.Duel) rigHeight = layout.ffaEyeHeight; // 1:1 눈높이(10m) 대신 타워보다 약간 위 (4인 · 다인전)
+        }
+
+        private int _ringMask;
+
+        /// <summary>다인전: 탈락으로 전장이 N-1각형으로 바뀌면 내 발판도 새 자리로 (순간 이동 연출과 함께)</summary>
+        private void LateUpdate()
+        {
+            var g = _layout != null ? _layout.Geometry : null;
+            if (g == null || !g.IsPolygon || g.RingMask == _ringMask) return;
+            bool first = _ringMask == 0;
+            _ringMask = g.RingMask;
+            if (g.HasTeam(_team)) Place(_worldColumn, !first);
         }
 
         public void SetTeam(Team team, int worldColumn)

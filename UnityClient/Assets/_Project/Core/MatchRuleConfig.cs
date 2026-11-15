@@ -128,6 +128,18 @@ namespace SpellboundVR.Core
         }
 
         /// <summary>4인 개인전 값으로 바꾼다 — 에셋 원본이 아니라 사본에 부른다 (GameBootstrap · BotLab)</summary>
+        [Tooltip("다인전: 이 인원(사람 + AI)이 모이면 카운트다운 — 그 순간 인원이 정N각형의 N (최대 6)")]
+        public int PolygonMinPlayers = 3;
+        [Tooltip("다인전: 플레이어 체력 배율 — 타워가 없어 스킬이 처음부터 100% 들어오므로 오래 버티게")]
+        public float PolygonPlayerHpScale = 3f;
+
+        /// <summary>다인전 규칙 = 개인전 규칙 + 플레이어 체력 배율</summary>
+        public void ApplyPolygonRules()
+        {
+            ApplyFfaRules();
+            PlayerMaxHp *= PolygonPlayerHpScale;
+        }
+
         public void ApplyFfaRules()
         {
             TowerMaxHp *= FfaStructureHpScale;

@@ -158,7 +158,13 @@ namespace SpellboundVR.Combat
 
         public Team GetLaneTarget(Team caster, int lane) => Arena.LaneTarget(caster, lane);
 
-        public int GetAimColumn(Team caster, int lane) => Arena.LaneColumn(Arena.LaneTarget(caster, lane), lane);
+        public int GetAimColumn(Team caster, int lane)
+        {
+            Team target = Arena.LaneTarget(caster, lane);
+            // 다인전 쌍 레인(변 · 대각선): 시전 순간 상대가 선 칸을 노린다 — 그 뒤에 칸을 옮기면 피한다
+            if (Arena.IsPolygon && lane < ArenaGeometry.PolygonDuelLaneBase) return Players[(int)target].WorldColumn;
+            return Arena.LaneColumn(target, lane);
+        }
 
         /// <summary>그 레인의 상대가 살아 있는가 (1:1 은 항상)</summary>
         public bool IsLaneOpen(Team caster, int lane) => Arena.IsDuel || IsPlayerAlive(Arena.LaneTarget(caster, lane));
@@ -386,10 +392,11 @@ namespace SpellboundVR.Combat
             if (!IsPlayerAlive(caster) || !Catalog.TryGet(spellId, out var def) || !_executors.TryGet(spellId, out ISpellExecutor executor)) return;
             // target 을 노리는 열: 1:1 은 target 이 선 열, 개인전은 target 으로 가는 레인
             Column column = Column.Center;
-            for (int c = 0; c < TeamUtil.ColumnCount; c++)
+            for (int c = 0; c < Arena.ColumnSlots; c++)
             {
+                if (!Arena.ColumnValid(caster, (Column)c)) continue;
                 int lane = Arena.ResolveLane(caster, (Column)c);
-                if (Arena.IsDuel ? lane == Players[(int)target].WorldColumn : Arena.LaneTarget(caster, lane) == target)
+                if (Arena.DuelLike ? Arena.LaneColumn(target, lane) == Players[(int)target].WorldColumn : Arena.LaneTarget(caster, lane) == target)
                 {
                     column = (Column)c;
                     break;

@@ -8,6 +8,7 @@
 //        1(Home)
 //   4(Seat4)  2(Seat2)      · 맞은편끼리 Home ↔ Away, Seat2 ↔ Seat4 (1:1 은 Home · Away 만 쓴다)
 //        3(Away)
+// 다인전(정N각형)은 Seat5 · Seat6 까지 최대 6자리를 쓰고, 링은 자리 번호(1 Home · 2 Seat2 · 3 Away · 4 Seat4 · 5 · 6) 순이다.
 
 using SpellboundVR.Contracts;
 
@@ -15,8 +16,8 @@ namespace SpellboundVR.Core
 {
     public static class TeamUtil
     {
-        /// <summary>진영 배열 크기 (4인 개인전 기준). 지금 경기에서 쓰는 수는 ArenaGeometry.TeamCount</summary>
-        public const int TeamCount = 4;
+        /// <summary>진영 배열 크기 (다인전 최대 6자리 기준). 지금 경기에서 쓰는 수는 ArenaGeometry.TeamCount</summary>
+        public const int TeamCount = 6;
         public const int ColumnCount = 3;
 
         /// <summary>맞은편 자리 (1:1 의 상대)</summary>
@@ -33,7 +34,7 @@ namespace SpellboundVR.Core
 
         public static int Index(Team team) => (int)team;
 
-        /// <summary>시계 방향 자리 순서 0 ~ 3 (Home · Seat2 · Away · Seat4)</summary>
+        /// <summary>시계 방향 자리 순서 0 ~ 3 (Home · Seat2 · Away · Seat4). 다인전 자리 Seat5 · Seat6 은 4 · 5 (번호판용)</summary>
         public static int ClockIndex(Team team)
         {
             switch (team)
@@ -41,7 +42,9 @@ namespace SpellboundVR.Core
                 case Team.Home: return 0;
                 case Team.Seat2: return 1;
                 case Team.Away: return 2;
-                default: return 3;
+                case Team.Seat4: return 3;
+                case Team.Seat5: return 4;
+                default: return 5;
             }
         }
 
@@ -56,7 +59,12 @@ namespace SpellboundVR.Core
             }
         }
 
-        /// <summary>전장 그림의 발판 번호 1 ~ 4</summary>
+        private static readonly Team[] s_seatOrder = { Team.Home, Team.Seat2, Team.Away, Team.Seat4, Team.Seat5, Team.Seat6 };
+
+        /// <summary>자리 순서(ClockIndex) 0 ~ 5 의 진영 — 다인전 링 순서</summary>
+        public static Team TeamAtSeat(int index) => s_seatOrder[((index % TeamCount) + TeamCount) % TeamCount];
+
+        /// <summary>전장 그림의 발판 번호 1 ~ 6 (다인전은 링을 시계 방향으로 도는 순서)</summary>
         public static int SeatNumber(Team team) => ClockIndex(team) + 1;
 
         /// <summary>내 열 중 그 상대를 가리키는 열 (ArenaGeometry.ColumnTarget 의 반대) — 1:1 의 상대는 항상 가운데</summary>
@@ -95,7 +103,7 @@ namespace SpellboundVR.Core
             }
         }
 
-        /// <summary>엔티티 ID 규칙 — 플레이어: 1 + 진영 (Home 1, Away 2, Seat2 3, Seat4 4)</summary>
+        /// <summary>엔티티 ID 규칙 — 플레이어: 1 + 진영 (Home 1, Away 2, Seat2 3, Seat4 4, Seat5 5, Seat6 6)</summary>
         public static int PlayerId(Team team) => 1 + (int)team;
 
         /// <summary>구조물 ID 시작값 — 구조물 ID - 이 값 = 구조물 배열 번호 (MatchSnapshot)</summary>

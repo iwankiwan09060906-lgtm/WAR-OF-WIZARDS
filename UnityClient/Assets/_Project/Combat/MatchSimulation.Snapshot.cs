@@ -177,23 +177,37 @@ namespace SpellboundVR.Combat
         /// <summary>그 상대를 치려면 조준할 내 열 — 1:1 은 상대가 선 열, 개인전은 그 상대로 가는 레인</summary>
         public Column ColumnToward(Team self, Team enemy)
         {
-            if (Arena.IsDuel) return TeamUtil.ToLocalColumn(self, Players[(int)enemy].WorldColumn);
+            if (Arena.DuelLike)
+            {
+                // 상대가 선 칸으로 가는 열 (1:1 은 레인 = 월드 열, 다인전 마지막 2명은 두 자리 열 축에 따라 거울)
+                for (int c = 0; c < TeamUtil.ColumnCount; c++)
+                    if (Arena.LaneColumn(enemy, Arena.ResolveLane(self, (Column)c)) == Players[(int)enemy].WorldColumn) return (Column)c;
+                return Column.Center;
+            }
             Arena.TryLocalColumn(self, Arena.LaneBetween(self, enemy), out Column local);
             return local;
         }
 
-        /// <summary>봇이 지금 노릴 상대 — 1:1 은 상대, 개인전은 내 쪽 레인 타워가 무너진 상대 중 HP 가 낮은 쪽 (없으면 HP 가 낮은 쪽)</summary>
+        /// <summary>봇이 지금 노릴 상대 — 1:1 은 상대, 개인전은 내 쪽 레인 타워가 무너진 상대 중 HP 가 낮은 쪽 (없으면 HP 가 낮은 쪽),
+        /// 다인전은 HP 가 낮은 쪽 (이웃 · 넥서스 무너진 이웃 우선)</summary>
         public Team FocusEnemy(Team team)
         {
             if (Arena.IsDuel) return TeamUtil.Opponent(team);
             var best = team;
             float bestScore = float.MaxValue;
             // 시계 방향으로 돌며 본다 — 동점이면 왼쪽 이웃 (모두가 같은 자리를 노리지 않게)
-            for (int step = 1; step < 4; step++)
+            int seats = Arena.IsPolygon ? Arena.RingCount : 4;
+            for (int step = 1; step < seats; step++)
             {
-                var enemy = TeamUtil.TeamAtClock(TeamUtil.ClockIndex(team) + step);
+                var enemy = Arena.IsPolygon ? Arena.RingTeam(Arena.RingIndex(team) + step) : TeamUtil.TeamAtClock(TeamUtil.ClockIndex(team) + step);
                 if (!IsPlayerAlive(enemy)) continue;
                 float score = Players[(int)enemy].Hp + (Defense.TowerAlive(enemy, team) ? 10000f : 0f);
+                if (Arena.IsPolygon)
+                {
+                    // 다인전: 타워가 없어 스킬은 누구에게나 100% — 웨이브 · 소환이 닿는 이웃을 먼저, 넥서스가 무너진 이웃은 돌파할 수 있어 더 먼저
+                    bool neighbor = Arena.IsSpawnLane(team, Arena.LaneBetween(team, enemy));
+                    score = Players[(int)enemy].Hp * (neighbor ? 0.85f : 1f) - (neighbor && !Defense.NexusAlive(enemy) ? 300f : 0f);
+                }
                 if (score < bestScore)
                 {
                     bestScore = score;

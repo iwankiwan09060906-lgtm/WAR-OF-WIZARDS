@@ -27,7 +27,7 @@ namespace SpellboundVR.Audio
         private readonly Dictionary<int, float> _mineUntil = new Dictionary<int, float>();
         /// <summary>반사 결계가 켜져 있는 동안 (0 = 내 것, 1 = 상대 것) — 결계 중 다시 오는 H04 Cast = 튕김</summary>
         private readonly float[] _reflectUntil = new float[2];
-        private readonly bool[] _nexusAlive = { true, true, true, true };
+        private readonly bool[] _nexusAlive = { true, true, true, true, true, true }; // 진영 수 (다인전 6자리)
         private readonly SlotState[] _slotState = new SlotState[8];
         private MatchPhase _phase;
         private int _hp = -1;

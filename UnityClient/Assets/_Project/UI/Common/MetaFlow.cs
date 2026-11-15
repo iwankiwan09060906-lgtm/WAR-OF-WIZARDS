@@ -185,7 +185,7 @@ namespace SpellboundVR.UI
             var deck = new int[Deck.DeckData.SlotCount];
             for (int i = 0; i < deck.Length && i < ids.Length; i++) deck[i] = ids[i];
             _boot.LocalPlayerName = MetaState.Nickname;
-            _boot.BeginBattle(deck, _online, skillTest && _boot.recognizeAllRunes, ctx.IsFfa ? Arena.ArenaMode.Ffa4 : Arena.ArenaMode.Duel);
+            _boot.BeginBattle(deck, _online, skillTest && _boot.recognizeAllRunes, ctx.ArenaMode);
             MetaState.ApplySettings(); // 전투용 비네팅 등은 BeginBattle에서 생긴다
 
             _events = _boot.Session != null ? _boot.Session.Events : null;
@@ -287,7 +287,7 @@ namespace SpellboundVR.UI
                 Result = result,
                 Reason = _forfeited && result == MatchResult.Lose ? "경기 중 기권했습니다." : ffa ? FfaReasonText(result, place) : ReasonText(result, reason),
                 Place = place,
-                Players = ctx.Players,
+                Players = ffa && _events.Latest != null ? _events.Latest.PresentCount() : ctx.Players, // 다인전은 모인 인원
                 DurationSec = duration,
                 Casts = _casts,
                 DamageDealt = _damageDealt,

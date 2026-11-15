@@ -178,7 +178,7 @@ namespace SpellboundVR.Backend
                     damageDealt = _damageDealt,
                     damageTaken = _damageTaken,
                     place = place,
-                    players = _events.Arena.TeamCount,
+                    players = _events.Latest != null ? _events.Latest.PresentCount() : _events.Arena.TeamCount, // 다인전은 모인 인원
                 };
                 MatchResultService.Record(record, _ => Saved("전적 저장 완료"), err => Saved(null, err));
             }

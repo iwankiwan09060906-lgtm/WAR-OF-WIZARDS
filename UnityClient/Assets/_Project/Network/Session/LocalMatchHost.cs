@@ -38,7 +38,7 @@ namespace SpellboundVR.Network
             sim.JoinHuman(localTeam, deck);
             sim.SetPlayerName(localTeam, playerName);
             if (fillOpponentWithBot)
-                while (sim.TryGetFreeTeam(out Team free)) sim.JoinBot(free); // 빈자리 전부 (1:1 = 1명, 개인전 = 3명)
+                while (sim.TryGetFreeTeam(out Team free)) sim.JoinBot(free); // 빈자리 전부 (1:1 = 1명, 4인 개인전 = 3명, 다인전 = 5명 → 정육각형)
             events.SetLocalTeam(localTeam);
 
             sim.WriteSnapshot(_snapshot);

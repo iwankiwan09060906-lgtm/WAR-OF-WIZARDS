@@ -40,6 +40,12 @@ namespace SpellboundVR.Arena
         [Tooltip("타워 · 넥서스 · 상대 아바타 크기 배율 (표시 전용, 판정과 무관). 1:1 보다 가까이 있어 그대로 두면 커 보인다")]
         public float ffaModelScale = 0.65f;
 
+        [Header("다인전 (정N각형, 3 ~ 6명) — 레인 폭 · 구조물 깊이 · 눈높이 · 모델 배율은 4인 개인전 값을 쓴다")]
+        [Tooltip("이웃 사이 거리 = 변 레인 길이 (m)")]
+        public float polygonEdgeLength = 32f;
+        [Tooltip("2명이 남아 1:1 전장이 됐을 때 마주 보는 거리 (m)")]
+        public float polygonDuelLength = 32f;
+
         [Header("씬 구조물 비주얼 (선택) — 연결 시 위치에서 깊이를 읽고, 표시용으로 재사용")]
         public Transform homeTowerVisual;
         public Transform homeNexusVisual;
@@ -67,6 +73,12 @@ namespace SpellboundVR.Arena
             basePos.y = transform.position.y;
             Vector3 forward = anchor.forward;
 
+            if (_mode == ArenaMode.Polygon)
+            {
+                _geometry = new ArenaGeometry(basePos, forward, polygonEdgeLength, ffaColumnSpacing, ffaNexusDepth, ffaTowerDepth, spawnDepth,
+                                              ArenaMode.Polygon, polygonDuelLength);
+                return _geometry;
+            }
             if (_mode == ArenaMode.Ffa4)
             {
                 _geometry = new ArenaGeometry(basePos, forward, ffaFieldLength, ffaColumnSpacing, ffaNexusDepth, ffaTowerDepth, spawnDepth, ArenaMode.Ffa4);

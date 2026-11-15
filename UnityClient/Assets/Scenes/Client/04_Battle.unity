@@ -8719,10 +8719,14 @@ MonoBehaviour:
   towerDepth: 13
   spawnDepth: 6
   commanderPlatformHeight: 0.52243906
+  ffaFieldLength: 56
+  ffaColumnSpacing: 5
   ffaNexusDepth: 4
   ffaTowerDepth: 9
   ffaEyeHeight: 4.2
   ffaModelScale: 0.65
+  polygonEdgeLength: 32
+  polygonDuelLength: 32
   homeTowerVisual: {fileID: 572280587}
   homeNexusVisual: {fileID: 269228009}
   awayTowerVisual: {fileID: 557882359}

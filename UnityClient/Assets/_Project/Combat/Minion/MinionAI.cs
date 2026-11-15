@@ -49,6 +49,7 @@ namespace SpellboundVR.Combat
                 return;
             }
 
+            Vector2 prev = u.Position, heading = Vector2.zero;
             u.RetargetTimer -= dt;
             if (u.RetargetTimer <= 0f || !sim.IsTargetAliveFor(u, u.TargetId))
             {
@@ -93,9 +94,42 @@ namespace SpellboundVR.Combat
                 u.Position = lane.Point(Mathf.Min(along, lane.Length), lateral);
                 u.State = UnitVisualState.Moving;
                 u.AttackTimer = Mathf.Min(u.AttackTimer, def.AttackInterval * 0.5f);
+                heading = lane.Dir; // 레인 중심 복귀 성분이 비켜 돌 방향을 뒤집지 않도록
             }
 
+            AvoidStructures(sim, u, prev, heading == Vector2.zero ? u.Position - prev : heading);
             u.Position = sim.Arena.ClampToField(u.Position);
+        }
+
+        /// <summary>타워 · 넥서스 · 설치물은 통과하지 않고 옆으로 돌아간다 (비행 유닛 제외)</summary>
+        private static void AvoidStructures(MatchSimulation sim, UnitState u, Vector2 prev, Vector2 heading)
+        {
+            if (u.Def.FlightHeight > 0f) return;
+            float step = (u.Position - prev).magnitude;
+            var structures = sim.Structures;
+            for (int i = 0; i < structures.Length; i++)
+                if (structures[i].Alive) SlideAround(u, heading, step, structures[i].Position, structures[i].Radius);
+            var units = sim.Units;
+            for (int i = 0; i < units.Length; i++)
+            {
+                var o = units[i];
+                if (o.Active && !o.Dead && o.IsStructure) SlideAround(u, heading, step, o.Position, o.Def.BodyRadius);
+            }
+        }
+
+        /// <summary>원 안으로 들어가면 원 둘레로 밀어내고, 이번 프레임 이동량만큼 지금 있는 쪽 둘레를 따라 미끄러진다</summary>
+        private static void SlideAround(UnitState u, Vector2 heading, float step, Vector2 center, float radius)
+        {
+            float r = radius + u.Def.BodyRadius;
+            Vector2 d = u.Position - center;
+            float sq = d.sqrMagnitude;
+            if (sq >= r * r) return;
+            Vector2 n = sq > 1e-8f ? d / Mathf.Sqrt(sq) : -heading.normalized;
+            if (n == Vector2.zero) n = Vector2.right;
+            // 진행 방향 오른쪽에 있으면 반시계, 왼쪽이면 시계 방향으로 돈다 (정면이면 반시계로 고정 — 결정적)
+            bool ccw = heading.x * d.y - heading.y * d.x <= 0f;
+            Vector2 t = ccw ? new Vector2(-n.y, n.x) : new Vector2(n.y, -n.x);
+            u.Position = center + n * r + t * step;
         }
 
         /// <summary>4인 개인전 우회 — 예전 레인을 따라 내 발판으로 돌아가고, 새 레인의 내 발판으로 옮긴 뒤 평소처럼 전진한다</summary>

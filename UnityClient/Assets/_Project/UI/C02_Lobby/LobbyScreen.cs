@@ -82,6 +82,7 @@ namespace SpellboundVR.UI
             // 경기 인원: 랭킹전 · 친선전 · 봇 연습전이 모두 따른다
             var players = UiKit.HBox(buttons, 12, 0, TextAnchor.MiddleCenter, "Players");
             players.GetComponent<HorizontalLayoutGroup>().childForceExpandWidth = false;
+            PlayerChoice(players, "다인전", MatchContext.PolygonPlayers);
             PlayerChoice(players, "4인 개인전", 4);
             PlayerChoice(players, "1:1 대전", 2);
             // 대전 종류를 고르면 덱 선택(C09 대전 준비)을 거쳐 시작한다
@@ -116,7 +117,7 @@ namespace SpellboundVR.UI
             {
                 MetaState.PreferredPlayers = players;
                 Redraw();
-            }, 214, 54, UiTheme.FontBody);
+            }, 180, 54, UiTheme.FontBody);
         }
 
         // ── 왼쪽: 내 마법사 · 마법서 ─────────────────────────────

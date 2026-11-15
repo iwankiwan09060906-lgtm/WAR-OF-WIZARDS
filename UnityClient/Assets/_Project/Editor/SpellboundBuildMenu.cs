@@ -110,12 +110,14 @@ namespace SpellboundVR.EditorTools
             finally { File.Delete(building); }
             if (built)
             {
-                // 서버 하나가 한 종류만 연다 — 4인 개인전(기본)과 1:1 은 세션 이름이 다르다 (GameBootstrap.SessionFor)
+                // 서버 하나가 한 종류만 연다 — 4인 개인전(기본) · 1:1 · 다인전은 세션 이름이 다르다 (GameBootstrap.SessionFor)
                 File.WriteAllText(Path.Combine(dir, "RunServer.bat"),
                     "@echo off\r\nstart \"Spellbound Server\" \"%~dp0SpellboundServer.exe\" -server -ffa -screen-fullscreen 0 -screen-width 1280 -screen-height 720 -logFile \"%~dp0server.log\"\r\n");
                 File.WriteAllText(Path.Combine(dir, "RunServer1v1.bat"),
                     "@echo off\r\nstart \"Spellbound Server 1v1\" \"%~dp0SpellboundServer.exe\" -server -duel -screen-fullscreen 0 -screen-width 1280 -screen-height 720 -logFile \"%~dp0server_1v1.log\"\r\n");
-                Debug.Log("[Spellbound Build] 서버 빌드 완료: " + exe + " (RunServer.bat = 4인 개인전, RunServer1v1.bat = 1:1)");
+                File.WriteAllText(Path.Combine(dir, "RunServerPolygon.bat"),
+                    "@echo off\r\nstart \"Spellbound Server Polygon\" \"%~dp0SpellboundServer.exe\" -server -polygon -screen-fullscreen 0 -screen-width 1280 -screen-height 720 -logFile \"%~dp0server_poly.log\"\r\n");
+                Debug.Log("[Spellbound Build] 서버 빌드 완료: " + exe + " (RunServer.bat = 4인 개인전, RunServer1v1.bat = 1:1, RunServerPolygon.bat = 다인전)");
             }
         }
 

@@ -194,11 +194,12 @@ namespace SpellboundVR.Core
             _matchRules = rules;
             if (mode == ArenaMode.Duel) return;
             _matchRules = Instantiate(rules); // 에셋 원본을 바꾸지 않도록 사본 사용
-            _matchRules.ApplyFfaRules();
+            if (mode == ArenaMode.Polygon) _matchRules.ApplyPolygonRules();
+            else _matchRules.ApplyFfaRules();
         }
 
-        /// <summary>경기 종류별 Fusion 세션 — 서버 하나가 한 종류만 연다 (RunServer.bat · RunServer1v1.bat)</summary>
-        private string SessionFor(ArenaMode mode) => mode == ArenaMode.Duel ? sessionName : sessionName + "-ffa";
+        /// <summary>경기 종류별 Fusion 세션 — 서버 하나가 한 종류만 연다 (RunServer.bat · RunServer1v1.bat · RunServerPolygon.bat)</summary>
+        private string SessionFor(ArenaMode mode) => mode == ArenaMode.Duel ? sessionName : mode == ArenaMode.Polygon ? sessionName + "-poly" : sessionName + "-ffa";
 
         /// <summary>경기 중 메뉴를 여는 동안 룬 그리기 · 조준 · 이동 입력을 멈춘다 (경기 자체는 계속된다)</summary>
         public void SetBattleInputEnabled(bool enabled)
@@ -248,7 +249,7 @@ namespace SpellboundVR.Core
         /// <summary>개인전 탈락 후 관전 — 남은 플레이어 시점을 돌아가며 본다. 볼 사람이 없거나 1:1 이면 false</summary>
         public bool BeginSpectating()
         {
-            if (_session == null || _arenaMode != ArenaMode.Ffa4 || _session.Arena.IsDuel) return false;
+            if (_session == null || _arenaMode == ArenaMode.Duel || _session.Arena.IsDuel) return false;
             var hud = GetComponent<BattleHudView>();
             if (_spectator == null)
             {
@@ -368,6 +369,7 @@ namespace SpellboundVR.Core
                 if (args[i] == "-session" && i + 1 < args.Length) sessionName = args[i + 1];
                 if (args[i] == "-duel") serverArenaMode = ArenaMode.Duel;
                 if (args[i] == "-ffa") serverArenaMode = ArenaMode.Ffa4;
+                if (args[i] == "-polygon") serverArenaMode = ArenaMode.Polygon;
             }
 #if UNITY_SERVER
             return BootMode.DedicatedServer;
@@ -438,7 +440,7 @@ namespace SpellboundVR.Core
             lineGo.AddComponent<MagicLineRenderer>().Initialize(input, cast, input is KeyboardInput ? 0.004f : 0.006f);
             gameObject.AddComponent<RuneReadyDisplay>().Initialize(cast, input, head, runeLibrary);
             var presentation = new GameObject("[Presentation]");
-            if (_arenaMode == ArenaMode.Ffa4) presentation.AddComponent<FfaArenaView>().Initialize(_session, vfxCatalog); // 구조물 · 팀 아트를 쓰기 전에
+            if (_arenaMode != ArenaMode.Duel) presentation.AddComponent<FfaArenaView>().Initialize(_session, vfxCatalog); // 구조물 · 팀 아트를 쓰기 전에 (4인 · 다인전)
             else presentation.AddComponent<DuelArenaView>().Initialize(_session);
             presentation.AddComponent<VFXPlayer>().Initialize(_session, vfxCatalog);
             _arenaView = presentation.AddComponent<ArenaStateView>();
@@ -559,7 +561,7 @@ namespace SpellboundVR.Core
             _session = new ClientSession(_matchRules, spellCatalog, runeLibrary, arenaLayout, view, new DeckData(localDeck));
             view.SetLocalTeam(Team.Home);
             var presentation = new GameObject("[Server View]");
-            if (_arenaMode == ArenaMode.Ffa4) presentation.AddComponent<FfaArenaView>().Initialize(_session, vfxCatalog);
+            if (_arenaMode != ArenaMode.Duel) presentation.AddComponent<FfaArenaView>().Initialize(_session, vfxCatalog);
             else presentation.AddComponent<DuelArenaView>().Initialize(_session);
             presentation.AddComponent<VFXPlayer>().Initialize(_session, vfxCatalog);
             var serverArena = presentation.AddComponent<ArenaStateView>();

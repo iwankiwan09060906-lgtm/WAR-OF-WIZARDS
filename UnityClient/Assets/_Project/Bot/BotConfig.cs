@@ -22,6 +22,9 @@ namespace SpellboundVR.Bot
         [Tooltip("AI 전략 두뇌: 시전 사이 최소 간격(초) — 사람이 룬을 그리고 조준하는 시간과 비슷하게")]
         public float AiCastGapSeconds = 7f;
 
+        [Tooltip("AI 전략 두뇌: 날아오는 투사체 하나마다 못 피할 확률 (0 = 늘 피함) — 사람처럼 가끔 놓치거나 늦게 반응한다")]
+        [Range(0f, 1f)] public float DodgeMissChance = 0.4f;
+
         [Tooltip("시전 전에 룬을 그리는 모습을 상대에게 보여 주는 시간(초) — 사람의 조준 시간과 비슷하게, AiCastGapSeconds 보다 짧게")]
         public float CastWindupSeconds = 4.5f;
 

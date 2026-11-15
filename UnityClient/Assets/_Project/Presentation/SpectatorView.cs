@@ -75,7 +75,9 @@ namespace SpellboundVR.Presentation
             if (s == null) return false;
             for (int i = 1; i <= TeamUtil.TeamCount; i++)
             {
-                var t = TeamUtil.TeamAtClock(TeamUtil.ClockIndex(from) + dir * i);
+                var arena = _session.Arena;
+                var t = arena.IsPolygon ? arena.RingTeam(arena.RingIndex(from) + dir * i) // 다인전: 링을 시계 방향으로
+                                        : TeamUtil.TeamAtClock(TeamUtil.ClockIndex(from) + dir * i);
                 if (!Watchable(s, t)) continue;
                 found = t;
                 return true;

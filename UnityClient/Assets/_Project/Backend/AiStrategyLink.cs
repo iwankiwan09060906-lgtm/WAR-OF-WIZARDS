@@ -235,7 +235,7 @@ namespace SpellboundVR.Backend
                     var w = ts.Sim.Outcome.Winner;
                     var result = MatchResultResolver.ToLocalResult(w, (Team)t);
                     string outcome = result == MatchResult.Win ? "WIN" : result == MatchResult.Lose ? "LOSE" : "DRAW";
-                    int players = ts.Sim.Arena.TeamCount;
+                    int players = ts.Sim.Arena.IsPolygon ? ts.Sim.PresentCount : ts.Sim.Arena.TeamCount; // 다인전은 모인 인원
                     int place = ts.Sim.Arena.IsDuel ? (outcome == "WIN" ? 1 : 2) : Mathf.Max(1, ts.Sim.GetPlayer((Team)t).Place);
                     if (Online)
                     {
@@ -320,7 +320,7 @@ namespace SpellboundVR.Backend
                 nearestIncomingProjectileColumn = (int)obs.NearestIncomingProjectileColumn,
                 nearestIncomingProjectileEta = obs.NearestIncomingProjectileEta,
                 lanes = new LaneDto[lanes.Length],
-                players = sim.Arena.TeamCount,
+                players = sim.Arena.IsPolygon ? sim.PresentCount : sim.Arena.TeamCount,
                 opponents = BuildOpponents(sim, team),
             };
             for (int i = 0; i < deck.Length; i++)
@@ -351,8 +351,10 @@ namespace SpellboundVR.Backend
         {
             if (sim.Arena.IsDuel) return Array.Empty<OpponentDto>();
             var list = new List<OpponentDto>(3);
+            // 서버 지도(wow_board)는 3열 — 다인전은 왼쪽 이웃 · 첫 건너편 · 오른쪽 이웃만 보낸다 (지금 인원에 없는 열은 뺀다)
             for (int c = 0; c < TeamUtil.ColumnCount; c++)
             {
+                if (!sim.Arena.ColumnValid(team, (Column)c)) continue;
                 Team enemy = sim.Arena.ColumnTarget(team, (Column)c);
                 var p = sim.GetPlayer(enemy);
                 list.Add(new OpponentDto

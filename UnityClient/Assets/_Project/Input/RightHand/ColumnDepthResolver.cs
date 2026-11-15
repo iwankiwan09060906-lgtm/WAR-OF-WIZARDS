@@ -4,6 +4,7 @@
 //   소환 · 설치      : 열만 (라인 / 구역 L · C · R)
 // 레이가 지면을 향하지 않으면(수평 이상) 수평 방향으로 최대 사거리 지점을 쓴다.
 // 4인 개인전: 왼쪽 · 맞은편 · 오른쪽 상대를 향해 뻗은 세 레인 중 가리킨 방향에 가장 가까운 레인을 고른다.
+// 다인전: 가리킨 방향에 가장 가까운 상대 (대각선 너머 포함). 소환 · 설치는 좌 · 우 이웃 레인 중에서만.
 
 using SpellboundVR.Arena;
 using SpellboundVR.Contracts;
@@ -49,7 +50,8 @@ namespace SpellboundVR.Input
                 groundPoint.y = groundY;
             }
 
-            arena.ResolveAim(team, arena.ToArena(groundPoint), out int lane, out Column local, out float depth);
+            bool placement = targeting == SpellTargeting.Summon || targeting == SpellTargeting.Structure;
+            arena.ResolveAim(team, arena.ToArena(groundPoint), out int lane, out Column local, out float depth, placement);
             var frame = arena.GetLane(team, lane);
 
             result.Valid = true;

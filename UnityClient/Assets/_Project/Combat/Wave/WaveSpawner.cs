@@ -50,8 +50,9 @@ namespace SpellboundVR.Combat
 
             for (int c = 0; c < 3; c++)
             {
+                if (!sim.Arena.ColumnValid(team, (Contracts.Column)c)) continue; // 다인전 3명: 가운데 열은 없다
                 int lane = sim.Arena.IsDuel ? c : sim.Arena.ResolveLane(team, (Contracts.Column)c);
-                if (!sim.IsLaneOpen(team, lane)) continue;
+                if (!sim.IsLaneOpen(team, lane) || !sim.Arena.IsSpawnLane(team, lane)) continue; // 다인전은 좌 · 우 이웃 레인만
                 int order = 0;
                 for (int i = 0; i < rules.MeleePerLane; i++, order++)
                     TrySpawn(sim, team, MinionKind.Melee, lane, order);
@@ -65,8 +66,9 @@ namespace SpellboundVR.Combat
                 for (int i = 0; i < 3; i++)
                 {
                     int c = (start + i) % 3;
+                    if (!sim.Arena.ColumnValid(team, (Contracts.Column)c)) continue;
                     int lane = sim.Arena.IsDuel ? c : sim.Arena.ResolveLane(team, (Contracts.Column)c);
-                    if (!sim.IsLaneOpen(team, lane)) continue;
+                    if (!sim.IsLaneOpen(team, lane) || !sim.Arena.IsSpawnLane(team, lane)) continue;
                     TrySpawn(sim, team, MinionKind.Brute, lane, 2);
                     break;
                 }

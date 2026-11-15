@@ -16,7 +16,8 @@ namespace SpellboundVR.UI
         private Text _count, _sub;
         private GameObject _cancel;
         private int _lastShown = -99;
-        private readonly Text[] _seats = new Text[TeamUtil.TeamCount];
+        private readonly Text[] _seats = new Text[TeamUtil.TeamCount]; // 4인 개인전은 앞 4칸만, 다인전은 6칸
+        private int _seatCount = 4;
 
         public override string Title => null;
         public override bool ShowBackToLobby => false;
@@ -59,8 +60,10 @@ namespace SpellboundVR.UI
         {
             var col = UiKit.VBox(parent, 16, 0, TextAnchor.MiddleCenter, "Seats");
             UiKit.Size(col, -1, -1, 1);
-            UiKit.Label(col, "4인 개인전", UiTheme.FontTitle, UiTheme.Enemy, true, TextAnchor.MiddleCenter);
-            for (int i = 0; i < _seats.Length; i++)
+            bool polygon = MetaState.Match != null && MetaState.Match.IsPolygon;
+            _seatCount = polygon ? TeamUtil.TeamCount : 4;
+            UiKit.Label(col, polygon ? "다인전 — 모인 인원만큼 정다각형" : "4인 개인전", UiTheme.FontTitle, UiTheme.Enemy, true, TextAnchor.MiddleCenter);
+            for (int i = 0; i < _seatCount; i++)
             {
                 _seats[i] = UiKit.Label(col, "", UiTheme.FontTitle - 2, UiTheme.Text2, true, TextAnchor.MiddleLeft);
                 _seats[i].supportRichText = true;
@@ -75,13 +78,13 @@ namespace SpellboundVR.UI
             var s = flow.Latest;
             if (s == null || _seats[0] == null) return 0;
             int present = 0;
-            for (int t = 0; t < _seats.Length; t++)
+            for (int t = 0; t < _seatCount; t++)
             {
-                var team = TeamUtil.TeamAtClock(t);
+                var team = TeamUtil.TeamAtSeat(t);
                 ref var p = ref s.Players[(int)team];
                 bool me = team == flow.LocalTeam && p.Present != 0;
                 string name = !string.IsNullOrEmpty(s.Names[(int)team]) ? s.Names[(int)team] : p.IsBot != 0 ? "AI" : "";
-                string state = p.Present == 0 ? "<color=" + UiKit.Hex(UiTheme.Text3) + ">기다리는 중…</color>"
+                string state = p.Present == 0 ? "<color=" + UiKit.Hex(UiTheme.Text3) + ">" + (_seatCount > 4 && t >= 3 ? "빈자리 (비면 없이 시작)" : "기다리는 중…") + "</color>"
                              : p.IsBot != 0 ? "<color=" + UiKit.Hex(UiTheme.Amber) + ">AI 입장</color>"
                              : "<color=" + UiKit.Hex(UiTheme.Cyan) + ">입장 완료</color>";
                 if (p.Present != 0) present++;
@@ -147,7 +150,9 @@ namespace SpellboundVR.UI
                     if (_sub != null) _sub.text = flow.OnlineBattle ? flow.OnlineStatus : "경기를 준비하는 중…";
                     var s = flow.Latest;
                     if (_sub != null && s != null && ctx != null && ctx.IsFfa && s.Header.BotFillIn >= 0f)
-                        _sub.text = $"입장 {present} / 4명 · {Mathf.CeilToInt(s.Header.BotFillIn)}초 뒤 빈자리는 AI 가 채웁니다";
+                        _sub.text = ctx.IsPolygon
+                            ? $"입장 {present}명 · {Mathf.CeilToInt(s.Header.BotFillIn)}초 뒤 3명이 안 되면 AI 가 채웁니다 (3명이 모이면 시작)"
+                            : $"입장 {present} / 4명 · {Mathf.CeilToInt(s.Header.BotFillIn)}초 뒤 빈자리는 AI 가 채웁니다";
                     break;
             }
             if (_cancel != null) _cancel.SetActive(flow.Phase != MatchPhase.Countdown && flow.Phase != MatchPhase.Playing);

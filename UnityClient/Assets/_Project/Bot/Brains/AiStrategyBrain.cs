@@ -50,8 +50,10 @@ namespace SpellboundVR.Bot
         public float AllyFront;
         /// <summary>내 타워 사거리 근처까지 온 적 유닛 수</summary>
         public int EnemiesNearMyBase;
-        /// <summary>개인전: 이 레인의 상대가 탈락해 쓸 수 없다</summary>
+        /// <summary>개인전: 이 레인의 상대가 탈락해 쓸 수 없다 (다인전: 지금 인원에 없는 열도)</summary>
         public bool Closed;
+        /// <summary>다인전: 이웃이 아닌 상대로 가는 대각선 — 직접 공격만, 소환 · 설치 불가</summary>
+        public bool NoSpawn;
     }
 
     /// <summary>서버가 준 한 수 (슬롯 · 열은 봇 자신의 시점)</summary>
@@ -248,6 +250,8 @@ namespace SpellboundVR.Bot
         private readonly SpellCatalog _catalog;
         private readonly BotConfig _config;
         private readonly DeterministicRandom _rng;
+        /// <summary>지금 날아오는 투사체에 대해 이미 피할지 정했는가 · 못 피하기로 했는가 (투사체 하나마다 한 번만 정한다)</summary>
+        private bool _threatRolled, _threatMissed;
         private readonly IStrategyAdvisor _advisor;
         private AiBrainWeights _w;
         /// <summary>자세별 가중치 (-1 지키기 · 0 그대로 · 1 밀기) — 작전이 있으면 이번 틱에 _cw 로 쓴다</summary>
@@ -257,8 +261,10 @@ namespace SpellboundVR.Bot
         private AiBrainWeights _cw;
         private StrategyOrders _orders;
         private bool _hasOrders;
-        private readonly LaneInfo[] _lanes = new LaneInfo[TeamUtil.ColumnCount];
-        private readonly Arena.LaneFrame[] _frames = new Arena.LaneFrame[TeamUtil.ColumnCount];
+        /// <summary>열 수 — 다인전은 상대를 0 ~ 4 열로 고른다 (1:1 · 4인은 3 · 4번 열이 늘 닫혀 있다)</summary>
+        private const int BrainColumns = 5;
+        private readonly LaneInfo[] _lanes = new LaneInfo[BrainColumns];
+        private readonly Arena.LaneFrame[] _frames = new Arena.LaneFrame[BrainColumns];
         private readonly BotView _view = new BotView();
         /// <summary>이번 판단에서 노릴 상대로 가는 열 · 그 상대의 타워가 무너졌는지</summary>
         private Column _focusColumn;
@@ -318,7 +324,12 @@ namespace SpellboundVR.Bot
             {
                 int laneId = arena.ResolveLane(team, (Column)c);
                 _frames[c] = arena.GetLane(team, laneId);
-                _lanes[c] = new LaneInfo { EnemyFront = 1f, Closed = !sim.IsLaneOpen(team, laneId) };
+                _lanes[c] = new LaneInfo
+                {
+                    EnemyFront = 1f,
+                    Closed = !arena.ColumnValid(team, (Column)c) || !sim.IsLaneOpen(team, laneId),
+                    NoSpawn = !arena.IsSpawnLane(team, laneId),
+                };
             }
 
             // 적 유닛 깊이를 열마다 모아 두었다가 가장 많이 겹치는 깊이를 찾는다
@@ -363,8 +374,15 @@ namespace SpellboundVR.Bot
         }
 
         private const int MaxTrackedPerLane = 48;
-        private readonly float[][] _depthScratch = { new float[MaxTrackedPerLane], new float[MaxTrackedPerLane], new float[MaxTrackedPerLane] };
-        private readonly int[] _depthCount = new int[TeamUtil.ColumnCount];
+        private readonly float[][] _depthScratch = NewDepthScratch();
+        private readonly int[] _depthCount = new int[BrainColumns];
+
+        private static float[][] NewDepthScratch()
+        {
+            var d = new float[BrainColumns][];
+            for (int c = 0; c < d.Length; c++) d[c] = new float[MaxTrackedPerLane];
+            return d;
+        }
 
         private static void FindCluster(float[] d, int n, out float at, out int count)
         {
@@ -402,8 +420,17 @@ namespace SpellboundVR.Bot
 
             // 1) 피하기
             sbyte move = 0;
-            if (obs.IncomingProjectileCount > 0 && obs.NearestIncomingProjectileColumn == obs.SelfColumn &&
-                obs.NearestIncomingProjectileEta >= 0f && obs.NearestIncomingProjectileEta < DodgeEta && t >= _nextMoveAllowed)
+            bool threat = obs.IncomingProjectileCount > 0 && obs.NearestIncomingProjectileColumn == obs.SelfColumn &&
+                          obs.NearestIncomingProjectileEta >= 0f && obs.NearestIncomingProjectileEta < DodgeEta;
+            if (!threat) _threatRolled = false;
+            else if (!_threatRolled)
+            {
+                // 사람처럼 실수: 투사체 하나마다 한 번 굴려서, 못 피하기로 했으면 그 투사체가 지나갈 때까지 그대로 맞는다
+                _threatRolled = true;
+                _threatMissed = _rng.NextFloat() < (_config != null ? _config.DodgeMissChance : 0f);
+                if (_threatMissed) LastReason = "투사체를 놓침";
+            }
+            if (threat && !_threatMissed && t >= _nextMoveAllowed)
             {
                 int self = (int)obs.SelfColumn;
                 int target = self == 1 ? (_rng.NextFloat() < 0.5f ? 0 : 2) : 1;
@@ -486,6 +513,14 @@ namespace SpellboundVR.Bot
         private static bool UsesLane(SpellDefinition def) =>
             def.Targeting != SpellTargeting.Self && def.Targeting != SpellTargeting.Tower && def.Targeting != SpellTargeting.Global;
 
+        /// <summary>그 열에 이 스킬을 쓸 수 없는가 — 상대가 없거나, 다인전 대각선에 소환 · 설치</summary>
+        private bool LaneBlocked(SpellDefinition def, Column col)
+        {
+            if (!UsesLane(def)) return false;
+            var l = _lanes[(int)col];
+            return l.Closed || (l.NoSpawn && (def.Executor == SpellExecutorType.Summon || def.Executor == SpellExecutorType.Structure));
+        }
+
         // ── 서버 전략 ─────────────────────────────────────────
 
         private bool TryAdvice(in BotObservation obs, float t, out SpellCastRequest request)
@@ -495,7 +530,7 @@ namespace SpellboundVR.Bot
             if (t - a.RequestedAt > AdviceMaxAge || a.Slot < 0 || a.Slot >= _deck.Length) return false;
             if ((obs.SelfSlotReadyMask & (1 << a.Slot)) == 0 || _deck[a.Slot] != a.SpellId) return false;
             var def = _catalog.Get(a.SpellId);
-            if (def == null || (UsesLane(def) && _lanes[(int)a.Column].Closed)) return false;
+            if (def == null || (int)a.Column >= BrainColumns || LaneBlocked(def, a.Column)) return false;
             request = new SpellCastRequest
             {
                 SpellId = a.SpellId,
@@ -527,7 +562,7 @@ namespace SpellboundVR.Bot
                 var def = id > 0 ? _catalog.Get(id) : null;
                 if (def == null) continue;
                 float raw = Score(def, obs, out Column col, out float depth, out string why);
-                if (UsesLane(def) && _lanes[(int)col].Closed) continue;
+                if ((int)col >= BrainColumns || LaneBlocked(def, col)) continue;
                 float scale = _cw.Scale[(int)def.Behavior % AiBrainWeights.BehaviorCount];
                 float score = raw * scale;
                 if (score > 0f) AddCandidate(slot, id, col, Mathf.Clamp(depth, 0.05f, def.MaxDepth), score, why);
@@ -761,7 +796,7 @@ namespace SpellboundVR.Bot
             for (int c = 0; c < _lanes.Length; c++)
             {
                 var l = _lanes[c];
-                if (l.Closed) continue;
+                if (l.Closed || l.NoSpawn) continue;
                 float weak = (l.Enemies - l.Allies) * 2f + l.EnemiesNearMyBase * 2f - l.Allies * 0.1f;
                 float push = (l.Allies - l.Enemies) * 2f + l.AllyFront * 3f;
                 float s = (1f - _cw.SummonPush) * weak + _cw.SummonPush * push;

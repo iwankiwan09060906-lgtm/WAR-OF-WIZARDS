@@ -87,6 +87,19 @@ ROOM_CODE_RE = re.compile(r"^[A-Z0-9]{6}$")
 
 # 개인전: 한 경기 2~4명 (2명 = 1:1). 팀 없이 나 빼고 모두가 적이고, 빈자리는 봇이 채운다
 MAX_PLAYERS = 4
+# 다인전(정N각형): max_players = 6 이 이 모드의 표시 (format "poly"). 사람을 6명까지 모으고, 모자라면 봇으로 3명까지만 채운다
+# — 경기 인원(N)은 모인 사람 수로 정해진다. 실제 자리 수는 match_session_players 를 센다
+POLY_PLAYERS = 6
+POLY_MIN_PLAYERS = 3
+
+
+def is_poly(n):
+    return (n or 0) >= POLY_PLAYERS
+
+
+def seat_target(n, humans):
+    """자리 수: 다인전은 모인 사람 수(최소 3), 그 밖에는 n"""
+    return max(POLY_MIN_PLAYERS, min(POLY_PLAYERS, humans)) if is_poly(n) else n
 
 # 공식 팀 계정 (아이디 = 닉네임, 이메일, 비밀번호). 웹은 아이디로, Unity(이메일 칸 · 한글 키보드 없음)는 이메일로 로그인.
 # 네 계정은 처음부터 서로 친구라 4인 친선전에 바로 초대할 수 있다.
@@ -1886,6 +1899,8 @@ class WowHttpHandler(BaseHTTPRequestHandler):
                     if result not in ("WIN", "LOSE", "DRAW"):
                         return self.send_error_json(400, "result 는 WIN · LOSE · DRAW 중 하나입니다.")
                     n = s["max_players"] or 2
+                    if is_poly(n):   # 다인전: 실제 자리 수 (모인 인원)
+                        n = conn.execute("SELECT COUNT(*) AS k FROM match_session_players WHERE match_id = ?", (match_id,)).fetchone()["k"]
                     try:
                         place = int(body.get("place") or (1 if result == "WIN" else 0))
                     except (TypeError, ValueError):
@@ -2283,9 +2298,9 @@ class WowHttpHandler(BaseHTTPRequestHandler):
                     return self.send_error_json(400, f"준비하지 않은 마법사가 {not_ready}명 있습니다.")
                 seats = [{"player_id": m["player_id"], "bot_name": m["bot_name"], "bot_rating": m["bot_rating"]}
                          for m in c.execute("SELECT * FROM room_members WHERE room_code = ? ORDER BY joined_at, id", (code,)).fetchall()]
-                fill_bots(seats, n, p["rating"])
+                fill_bots(seats, seat_target(n, len(seats)), p["rating"])
                 conn.commit()
-                match_id = create_match_session(f"FR-{code}", seats, "friendly")
+                match_id = create_match_session(f"FR-{code}", seats, "friendly", POLY_PLAYERS if is_poly(n) else None)
             c.execute("UPDATE game_rooms SET status = 'PLAYING', match_id = ? WHERE code = ?", (match_id, code))
             return done("start", {"message": "게임이 시작되었습니다.", "matchId": match_id}, matchId=match_id)
 
@@ -2412,22 +2427,27 @@ def default_players():
 
 def players_of(body):
     """요청의 경기 인원 2~4 (개인전): {players: 4} · {maxPlayers: 3} · {format: "ffa4" | "4p" | "1v1"},
+    다인전은 {format: "poly"} 또는 {players: 6} → POLY_PLAYERS.
     없으면 설정 match.default_players (기본 4 — 4명까지 모으고 빈자리는 봇)"""
     body = body or {}
     raw = body.get("players") or body.get("maxPlayers") or body.get("format")
     if not raw:
         return default_players()
     s = str(raw).lower()
+    if "poly" in s:
+        return POLY_PLAYERS
     if "v" in s and "ffa" not in s:          # "1v1" = 2명, "1v1v1v1" = 4명
         n = s.count("v") + 1
     else:
         digits = re.findall(r"\d+", s)
         n = int(digits[-1]) if digits else default_players()
+    if n >= POLY_PLAYERS:
+        return POLY_PLAYERS
     return max(2, min(MAX_PLAYERS, n))
 
 
 def format_name(n):
-    return "1v1" if n == 2 else f"ffa{n}"
+    return "poly" if is_poly(n) else "1v1" if n == 2 else f"ffa{n}"
 
 
 def bot_seat(rating):
@@ -2442,9 +2462,10 @@ def fill_bots(seats, n, rating):
     return seats
 
 
-def create_match_session(room, seats, mode="ranked"):
+def create_match_session(room, seats, mode="ranked", max_players=None):
     """게임 방(match_sessions) + 자리 표(match_session_players). 같은 사람의 끝나지 않은 예전 방은 취소.
-    seats = 자리 순서대로 [{player_id (봇은 None), bot_name, bot_rating}], 첫 자리(player1)는 사람"""
+    seats = 자리 순서대로 [{player_id (봇은 None), bot_name, bot_rating}], 첫 자리(player1)는 사람.
+    max_players: 다인전이면 POLY_PLAYERS (모드 표시), 아니면 자리 수"""
     n = len(seats)
     ids = [s["player_id"] for s in seats if s["player_id"]]
     p2 = next((s["player_id"] for s in seats[1:] if s["player_id"]), None)
@@ -2457,14 +2478,15 @@ def create_match_session(room, seats, mode="ranked"):
                          (SELECT match_id FROM match_session_players WHERE player_id IN ({marks}))""", (now, *ids))
         cur = conn.execute("""INSERT INTO match_sessions (room_code, mode, player1_id, player2_id, bot_name, bot_rating, max_players, updated_at)
                               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-                           (room, mode, seats[0]["player_id"], p2, bot["bot_name"] if bot else "", bot["bot_rating"] if bot else 0, n, now))
+                           (room, mode, seats[0]["player_id"], p2, bot["bot_name"] if bot else "", bot["bot_rating"] if bot else 0,
+                            max_players or n, now))
         mid = cur.lastrowid
         for seat, s in enumerate(seats):
             conn.execute("""INSERT INTO match_session_players (match_id, seat, player_id, bot_name, bot_rating)
                             VALUES (?, ?, ?, ?, ?)""", (mid, seat, s["player_id"], s["bot_name"], s["bot_rating"]))
         conn.commit()
     broadcast_sse("match", {"action": "matched", "matchId": mid, "roomCode": room, "players": ids,
-                            "bot": len(ids) == 1, "maxPlayers": n})
+                            "bot": len(ids) == 1, "maxPlayers": max_players or n})
     return mid
 
 
@@ -2540,8 +2562,8 @@ def close_session_if_reported(conn, mid):
         conn.execute("UPDATE match_sessions SET status = 'ENDED' WHERE id = ? AND status != 'CANCELLED'", (mid,))
 
 
-def matched_payload(seats, me_id, room, mid, members):
-    """매칭 완료 응답 (예전 1:1 칸 + 개인전 칸: maxPlayers · seat · opponents)"""
+def matched_payload(seats, me_id, room, mid, members, max_players=None):
+    """매칭 완료 응답 (예전 1:1 칸 + 개인전 칸: maxPlayers · seat · opponents). 다인전은 maxPlayers = POLY_PLAYERS"""
     by_id = {m["playerId"]: m for m in members if m["playerId"]}
     my_seat = next(i for i, s in enumerate(seats) if s["player_id"] == me_id)
     opponents = []
@@ -2553,7 +2575,7 @@ def matched_payload(seats, me_id, room, mid, members):
             opponents.append({"playerId": m["playerId"], "nickname": m["nickname"], "rating": m["rating"], "bot": False, "seat": i})
         else:
             opponents.append({"nickname": s["bot_name"], "rating": s["bot_rating"], "bot": True, "seat": i})
-    n = len(seats)
+    n = max_players or len(seats)
     out = {"state": "matched", "opponentNickname": " · ".join(o["nickname"] for o in opponents),
            "opponentRating": round(sum(o["rating"] for o in opponents) / len(opponents)),
            "bot": all(o["bot"] for o in opponents), "roomCode": room, "matchId": mid,
@@ -2586,15 +2608,16 @@ def matchmaking_status(pid, bot_timeout):
             ids = {q["player_id"] for q in group}
             MATCH_QUEUE[:] = [q for q in MATCH_QUEUE if q["player_id"] not in ids]
             seats = [{"player_id": q["player_id"], "bot_name": "", "bot_rating": 0} for q in group]
-            fill_bots(seats, n, sum(q["rating"] for q in group) / len(group))
+            fill_bots(seats, seat_target(n, len(group)), sum(q["rating"] for q in group) / len(group))
             room = f"{'BOT' if len(group) == 1 else 'RANK'}-{uuid.uuid4().hex[:6].upper()}"
-            mid = create_match_session(room, seats, "ranked")
+            fmt = POLY_PLAYERS if is_poly(n) else None
+            mid = create_match_session(room, seats, "ranked", fmt)
             with get_db() as conn:
                 members = session_members(conn, mid)
             for q in group:
                 if q["player_id"] != pid:
-                    MATCH_RESULTS[q["player_id"]] = {"at": now, "result": matched_payload(seats, q["player_id"], room, mid, members)}
-            return matched_payload(seats, pid, room, mid, members)
+                    MATCH_RESULTS[q["player_id"]] = {"at": now, "result": matched_payload(seats, q["player_id"], room, mid, members, fmt)}
+            return matched_payload(seats, pid, room, mid, members, fmt)
         return {"state": "searching", "elapsedSeconds": int(elapsed), "ratingWindow": int(window),
                 "botTimeout": bot_timeout, "queueSize": sum(1 for q in MATCH_QUEUE if q.get("max_players", 2) == n),
                 "maxPlayers": n, "format": format_name(n), "playersNeeded": n, "playersFound": min(n, 1 + len(others))}
@@ -2831,7 +2854,7 @@ def lan_addresses():
 # ─────────────────────────────────────────────────────────────────────────────
 GAME_SERVER_DIR = os.path.join(os.path.dirname(SERVER_DIR), "Builds", "Server")
 GAME_SERVER_EXE = "SpellboundServer.exe"
-GAME_SERVER_MODES = (("-ffa", "server.log"), ("-duel", "server_1v1.log"))   # 서버 하나가 한 종류만 연다
+GAME_SERVER_MODES = (("-ffa", "server.log"), ("-duel", "server_1v1.log"), ("-polygon", "server_poly.log"))   # 서버 하나가 한 종류만 연다
 
 
 def _job_that_ends_with_me():
@@ -2887,7 +2910,7 @@ def start_game_servers():
     adopt = _job_that_ends_with_me()
     for mode, log in GAME_SERVER_MODES:
         threading.Thread(target=_keep_game_server, args=(exe, mode, log, adopt), daemon=True).start()
-    print("    - 게임 서버: 4인 개인전 · 1:1 을 창 없이 켰습니다 (이 창을 닫으면 같이 꺼집니다)")
+    print("    - 게임 서버: 4인 개인전 · 1:1 · 다인전을 창 없이 켰습니다 (이 창을 닫으면 같이 꺼집니다)")
 
 
 def main():

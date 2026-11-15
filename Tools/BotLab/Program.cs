@@ -23,6 +23,9 @@ internal static class Program
         if (args.Length > 0 && args[0] == "tune") return Tune(args.Length > 1 ? int.Parse(args[1]) : 400, args.Length > 2 ? int.Parse(args[2]) : 3);
         if (args.Length > 0 && args[0] == "ffa") return Ffa.Measure(args.Length > 1 ? int.Parse(args[1]) : 200, args.Length > 2 ? float.Parse(args[2]) : 900f);
         if (args.Length > 0 && args[0] == "ffatest") return Ffa.Test();
+        if (args.Length > 0 && args[0] == "polytest") return Polygon.Test();
+        if (args.Length > 0 && args[0] == "poly")
+            return Polygon.Measure(args.Length > 1 ? int.Parse(args[1]) : 40, args.Length > 2 ? float.Parse(args[2]) : 1200f);
         if (args.Length > 0 && args[0] == "skilltest") return SkillTest.Run();
         if (args.Length > 0 && args[0] == "ffatrace") return Ffa.Trace(args.Length > 1 ? uint.Parse(args[1]) : 1u, args.Length > 2 ? float.Parse(args[2]) : 900f);
         if (args.Length > 0 && args[0] == "vlm")
