@@ -1,0 +1,9 @@
+<!-- 엔진 코드 제거(Strip Engine Code)가 지우지 못하게: GameObject.CreatePrimitive 가 런타임에 붙이는 콜라이더
+     (씬 · 프리팹에 없어서 빌드가 안 쓰는 줄 알고 지운다 → Quest 에서 "class 'SphereCollider' doesn't exist") -->
+<linker>
+  <assembly fullname="UnityEngine.PhysicsModule">
+    <type fullname="UnityEngine.SphereCollider" preserve="all" />
+    <type fullname="UnityEngine.CapsuleCollider" preserve="all" />
+    <type fullname="UnityEngine.MeshCollider" preserve="all" />
+  </assembly>
+</linker>

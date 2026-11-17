@@ -85,6 +85,13 @@ namespace SpellboundVR.EditorTools
             BuildQuest(BootMode.FusionClient, "Spellbound.apk");
         }
 
+        /// <summary>빌드를 중간에 취소한 뒤엔 이걸로 — 일반 빌드는 반쯤 쓰인 에셋 데이터를 그대로 재사용해 Quest 에서 검은 화면이 된다</summary>
+        [MenuItem("Spellbound/Build/Quest APK (Fusion Client → PC server, Clean Build)", priority = 40)]
+        public static void BuildQuestClientClean()
+        {
+            BuildQuest(BootMode.FusionClient, "Spellbound.apk", clean: true);
+        }
+
         [MenuItem("Spellbound/Build/Quest APK (Offline vs Bot)", priority = 41)]
         public static void BuildQuestOffline()
         {
