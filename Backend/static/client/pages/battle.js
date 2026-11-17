@@ -2,7 +2,6 @@
 //   둘레는 웹 HUD: 체력 · 시간 · 시전 단계 · 룬 그리기 칸 · 마법 슬롯 8칸 · 내 위치.
 //   룬을 그리면 서버가 인식 → 슬롯이 준비되고 → 조준(열) → 시전 신호를 서버로 (서버 → Unity UDP 5067 · SSE, iframe 이면 postMessage)
 //   승패 · 체력은 Unity 가 정한다: Unity 가 'state' · 'match-end' 를 보내거나 서버 게임 방에 결과를 보고하면 결과 화면으로.
-//   AI 전략 코치: 지금 상황(+공유한 Unity 화면)을 서버 /api/ai/strategy(VLM · 규칙 AI)로 보내 최선의 수를 받는다.
 //   웹캠 손 추적: 카메라 프레임을 서버 /api/mediapipe/frame(MediaPipe)으로 보내 핀치 룬 · 주먹 · 가리키기 · 손바닥 · 왼손 이동을 받는다.
 import { api, state, go, finishMatch, toast, confirmDialog, icon, esc, mmss, duelHTML, SKILL, KINDS, RULES, MODE, deckProblem } from "../core.js";
 
@@ -52,11 +51,6 @@ export default {
           <div class="label" style="margin-top:16px">웹 조작</div>
           <dl class="keys"><div><dt>마우스</dt><dd>오른쪽 칸에 룬 그리기</dd></div><div><dt>1 – 8</dt><dd>슬롯 바로 쓰기</dd></div><div><dt>Q W E</dt><dd>조준할 열</dd></div><div><dt>Esc</dt><dd>조준 취소</dd></div><div><dt>← →</dt><dd>내 위치 이동</dd></div></dl>
           <div class="feed" id="feed" aria-live="polite"></div>
-          <div class="coach">
-            <div style="display:flex;justify-content:space-between;align-items:center;gap:6px"><span class="label">AI 전략 코치</span><span class="chip" id="coach-src">-</span></div>
-            <div id="coach-body" class="hint" style="margin-top:6px">지금 상황${ctx.maxPlayers > 2 ? `(${ctx.maxPlayers}인 개인전)` : ""}을 보고 최선의 수를 알려 줍니다. 화면을 보여주면 Unity 화면까지 읽습니다.</div>
-            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"><button class="btn info sm" data-act="coach">${icon("spark")}AI 전략</button><button class="btn ghost sm" data-act="share" id="share-btn">${icon("eye")}화면 보여주기</button></div>
-          </div>
           ${LOCAL ? `<div style="margin-top:14px;padding-top:12px;border-top:1px dashed var(--line-2)"><div class="label">Unity 없이 시험</div><p class="hint" style="margin-top:4px">WebGL 빌드를 Backend/static/game/ 에 넣으면 가운데에 Unity 게임이 뜹니다.</p>
             <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">${ctx.matchId ? `<button class="btn sm" data-dev="join">Unity 접속 흉내</button>` : ""}<button class="btn sm" data-dev="win">승리로 끝내기</button><button class="btn sm" data-dev="lose">패배로 끝내기</button></div></div>` : ""}
         </aside>
@@ -156,7 +150,6 @@ export default {
     };
     const finishCast = (i, lane) => {
       const id = deck[i];
-      recordCast(id, i, lane);   // AI 학습 데이터 (시전 직전 상황)
       setPhase("Cast");
       g.cd[i] = Date.now() + cdMax(i) * 1000;
       if (SKILL[id].high) g.uses[i] -= 1;
@@ -319,90 +312,6 @@ export default {
     }
     api.spellLink().then((r) => drawLink(Array.isArray(r.unity) ? r.unity.join(":") : "")).catch(() => drawLink());
 
-    // ── AI 전략 코치 (/api/ai/strategy) ────────────────────
-    const coach = { busy: false, stream: null, video: null, last: null };
-    const coachState = () => {
-      const u = g.unityState || {};
-      return {
-        selfHp: g.hp.me, opponentHp: g.hp.foe, maxHp: g.hp.max, selfColumn: g.lane, time: (Date.now() - g.start) / 1000,
-        mode: ctx.mode, players: ctx.maxPlayers || 2,
-        opponents: (ctx.opponents || []).map((o) => ({ nickname: o.nickname, bot: o.bot })),
-        ...u,   // Unity 가 보낸 상황 (lanes · 구조물 · 투사체 · opponents …) 이 있으면 그걸 믿는다
-        deck, ready: deck.map((_, i) => ready(i)), uses: g.uses.map((x) => (x === Infinity ? 3 : x)),
-      };
-    };
-    const grabScreen = () => {
-      const v = coach.video;
-      if (!v || v.readyState < 2 || !v.videoWidth) return undefined;
-      const scale = Math.min(1, 1280 / v.videoWidth);
-      const c = document.createElement("canvas");
-      c.width = Math.round(v.videoWidth * scale);
-      c.height = Math.round(v.videoHeight * scale);
-      c.getContext("2d").drawImage(v, 0, 0, c.width, c.height);
-      return c.toDataURL("image/jpeg", 0.8);
-    };
-    const drawCoach = (r) => {
-      const [tk, tone] = THREAT_KO[r.threat] || ["-", ""];
-      $("#coach-src").textContent = (r.source === "claude" ? "Claude VLM" : r.source === "ollama" ? "로컬 VLM" : r.source === "local" ? "학습한 VLM" : "규칙 AI") + (r.usedImage ? " · 화면" : "");
-      const c = r.cast;
-      const sk = c.slot >= 0 ? SKILL[deck[c.slot]] : null;
-      $("#coach-body").innerHTML = `<b class="coach-sum">${esc(r.summary)}</b><span class="chip ${tone}">위험 ${tk}</span>
-        ${r.move.direction ? `<div>${r.move.direction < 0 ? "← 왼쪽" : "오른쪽 →"}으로 한 칸 — ${esc(r.move.reason)}</div>` : ""}
-        <div>${sk ? `추천 <b>${c.slot + 1}. ${esc(sk.name)}</b>${c.column >= 0 ? ` → ${LANE_KO[c.column]}` : ""} — ` : ""}${esc(c.reason)}</div>
-        ${r.focus ? `<div class="red">노릴 상대: ${esc(r.focus)}</div>` : ""}
-        ${r.plan?.length ? `<ol class="coach-plan">${r.plan.map((x) => `<li>${esc(x)}</li>`).join("")}</ol>` : ""}
-        ${r.fallbackReason ? `<div>VLM 대신 규칙 AI: ${esc(r.fallbackReason)}</div>` : ""}
-        ${sk ? `<button class="btn play sm" data-act="coach-go" style="margin-top:6px;align-self:flex-start">추천대로 쓰기</button>` : ""}`;
-    };
-    const askCoach = async () => {
-      if (coach.busy || g.ended) return;
-      coach.busy = true;
-      $("#coach-body").innerHTML = `<span><span class="spin" aria-hidden="true"></span> 상황을 읽는 중…</span>`;
-      try {
-        coach.last = await api.aiStrategy({ state: coachState(), image: grabScreen(), gameId: ctx.gameId, matchId: ctx.matchId });
-        drawCoach(coach.last);
-        log(`AI 코치: ${esc(coach.last.summary)}`);
-      } catch (e) { $("#coach-body").textContent = e.message; }
-      finally { coach.busy = false; }
-    };
-    const followCoach = () => {
-      const r = coach.last;
-      if (!r) return;
-      if (r.move.direction) setLane(g.lane + r.move.direction);
-      const c = r.cast;
-      if (c.slot >= 0 && g.phase === "Idle" && ready(c.slot)) { g.autoAim = c.column >= 0 ? c.column : null; g.followed = c.slot; startCast(c.slot); }
-      else if (c.slot >= 0) msg("지금은 추천 스킬을 쓸 수 없어요 (시전 중 · 쿨타임).", "fail");
-    };
-    // AI 학습 데이터: 시전할 때마다 상황 + 실제 행동 (+ 공유한 화면) — 판이 끝나면 서버가 결과 이름표를 붙인다
-    const recordCast = (id, i, lane) => {
-      const followed = g.followed === i;
-      g.followed = null;
-      api.aiRecord({ gameId: ctx.gameId, matchId: ctx.matchId, source: "web", state: coachState(), image: grabScreen(),
-        action: { spellId: id, slot: i, column: lane, followedAdvice: followed } }).catch(() => {});
-    };
-    const stopShare = () => {
-      coach.stream?.getTracks().forEach((t) => t.stop());
-      coach.stream = null;
-      coach.video = null;
-      const b = $("#share-btn");
-      if (b) b.innerHTML = `${icon("eye")}화면 보여주기`;
-    };
-    const toggleShare = async () => {
-      if (coach.stream) { stopShare(); return; }
-      try {
-        const st = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 5 }, audio: false });
-        const v = document.createElement("video");
-        v.muted = true;
-        v.srcObject = st;
-        await v.play();
-        coach.stream = st;
-        coach.video = v;
-        st.getVideoTracks()[0].addEventListener("ended", stopShare);
-        $("#share-btn").innerHTML = `${icon("x")}공유 끄기`;
-        toast("이제 AI 전략이 공유한 화면(Unity 게임 창)을 함께 봅니다.", "ok");
-      } catch { toast("화면 공유를 하지 않았습니다.", "error"); }
-    };
-
     // ── 웹캠 손 추적 (서버 MediaPipe /api/mediapipe/frame) ─
     const cam = { on: false, stream: null, timer: 0, busy: false, canvas: document.createElement("canvas") };
     const camMsg = (t) => { const el = $("#cam-msg"); if (el) el.textContent = t; };
@@ -455,9 +364,9 @@ export default {
     };
     const startCam = async () => {
       try {
-        const st = await api.aiStatus();
-        if (!st.mediapipe?.image?.available) {
-          camMsg(`서버 MediaPipe 꺼짐 — ${st.mediapipe?.image?.reason || "Backend/run_server_ai.bat 로 서버를 켜 주세요"}`);
+        const st = await api.handStatus();
+        if (!st?.image?.available) {
+          camMsg(`서버 MediaPipe 꺼짐 — ${st?.image?.reason || "Backend/run_server_ai.bat 로 서버를 켜 주세요"}`);
           return;
         }
         cam.stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 }, audio: false });
@@ -473,9 +382,6 @@ export default {
     };
     root.addEventListener("click", (e) => {
       const a = e.target.closest("button")?.dataset.act;
-      if (a === "coach") askCoach();
-      if (a === "coach-go") followCoach();
-      if (a === "share") toggleShare();
       if (a === "cam") { if (cam.on) stopCam(); else startCam(); }
     });
 
@@ -489,7 +395,7 @@ export default {
       g.ended = true;
       g.timers.forEach(clearTimeout);
       clearInterval(tick); clearInterval(poll); clearTimeout(pad.timer);
-      stopCam(); stopShare();
+      stopCam();
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("message", onMessage);
       window.removeEventListener("resize", onResize);

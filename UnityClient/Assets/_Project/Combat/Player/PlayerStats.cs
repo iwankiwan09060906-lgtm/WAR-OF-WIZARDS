@@ -52,6 +52,8 @@ namespace SpellboundVR.Combat
         public byte PreviewLane = PlayerSnap.NoCastLane;
         /// <summary>이 시각까지 새 보고가 없으면 Preview 를 지운다 (접속이 끊긴 사람)</summary>
         public float PreviewUntil;
+        /// <summary>시연: 쓰러졌다 부활한 횟수 (HUD 가 늘어난 것을 보고 "부활" 을 띄운다)</summary>
+        public int Deaths;
 
         public PlayerState(Team team)
         {
@@ -78,6 +80,7 @@ namespace SpellboundVR.Combat
             Eliminated = false;
             Place = 0;
             DamageDealt = 0f;
+            Deaths = 0;
             ClearPreview();
         }
 

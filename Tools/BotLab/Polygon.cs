@@ -148,8 +148,6 @@ internal static class Polygon
         rules.ApplyPolygonRules();
         rules.AfkForfeitSeconds = 1e6f; // 검사 중 사람 자리가 잠수로 탈락하지 않게
         var cfg = BotConfig.CreateDefault();
-        cfg.UseServerStrategy = false;
-        cfg.ReportExperience = false;
         return new MatchSimulation(rules, SpellCatalog.CreateDefault(), Arena(), cfg, null, null, null, seed) { LogCasts = false, AllowTestCasts = true };
     }
 

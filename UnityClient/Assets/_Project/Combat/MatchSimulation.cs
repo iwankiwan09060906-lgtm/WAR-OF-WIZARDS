@@ -85,6 +85,10 @@ namespace SpellboundVR.Combat
         private readonly float[] _keepDepth = new float[MatchSnapshot.MaxUnits];
         private readonly float[] _keepLateral = new float[MatchSnapshot.MaxUnits];
         private readonly bool[] _keepValid = new bool[MatchSnapshot.MaxUnits];
+        /// <summary>시연 스킬 로테이션: 진영마다 스킬창에 없는 스킬의 대기열 — 쓴 스킬은 맨 뒤로, 맨 앞이 스킬창에 (null = 로테이션 안 씀)</summary>
+        private readonly List<int>[] _rotation = new List<int>[TeamUtil.TeamCount];
+        /// <summary>시연: AI 자리를 사람이 넘겨받기까지 남은 초 (음수 = 예약 없음)</summary>
+        private readonly float[] _takeoverIn = { -1f, -1f, -1f, -1f, -1f, -1f }; // 진영 수 (TeamUtil.TeamCount)
 
         /// <summary>덱 밖 룬 테스트 시전 슬롯 번호 (AllowTestCasts일 때만 허용)</summary>
         public const int TestCastSlot = -1;
@@ -208,7 +212,9 @@ namespace SpellboundVR.Combat
             p.IsBot = false;
             p.Connected = true;
             _bots[(int)team] = null;
-            SetDeck(team, deck);
+            _takeoverIn[(int)team] = -1f;
+            if (Rules.SkillRotation) StartRotation(team);
+            else SetDeck(team, deck);
             RefreshRing();
             Debug.Log($"[MatchSimulation] 사람 플레이어 입장: {team}, 덱 {new DeckData(_decks[(int)team])}");
         }
@@ -225,8 +231,12 @@ namespace SpellboundVR.Combat
             if (brainOverride != null) _botBrainOverrides[t] = brainOverride;
             bool wasManual = _bots[t] != null && _bots[t].ManualMode;
 
-            int[] deck = RandomDeckBuilder.Build(Catalog, _executors, Rules, BotConfig, _rng);
-            System.Array.Copy(deck, _decks[t], DeckData.SlotCount);
+            if (Rules.SkillRotation) StartRotation(team);
+            else
+            {
+                int[] deck = RandomDeckBuilder.Build(Catalog, _executors, Rules, BotConfig, _rng);
+                System.Array.Copy(deck, _decks[t], DeckData.SlotCount);
+            }
             _bots[t] = new BotPlayer(team, _decks[t], Catalog, BotConfig, _rng.NextUInt(),
                                      _botManualKeys, _botRequireAlt, _botBrainOverrides[t]);
             _bots[t].SetManualMode(wasManual);
@@ -237,6 +247,7 @@ namespace SpellboundVR.Combat
         /// <summary>덱 제출 (서버 재검증 §13.1). 경기 중이면 다음 경기부터 적용.</summary>
         public void SetDeck(Team team, int[] deck)
         {
+            if (Rules.SkillRotation && _rotation[(int)team] != null) return; // 시연: 슬롯은 로테이션이 정한다 (넘겨받은 AI 의 스킬 그대로)
             if (!ServerDeckValidator.Validate(deck, Catalog, Rules, out string reason))
             {
                 Debug.LogWarning($"[MatchSimulation] {team} 덱 거절: {reason} → 기본 덱 사용");
@@ -266,6 +277,11 @@ namespace SpellboundVR.Combat
         {
             var p = Players[(int)team];
             if (!p.Present) return;
+            if (_takeoverIn[(int)team] >= 0f)
+            {
+                _takeoverIn[(int)team] = -1f; // 입장 알림 중에 나갔다 — AI 가 계속 앉아 있는다
+                return;
+            }
             if (_phase == MatchPhase.Playing && !Arena.IsDuel)
             {
                 // 개인전: 경기는 계속 — 살아 있으면 그 자리를 봇이 잇고, 이미 탈락했으면 관전을 그만둔 것
@@ -387,6 +403,7 @@ namespace SpellboundVR.Combat
         {
             if (dt <= 0f) return;
             _tick++;
+            TickTakeovers(dt);
 
             switch (_phase)
             {
@@ -436,7 +453,8 @@ namespace SpellboundVR.Combat
                 if (p.Preview.Phase != CastPreviewPhase.None && (!p.Alive || _matchTime > p.PreviewUntil)) p.ClearPreview();
             }
 
-            for (int t = 0; t < _bots.Length; t++) _bots[t]?.Tick(this);
+            if (!BotsPassive)
+                for (int t = 0; t < _bots.Length; t++) _bots[t]?.Tick(this);
 
             ProcessQueue();
             TickRoutines(dt);
@@ -449,6 +467,11 @@ namespace SpellboundVR.Combat
             _regen.Tick(this, dt);
             CleanupDeadUnits();
 
+            if (Rules.DemoEndless)
+            {
+                TickDemoRespawn(); // 시연: 탈락 · 경기 종료 없이 쓰러지면 부활
+                return;
+            }
             if (!Arena.IsDuel)
             {
                 TickStorm(dt);
@@ -508,6 +531,7 @@ namespace SpellboundVR.Combat
             {
                 SlotCooldownService.Consume(caster, request.SlotIndex, _matchTime, Rules, def.Tier, _scaling.Stage, def.CooldownOverride);
                 _sink.OnCastAccepted(team, request.SlotIndex, request.SpellId);
+                if (Rules.SkillRotation) RotateSlot(team, request.SlotIndex);
             }
             caster.LastActivityTime = _matchTime;
 
@@ -1058,6 +1082,146 @@ namespace SpellboundVR.Combat
             position = u.Position;
             radius = u.Def.BodyRadius;
             return true;
+        }
+
+        // ── 전시 시연 (MatchRuleConfig.DemoEndless · SkillRotation) ─────────
+
+        /// <summary>로컬 연습: 봇이 시전 · 이동하지 않는다 (서 있는 과녁)</summary>
+        public bool BotsPassive { get; set; }
+
+        /// <summary>
+        /// 쓰러지면 그 자리는 풀피로 다시 선다 — 넥서스도 다시 세운다. 유닛 · 설치물 · 슬롯은 그대로.
+        /// 사람이 쓰러지면 그 사람은 게임 오버(클라이언트가 Deaths 증가를 본다)이고 자리는 AI 가 잇는다 — 6자리는 줄지 않는다
+        /// </summary>
+        private void TickDemoRespawn()
+        {
+            for (int t = 0; t < Arena.TeamCount; t++)
+            {
+                var p = Players[t];
+                if (!p.Present || p.Alive) continue;
+                if (p.IsHuman) TakeOverWithBot((Team)t);
+                p.Hp = p.MaxHp;
+                p.DeathPending = false;
+                p.BlindUntil = -1f;
+                p.ClearPreview();
+                p.Deaths++;
+                _status.ClearTarget(p.Id);
+                var nexus = Defense.Nexus((Team)t);
+                if (!nexus.Alive && nexus.MaxHp > 0f)
+                {
+                    nexus.Alive = true;
+                    nexus.Hp = nexus.MaxHp;
+                }
+                Debug.Log($"[MatchSimulation] {(Team)t} 쓰러짐 → 부활 ({p.Deaths}번째) t={_matchTime:0.0}");
+            }
+        }
+
+        /// <summary>로테이션 시작: 시전할 수 있는 스킬을 섞어 앞에서부터 RotationSlots 장은 스킬창, 나머지는 대기열 (남은 슬롯은 비움)</summary>
+        private void StartRotation(Team team)
+        {
+            int t = (int)team;
+            var ids = new List<int>(24);
+            var all = Catalog.All;
+            for (int i = 0; i < all.Count; i++)
+                if (all[i] != null && _executors.Has(all[i].SpellId) && !ids.Contains(all[i].SpellId)) ids.Add(all[i].SpellId);
+            for (int i = ids.Count - 1; i > 0; i--)
+            {
+                int j = _rng.Range(0, i + 1);
+                (ids[i], ids[j]) = (ids[j], ids[i]);
+            }
+            System.Array.Clear(_decks[t], 0, _decks[t].Length);
+            int slots = Mathf.Clamp(Mathf.Min(Rules.RotationSlots, ids.Count), 1, DeckData.SlotCount);
+            for (int s = 0; s < slots; s++) _decks[t][s] = ids[s];
+            ids.RemoveRange(0, slots);
+            _rotation[t] = ids;
+            if (_phase != MatchPhase.WaitingForPlayers) SlotCooldownService.Initialize(Players[t], _decks[t], Catalog, Rules);
+        }
+
+        /// <summary>쓴 스킬은 대기열 맨 뒤로, 대기열 맨 앞 스킬이 그 칸에 — RotationRefillSeconds 뒤 Ready (19종을 차례로 모두 써 볼 수 있다)</summary>
+        private void RotateSlot(Team team, int slot)
+        {
+            int t = (int)team;
+            var queue = _rotation[t];
+            if (queue == null || queue.Count == 0 || slot < 0 || slot >= DeckData.SlotCount) return;
+            int used = _decks[t][slot];
+            int id = queue[0];
+            queue.RemoveAt(0);
+            if (used > 0) queue.Add(used);
+            if (!Catalog.TryGet(id, out SpellDefinition def)) return;
+            _decks[t][slot] = id;
+            ref SlotRuntime s = ref Players[t].Slots[slot];
+            s.SpellId = id;
+            s.IsHighPower = def.Tier == SpellTier.HighPower;
+            s.HighPowerUsesLeft = s.IsHighPower ? Rules.HighPowerUsesPerGame : 0;
+            float cd = Mathf.Max(0.1f, Rules.RotationRefillSeconds);
+            s.CooldownDuration = cd;
+            s.CooldownEndTime = _matchTime + cd;
+            s.State = SlotState.Cooldown;
+        }
+
+        /// <summary>스킬창에 없는 스킬의 대기열 (맨 앞이 다음에 들어온다, 로테이션을 안 쓰면 null)</summary>
+        public IReadOnlyList<int> RotationQueue(Team team) => _rotation[(int)team];
+
+        /// <summary>이 진영 슬롯의 지금 스킬 (봇 두뇌 · 테스트)</summary>
+        public int SlotSpell(Team team, int slot) => _decks[(int)team][slot];
+
+        /// <summary>시연: 사람이 넘겨받을 자리 — 빈자리가 있으면 그 자리, 없으면 예약되지 않은 AI 자리 중 하나. 6명 모두 사람이면 false</summary>
+        public bool TryReserveSeat(out Team team, out bool takeover)
+        {
+            takeover = false;
+            if (TryGetFreeTeam(out team)) return true;
+            int count = 0;
+            for (int t = 0; t < Arena.TeamCount; t++)
+                if (Players[t].Present && Players[t].IsBot && _takeoverIn[t] < 0f) count++;
+            if (count == 0) return false;
+            int pick = _rng.Range(0, count);
+            for (int t = 0; t < Arena.TeamCount; t++)
+            {
+                if (!Players[t].Present || !Players[t].IsBot || _takeoverIn[t] >= 0f || pick-- > 0) continue;
+                team = (Team)t;
+                takeover = true;
+                _takeoverIn[t] = Mathf.Max(0f, Rules.JoinNoticeSeconds);
+                Debug.Log($"[MatchSimulation] {team} AI 자리를 {Rules.JoinNoticeSeconds:0}초 뒤 사람이 넘겨받습니다");
+                return true;
+            }
+            return false;
+        }
+
+        /// <summary>사람이 넘겨받기를 기다리는 자리인가 (입장 알림 중)</summary>
+        public bool TakeoverPending(Team team) => _takeoverIn[(int)team] >= 0f;
+
+        /// <summary>입장 알림: 가장 먼저 넘겨받는 자리 번호(1 ~ 6, 없으면 0)와 남은 초</summary>
+        public int NextTakeover(out float secondsLeft)
+        {
+            int seat = 0;
+            secondsLeft = -1f;
+            for (int t = 0; t < TeamUtil.TeamCount; t++)
+            {
+                if (_takeoverIn[t] < 0f || (seat != 0 && _takeoverIn[t] >= secondsLeft)) continue;
+                seat = TeamUtil.SeatNumber((Team)t);
+                secondsLeft = _takeoverIn[t];
+            }
+            return seat;
+        }
+
+        /// <summary>시간이 된 예약 자리를 사람에게 — HP · 슬롯(로테이션) · 유닛 · 설치물 · 넥서스는 AI 가 쓰던 그대로</summary>
+        private void TickTakeovers(float dt)
+        {
+            for (int t = 0; t < TeamUtil.TeamCount; t++)
+            {
+                if (_takeoverIn[t] < 0f) continue;
+                _takeoverIn[t] -= dt;
+                if (_takeoverIn[t] > 0f) continue;
+                _takeoverIn[t] = -1f;
+                var p = Players[t];
+                if (!p.Present || !p.IsBot) continue;
+                p.IsBot = false;
+                p.Connected = true;
+                p.LastActivityTime = _matchTime;
+                p.ClearPreview();
+                _bots[t] = null;
+                Debug.Log($"[MatchSimulation] {(Team)t} 사람이 AI 자리를 넘겨받았습니다 t={_matchTime:0.0}");
+            }
         }
 
         // ── 테스트 시나리오 (§20.3 F1 ~, 개발 빌드 전용) ─────────────

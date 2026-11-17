@@ -33,6 +33,9 @@ namespace SpellboundVR.Network
         public string LastFailure { get; private set; } = "";
         public bool IsConnected => _runner != null && _runner.IsRunning && _clientBound;
 
+        /// <summary>접속해 있다가 끊겼다 (Leave 제외). 구독하면 자체 재접속 대신 구독자가 처리한다 (시연: 씬을 다시 읽어 새로 접속)</summary>
+        public event System.Action OnConnectionLost;
+
         /// <summary>서버 왕복 지연 (ms), 미접속 시 -1 (§21.3 실측 지연 확인용)</summary>
         public float PingMs => _runner != null && _runner.IsRunning
             ? (float)(_runner.GetPlayerRtt(_runner.LocalPlayer) * 1000.0)
@@ -171,7 +174,14 @@ namespace SpellboundVR.Network
             Status = "Shutdown: " + shutdownReason;
             _clientBound = false;
             _viewBound = false;
-            if (isActiveAndEnabled && !_left && _attempts < maxRetries) StartCoroutine(ReconnectLater());
+            if (!isActiveAndEnabled || _left) return;
+            if (OnConnectionLost != null)
+            {
+                _left = true; // 한 번만
+                OnConnectionLost();
+                return;
+            }
+            if (_attempts < maxRetries) StartCoroutine(ReconnectLater());
         }
 
         private IEnumerator ReconnectLater()

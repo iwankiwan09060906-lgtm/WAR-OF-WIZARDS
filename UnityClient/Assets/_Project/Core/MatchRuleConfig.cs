@@ -140,6 +140,37 @@ namespace SpellboundVR.Core
             PlayerMaxHp *= PolygonPlayerHpScale;
         }
 
+        [Header("전시 시연 (6인 고정 · 끝나지 않는 경기)")]
+        [Tooltip("시연 모드: 쓰러지면 풀피로 부활, 탈락 · 경기 종료 · 마나 폭풍 · 강화 · AFK 없음")]
+        public bool DemoEndless;
+        [Tooltip("스킬 로테이션: 스킬창 4칸 + 대기열 — 쓴 스킬은 대기열 맨 뒤로, 맨 앞 스킬이 그 칸에 (19종 모두, 고위력 횟수 제한 없음)")]
+        public bool SkillRotation;
+        [Tooltip("로테이션 슬롯 수 (스킬창에 보이는 수)")]
+        public int RotationSlots = 4;
+        [Tooltip("스킬을 쓰면 그 칸에 들어온 다음 스킬이 이 시간(초) 뒤 Ready — 짧게 해서 19종을 빨리 돌아가며 써 본다")]
+        public float RotationRefillSeconds = 1.5f;
+        [Tooltip("사람이 접속한 뒤 AI 자리를 넘겨받기까지 (초) — 그동안 방 안에 입장 알림이 뜬다")]
+        public float JoinNoticeSeconds = 3f;
+
+        /// <summary>시연 규칙 = 다인전 + 근접 미니언만 · 끝나지 않는 경기 · 스킬 로테이션</summary>
+        public void ApplyDemoRules()
+        {
+            ApplyPolygonRules();
+            PlayerMaxHp *= 2f;        // 시연: 다인전(3배)의 2배 — 한 사람이 오래 체험하도록
+            DemoEndless = true;
+            SkillRotation = true;
+            MeleePerLane = 1;
+            RangedPerLane = 0;
+            BruteEveryNWaves = 0;
+            ScalingInterval = 1e9f;   // 끝없는 경기라 강화가 쌓이지 않게
+            StormStartSeconds = 1e9f;
+            AfkForfeitSeconds = 1e9f;
+            AfkWarningSeconds = 1e9f;
+            AutoRestartDelay = 0f;
+            // 6명 × 5레인 웨이브 — 진영 상한 × 6 이 유닛 풀(MatchSnapshot.MaxUnits 176) 안에 들게
+            MaxAliveUnitsPerTeam = 28;
+        }
+
         public void ApplyFfaRules()
         {
             TowerMaxHp *= FfaStructureHpScale;

@@ -24,8 +24,6 @@ internal static class Ffa
     private static BotConfig Config()
     {
         var cfg = BotConfig.CreateDefault();
-        cfg.UseServerStrategy = false;
-        cfg.ReportExperience = false;
         return cfg;
     }
 
@@ -34,7 +32,7 @@ internal static class Ffa
 
     private static void JoinAi(MatchSimulation sim, Team team, SpellCatalog catalog, BotConfig cfg, uint seed)
     {
-        sim.JoinBot(team, new AiStrategyBrain(team, sim.GetDeck(team), catalog, cfg, seed));
+        sim.JoinBot(team); // 랜덤 두뇌 (AI 전략 두뇌는 삭제)
     }
 
     public static int Measure(int games, float cap)

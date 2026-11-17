@@ -11,7 +11,7 @@ echo [*] 웹 브라우저 접속: http://localhost:8080/
 echo [*] 관리자 콘솔:     http://localhost:8080/admin.html
 echo [*] 종료하려면 이 창에서 Ctrl+C 를 누르세요.
 echo.
-python wow_server.py 8080
+python wow_server.py 8080 %*
 if %errorlevel% neq 0 (
     echo.
     echo [경고] python 명령을 찾을 수 없거나 오류가 발생했습니다.

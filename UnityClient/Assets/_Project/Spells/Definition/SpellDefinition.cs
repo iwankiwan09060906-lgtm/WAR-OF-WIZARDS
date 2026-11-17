@@ -267,12 +267,12 @@ namespace SpellboundVR.Spells
             d.Executor = SpellExecutorType.Area;
             d.Behavior = SpellBehaviorType.PoisonField;
             d.Dodgeable = false;
-            d.BaseDamage = 12f;          // 첫 틱
+            d.BaseDamage = 18f;          // 첫 틱
             d.ProjectileSpeed = 20f;     // 독병 비행
             d.ArcHeight = 3.5f;
             d.TickInterval = 0.5f;
-            d.TickDamageRamp = 2f;       // 머무를수록 +2
-            d.MaxTickDamage = 30f;       // 틱 상한 → 5초 최대 210
+            d.TickDamageRamp = 3f;       // 머무를수록 +3
+            d.MaxTickDamage = 44f;       // 틱 상한 (시연 밸런스: 한 번 시전 ≈ 280)
             d.EffectDuration = 5f;
             d.FieldHalfDepth = 6f;       // 깊이 12m × 3열 전체 (독병 크기는 그대로, 장판 범위만 넓게)
             d.Radius = 2.5f;
@@ -288,7 +288,7 @@ namespace SpellboundVR.Spells
             d.Executor = SpellExecutorType.Area;
             d.Behavior = SpellBehaviorType.FireballLob;
             d.Dodgeable = false;
-            d.BaseDamage = 160f;
+            d.BaseDamage = 330f;
             d.Radius = 2.6f;
             d.MaxDepth = 1f;
             d.ProjectileSpeed = 26f;
@@ -303,7 +303,7 @@ namespace SpellboundVR.Spells
             d.Executor = SpellExecutorType.Area;
             d.Behavior = SpellBehaviorType.ArrowVolley;
             d.Dodgeable = false;
-            d.BaseDamage = 32f;          // 화살 1발
+            d.BaseDamage = 46f;          // 화살 1발
             d.ShotCount = 10;
             d.ShotInterval = 0.05f;
             d.ProjectileSpeed = 22f;
@@ -322,7 +322,7 @@ namespace SpellboundVR.Spells
             d.Executor = SpellExecutorType.Beam;
             d.Behavior = SpellBehaviorType.TornadoLane;
             d.Dodgeable = false;
-            d.BaseDamage = 15f;          // 붙잡혀 밀려가는 동안 TickInterval 마다
+            d.BaseDamage = 30f;          // 붙잡혀 밀려가는 동안 TickInterval 마다
             d.EffectDuration = 3.5f;     // 레인을 따라 나아가는 시간
             d.LaneStartDepth = 0.04f;    // 시전자 바로 앞에서 출발
             d.LaneEndDepth = 0.85f;      // 상대 진영 앞까지
@@ -338,7 +338,7 @@ namespace SpellboundVR.Spells
             d.Executor = SpellExecutorType.Area;
             d.Behavior = SpellBehaviorType.LightningStrikes;
             d.Dodgeable = true;          // 플레이어는 낙뢰 순간 위치로 판정
-            d.BaseDamage = 75f;          // 1회
+            d.BaseDamage = 108f;         // 1회
             d.ShotCount = 3;
             d.ShotInterval = 0.55f;
             d.TelegraphDelay = 1f;       // 먹구름이 사방에서 날아와 자리 잡는 시간
@@ -355,7 +355,7 @@ namespace SpellboundVR.Spells
             d.Executor = SpellExecutorType.Projectile;
             d.Behavior = SpellBehaviorType.MultiShotFrontFirst;
             d.Dodgeable = true;
-            d.BaseDamage = 4.25f;        // 60발 × 4.25 = 255 (예전 한 발을 4발로 나눔)
+            d.BaseDamage = 5.5f;         // 60발 × 5.5 = 330
             d.ProjectileSpeed = 24f;
             d.ShotCount = 60;
             d.ShotInterval = 0.034f;     // 약 2초
@@ -372,7 +372,7 @@ namespace SpellboundVR.Spells
             d.FocusCategory = SpellFocusCategory.Defense;
             d.StatusEffectId = "S08_Shield";
             d.EffectDuration = 8f;
-            d.ShieldAmount = 180f;
+            d.ShieldAmount = 350f;
             d.RegenDelay = 3f;
             d.RegenPerSecond = 12f;
             return d;
@@ -454,8 +454,8 @@ namespace SpellboundVR.Spells
             d.Executor = SpellExecutorType.Global;
             d.Behavior = SpellBehaviorType.FreezeAll;
             d.FocusCategory = SpellFocusCategory.Defense;
-            d.BaseDamage = 150f;
-            d.EffectDuration = 10f;
+            d.BaseDamage = 140f;
+            d.EffectDuration = 6f;
             return d;
         }
 
@@ -466,7 +466,7 @@ namespace SpellboundVR.Spells
             d.Executor = SpellExecutorType.Beam;
             d.Behavior = SpellBehaviorType.LaserBeam;
             d.Dodgeable = true;
-            d.BaseDamage = 40f;          // 0.2초마다 × 20틱 = 800
+            d.BaseDamage = 22f;          // 0.2초마다 × 20틱 = 440
             d.TickInterval = 0.2f;
             d.EffectDuration = 4f;       // 빔 유지 시간
             d.TelegraphDelay = 0.5f;     // §11.2 예고선
@@ -481,7 +481,7 @@ namespace SpellboundVR.Spells
             d.Executor = SpellExecutorType.Beam;
             d.Behavior = SpellBehaviorType.DrainLife;
             d.Dodgeable = false;         // 조준한 레인에 서 있으면 명중 (쉴드 · 반사 결계로만 막힘)
-            d.BaseDamage = 320f;         // 플레이어 · 레인 유닛 1기당
+            d.BaseDamage = 450f;         // 플레이어 · 레인 유닛 1기당
             d.EffectDuration = 1f;       // 흡혈 선이 1초 뒤 사라지며 회복
             d.EffectRatio = 2f;          // 플레이어 실제 피해 × 2 회복 (레인 유닛 · 설치물은 그 절반 비율)
             return d;

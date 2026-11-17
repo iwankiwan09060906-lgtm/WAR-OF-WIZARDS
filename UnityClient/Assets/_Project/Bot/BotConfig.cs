@@ -1,50 +1,22 @@
-// §20.2 기본 봇 — 이동 5~20초 랜덤(확정), 시전 간격 추후 설정(SO)
-// §20.4 AI 전략 봇(AiStrategyBrain)이 기본. TimerRandom 으로 바꾸면 예전 랜덤 봇.
+// §20.2 봇 — 랜덤 두뇌(TimerRandomBrain) 하나만 쓴다: 랜덤 스킬 · 성공률 60% · 랜덤 시간 · 랜덤 칸 이동
+// (VLM · 로컬 모델을 쓰던 AI 전략 두뇌 · 서버 작전 연결은 삭제)
 
 using UnityEngine;
 
 namespace SpellboundVR.Bot
 {
-    public enum BotBrainKind
-    {
-        /// <summary>하이브리드: 전장을 보고 고르는 AI 전략 두뇌(빠른 반사) + 서버 VLM · 학습의 작전(전략)</summary>
-        AiStrategy,
-        /// <summary>정해진 간격마다 랜덤 슬롯 · 랜덤 조준 (§20.2 기본 봇)</summary>
-        TimerRandom,
-    }
-
     [CreateAssetMenu(menuName = "Spellbound/Bot Config", fileName = "BotConfig")]
     public sealed class BotConfig : ScriptableObject
     {
-        [Header("두뇌 (§20.4)")]
-        public BotBrainKind Brain = BotBrainKind.AiStrategy;
 
-        [Tooltip("AI 전략 두뇌: 시전 사이 최소 간격(초) — 사람이 룬을 그리고 조준하는 시간과 비슷하게")]
-        public float AiCastGapSeconds = 7f;
-
-        [Tooltip("AI 전략 두뇌: 날아오는 투사체 하나마다 못 피할 확률 (0 = 늘 피함) — 사람처럼 가끔 놓치거나 늦게 반응한다")]
-        [Range(0f, 1f)] public float DodgeMissChance = 0.4f;
-
-        [Tooltip("시전 전에 룬을 그리는 모습을 상대에게 보여 주는 시간(초) — 사람의 조준 시간과 비슷하게, AiCastGapSeconds 보다 짧게")]
+        [Tooltip("시전 전에 룬을 그리는 모습을 상대에게 보여 주는 시간(초) — 사람의 조준 시간과 비슷하게")]
         public float CastWindupSeconds = 4.5f;
 
         [Tooltip("룬 그리는 시간 흔들림 — 매 시전 CastWindupSeconds × (1 ~ 1 + 이 값) (사람처럼 빠를 때 · 느릴 때가 있다)")]
         [Range(0f, 1f)] public float CastWindupJitter = 0.5f;
 
-        [Tooltip("룬을 그리다 실패할 확률 (0~1) — 실패하면 시전하지 않고 다음 기회를 기다린다")]
-        [Range(0f, 1f)] public float CastFailChance = 0.25f;
-
-        [Tooltip("서버 AI 전략(/api/ai/strategy — VLM 작전 · 판 결과로 배운 것)을 같이 쓴다. 서버에 연결된 경우만")]
-        public bool UseServerStrategy = true;
-
-        [Tooltip("서버 전략 요청 간격(초) — 서버(VLM)는 이때마다 작전(orders)과 한 수를 준다")]
-        public float ServerAdviceInterval = 3f;
-
-        [Tooltip("하이브리드: 두뇌 점수가 이 값 이상이면(위급) 서버의 한 수보다 두뇌 판단이 먼저 (빠른 반사)")]
-        public float EmergencyScore = 6f;
-
-        [Tooltip("봇의 판단 · 경기 결과를 서버 학습 데이터(/api/ai/experience)로 보낸다")]
-        public bool ReportExperience = true;
+        [Tooltip("룬을 그리다 실패할 확률 (0~1) — 실패하면 시전하지 않고 다음 기회를 기다린다 (0.4 = 성공률 60%)")]
+        [Range(0f, 1f)] public float CastFailChance = 0.4f;
 
         [Header("시전 (§20.2 — 추후 설정)")]
         public float CastIntervalMin = 4f;

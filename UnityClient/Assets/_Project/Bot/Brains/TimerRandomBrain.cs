@@ -1,7 +1,8 @@
-// §20.2 기본 봇 두뇌 (IBotBrain Mock 겸 실사용)
-//   시전: 정해진 간격마다 Ready 슬롯 중 랜덤 1개, 없으면 다음 간격까지 대기
-//   조준: 열 · 깊이 · 소환 라인 · 설치 칸 모두 랜덤
-//   이동: 5 ~ 20초 랜덤 간격으로 랜덤 칸
+// §20.2 기본 봇 두뇌 — 유일한 봇 두뇌 (VLM · 로컬 모델을 쓰던 AI 전략 두뇌는 삭제)
+//   시전: 정해진 간격마다 Ready 슬롯 중 랜덤 1개 (시연은 19종 로테이션이라 결국 19종을 랜덤으로 쓴다), 없으면 다음 간격까지 대기
+//   성공률: BotPlayer 가 시전 준비 중 BotConfig.CastFailChance(기본 40%) 확률로 그리기를 실패한다 → 성공 60%
+//   조준: 상대(열) · 깊이 · 소환 · 설치 위치 모두 랜덤 (다인전은 상대 5명 중, 소환 · 설치는 조준선의 PlacementMaxDepth 까지)
+//   이동: MoveIntervalMin ~ Max 랜덤 간격으로 랜덤 칸
 
 using SpellboundVR.Contracts;
 using SpellboundVR.Deck;
@@ -44,15 +45,17 @@ namespace SpellboundVR.Bot
                 {
                     int spellId = _deck[slot];
                     var def = _catalog.Get(spellId);
+                    bool placement = def != null && (def.Targeting == SpellTargeting.Summon || def.Targeting == SpellTargeting.Structure);
+                    float maxPlace = obs.PlacementMaxDepth > 0f ? obs.PlacementMaxDepth : 1f;
                     cmd.HasCastRequest = true;
                     cmd.CastRequest = new SpellCastRequest
                     {
                         SpellId = spellId,
                         SlotIndex = slot,
-                        TargetColumn = (Column)_rng.Range(0, 3),
+                        TargetColumn = (Column)PickBit(placement ? obs.SpawnColumnMask : obs.ColumnMask, 3),
                         TargetDepth = def != null && def.Targeting == SpellTargeting.Area
                             ? _rng.Range(_config.AreaDepthMin, _config.AreaDepthMax)
-                            : 0f,
+                            : placement ? _rng.Range(0.1f, maxPlace) : 0f,
                     };
                 }
             }
@@ -73,6 +76,18 @@ namespace SpellboundVR.Bot
         {
             _nextCastTime = -1f;
             _nextMoveTime = -1f;
+        }
+
+        /// <summary>mask 의 켜진 비트 중 하나 (없으면 0 ~ fallbackCount-1 중 하나)</summary>
+        private int PickBit(byte mask, int fallbackCount)
+        {
+            if (mask == 0) return _rng.Range(0, fallbackCount);
+            int count = 0;
+            for (int i = 0; i < 8; i++) if ((mask & (1 << i)) != 0) count++;
+            int k = _rng.Range(0, count);
+            for (int i = 0; i < 8; i++)
+                if ((mask & (1 << i)) != 0 && k-- == 0) return i;
+            return 0;
         }
 
         private int PickReadySlot(byte mask)

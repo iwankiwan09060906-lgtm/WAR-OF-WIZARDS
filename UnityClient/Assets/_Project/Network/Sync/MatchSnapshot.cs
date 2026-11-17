@@ -118,6 +118,10 @@ namespace SpellboundVR.Network
         public float Duration;
         public byte UnitCount;
         public byte ProjectileCount;
+        /// <summary>시연: 곧 사람이 넘겨받는 AI 자리 번호 1 ~ 6 (없으면 0) — 방 안 입장 알림</summary>
+        public byte JoinSeat;
+        /// <summary>JoinSeat 를 넘겨받기까지 남은 초</summary>
+        public float JoinIn;
     }
 
     public struct PlayerSnap : INetworkStruct
@@ -154,6 +158,8 @@ namespace SpellboundVR.Network
         public sbyte PenX;
         public sbyte PenY;
         public byte PenStroke;
+        /// <summary>시연: 쓰러졌다 부활한 횟수 (byte 순환)</summary>
+        public byte Deaths;
 
         public const byte NoCastLane = 255;
     }

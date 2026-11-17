@@ -85,6 +85,13 @@ namespace SpellboundVR.Network
 
         private void TickBotFill(float dt)
         {
+            if (_sim.Rules.DemoEndless)
+            {
+                // 시연: 사람이 없어도 빈자리를 바로 AI 로 채워 6명 경기가 늘 돌아간다
+                while (_sim.TryGetFreeTeam(out Team empty)) _sim.JoinBot(empty);
+                _sim.BotFillIn = -1f;
+                return;
+            }
             // 다인전은 최소 인원(3)까지만 채운다 — 그 뒤로는 들어온 사람만큼 N 이 된다
             bool polygon = _sim.Arena.IsPolygon;
             if (_sim.Phase != MatchPhase.WaitingForPlayers || _sim.HumanCount == 0 || !_sim.TryGetFreeTeam(out _) ||
@@ -112,6 +119,19 @@ namespace SpellboundVR.Network
             team = Team.Home;
             if (_sim == null) return false;
             if (_playerTeams.TryGetValue(player, out team)) return true;
+            if (_sim.Rules.DemoEndless)
+            {
+                // 시연: AI 자리를 넘겨받는다 — JoinNoticeSeconds 동안 방 안에 입장 알림, 그 뒤 AI 가 쓰던 것 그대로 사람 차지 (6명 모두 사람이면 관전)
+                if (!_sim.TryReserveSeat(out team, out bool takeover)) return false;
+                if (!takeover) _sim.JoinHuman(team, Deck.DeckData.CreateDefault().ToArray());
+                // 이 자리에 남아 있던 예전 사람(게임 오버 화면 중)은 더는 이 자리를 움직이거나, 나갈 때 새 사람을 내보내지 못하게
+                var stale = new List<PlayerRef>();
+                foreach (var kv in _playerTeams) if (kv.Value == team) stale.Add(kv.Key);
+                foreach (var old in stale) _playerTeams.Remove(old);
+                _playerTeams[player] = team;
+                Debug.Log($"[NetworkMatchState] Player {player} → {team}{(takeover ? " (AI 자리 넘겨받기 예약)" : "")}");
+                return true;
+            }
             // 다인전은 경기 중에도 빈자리가 있지만, 링(정N각형)이 정해진 뒤라 끼지 않고 관전한다
             if (_sim.Arena.IsPolygon && _sim.Phase == MatchPhase.Playing) return false;
 
@@ -148,6 +168,12 @@ namespace SpellboundVR.Network
 
         public bool TryGetTeam(PlayerRef player, out Team team) => _playerTeams.TryGetValue(player, out team);
 
+        /// <summary>그 사람의 자리 — 아직 AI 가 앉아 있으면(시연 입장 알림 중) 요청을 받지 않는다</summary>
+        private bool TryGetHumanSeat(PlayerRef player, out Team team)
+        {
+            return _playerTeams.TryGetValue(player, out team) && _sim != null && !_sim.GetPlayer(team).IsBot;
+        }
+
         public void ServerSetName(PlayerRef player, string name)
         {
             if (_sim != null && _playerTeams.TryGetValue(player, out var team)) _sim.SetPlayerName(team, name);
@@ -160,22 +186,22 @@ namespace SpellboundVR.Network
 
         public void ServerRequestCast(PlayerRef player, in SpellCastRequest request)
         {
-            if (_sim != null && _playerTeams.TryGetValue(player, out var team)) _sim.SubmitCast(team, request);
+            if (TryGetHumanSeat(player, out var team)) _sim.SubmitCast(team, request);
         }
 
         public void ServerRequestMove(PlayerRef player, in MoveRequest request)
         {
-            if (_sim != null && _playerTeams.TryGetValue(player, out var team)) _sim.SubmitMove(team, request);
+            if (TryGetHumanSeat(player, out var team)) _sim.SubmitMove(team, request);
         }
 
         public void ServerReportActivity(PlayerRef player)
         {
-            if (_sim != null && _playerTeams.TryGetValue(player, out var team)) _sim.ReportActivity(team);
+            if (TryGetHumanSeat(player, out var team)) _sim.ReportActivity(team);
         }
 
         public void ServerCastPreview(PlayerRef player, in CastPreview preview)
         {
-            if (_sim != null && _playerTeams.TryGetValue(player, out var team)) _sim.SetCastPreview(team, preview);
+            if (TryGetHumanSeat(player, out var team)) _sim.SetCastPreview(team, preview);
         }
 
         private void WriteNetworked(MatchSnapshot s)

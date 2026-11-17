@@ -17,7 +17,7 @@ MonoBehaviour:
   Damage: 65
   AttackInterval: 1.6
   AttackRange: 1.5
-  MoveSpeed: 1.5
+  MoveSpeed: 2.4
   DetectRange: 7
   BodyRadius: 0.8
   StructureDamageMultiplier: 1.5

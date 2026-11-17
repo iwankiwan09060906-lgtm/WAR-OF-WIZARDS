@@ -22,7 +22,7 @@ MonoBehaviour:
   Behavior: 14
   FocusCategory: 1
   Dodgeable: 0
-  BaseDamage: 150
+  BaseDamage: 140
   Radius: 2
   MaxDepth: 1
   ProjectileSpeed: 20
@@ -43,7 +43,7 @@ MonoBehaviour:
   LaneStartDepth: 0
   LaneEndDepth: 1
   StatusEffectId: 
-  EffectDuration: 10
+  EffectDuration: 6
   ShieldAmount: 0
   RegenDelay: 3
   RegenPerSecond: 0

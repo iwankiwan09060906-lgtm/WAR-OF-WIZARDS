@@ -9,7 +9,7 @@ Quest 3 핸드트래킹으로 룬을 그려 마법을 쓰는 VR 대전 게임. *
 | 폴더 | 내용 |
 | --- | --- |
 | `UnityClient/` | Unity 6 (6000.3.10f1) 프로젝트. 게임 코드는 `Assets/_Project/`, 씬은 `Assets/Scenes/Client/04_Battle.unity` 하나. 1:1 · 4인 개인전 ([`Docs/Battle/Ffa4.md`](Docs/Battle/Ffa4.md)) |
-| `Backend/` | Python 웹 서버 (`wow_server.py`) · 웹 UI (`static/`) · AI (`wow_ai.py` · `wow_board.py` · `wow_learn.py`) — 로그인 · 마법서(덱) · 랭킹 · 매칭 · VLM · 학습 |
+| `Backend/` | Python 웹 서버 (`wow_server.py`) · 웹 UI (`static/`) — 로그인 · 마법서(덱) · 랭킹 · 매칭 · 서버 MediaPipe |
 | `GestureTools/MediaPipe/` | 웹캠 손 추적 → Unity 입력 (MediaPipe). 게임이 직접 켜고 끈다 |
 | `Tools/BotLab/` | 실제 전투 코드로 봇끼리 대전 — 승률 · 경기 길이 측정, 규칙 검사 |
 | `Docs/` | 분야별 문서 (아래) |
@@ -32,14 +32,14 @@ Quest 3 핸드트래킹으로 룬을 그려 마법을 쓰는 VR 대전 게임. *
 | [`Docs/Art/Licenses.md`](Docs/Art/Licenses.md) | 외부 에셋 팩 출처 · 사용처 |
 | [`Docs/Backend/`](Docs/Backend/) | 웹 디자인 · 제품 · 서버 API |
 | [`Docs/Backend/MultiplayerAi.md`](Docs/Backend/MultiplayerAi.md) | 개인전 2~4명 매칭 · 공식 팀 계정(1조~4조) · AI 전략 코치(VLM) · 서버 MediaPipe |
-| [`Docs/Backend/AiLearning.md`](Docs/Backend/AiLearning.md) | AI 가 게임을 배우게 하기 — 경험 수집 · 판 결과로 자동 학습 · VLM 미세조정 |
 | [`Docs/Bot/ManualControlKeys.md`](Docs/Bot/ManualControlKeys.md) | 키보드 조작 · 봇 수동 조종 키 |
-| [`Docs/Bot/AiStrategyBot.md`](Docs/Bot/AiStrategyBot.md) | AI 전략 봇 (랜덤 봇 대신, 같은 시전 속도에서 승률 90%) · 서버 학습 연결 · 승률 측정기 BotLab |
+| [`Docs/DemoSetup.md`](Docs/DemoSetup.md) | **전시 시연 실행 가이드** — 받기 · 서버 켜기 · Quest 빌드 / 설치 · 진행 · 문제 해결 |
+| [`Docs/Battle/Demo.md`](Docs/Battle/Demo.md) | **전시 시연 모드** — Quest 연습 3스킬 → 6인 고정 끝나지 않는 경기 · 스킬 19종 로테이션 · AI 자리 넘겨받기 · 서버 옵저버 |
 | [`Docs/Input/MediaPipeHandInput.md`](Docs/Input/MediaPipeHandInput.md) | PC 웹캠 입력 — **손 모양 19종 표** · 추적기 · 메시지 형식 · 19종 룬 안내표 (그림: `GestureTools/MediaPipe/rune_sheet.png`) |
 
 ## 빠르게 실행
 
 1. Unity Hub에서 `UnityClient/`를 열고 `04_Battle` 씬에서 Play — 서버가 꺼져 있으면 게임이 켠다. 헤드셋 없는 PC 는 웹캠 손동작으로 조작한다 (환경설정에서 끄면 키보드 · 마우스).
-2. 서버만 켜려면 `StartServer.bat` (웹 서버 + 4인 · 1:1 게임 서버). PC 를 켤 때 저절로 켜지게 하려면 `ServerAutostart.bat` 을 한 번 실행한다.
+2. 전시 시연 서버는 `StartServer.bat` (6인 시연 게임 서버, 꺼지면 다시 켬). 예전 웹 서버 + 4인 · 1:1 · 다인전 게임 서버는 `Backend/StartBackend.bat`. PC 를 켤 때 저절로 켜지게 하려면 `ServerAutostart.bat` 을 한 번 실행한다.
 
 자세한 순서는 `MANUAL_TODO.md` 1장.

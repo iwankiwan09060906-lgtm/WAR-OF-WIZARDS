@@ -8,6 +8,9 @@
 //
 // 메타 UI(metaUi, 기본 켜짐): 전투 전에 C01 로그인 → C02 로비 → … → C11 카운트다운 화면이 먼저 뜨고,
 //   C11에서 BeginBattle(덱)으로 경기를 시작한다 (UI/Common/MetaFlow). 끄면 예전처럼 바로 봇전이 시작된다.
+// 전시 시연(demoMode, 기본 켜짐 · 명령줄 -nodemo 로 끔): 메타 UI 없이
+//   Quest : 연습 모드(PracticeGuide — 스킬 3개 받아쓰기, 이 기기 안 로컬 경기) → 씬을 다시 읽어 PC 서버 6인 시연 경기에 접속 (AI 자리를 넘겨받음)
+//   서버  : 6인 고정 다인전(가운데를 채운 정육각형) · 끝나지 않는 경기 · 사람이 없어도 AI 6명으로 계속 · 관전 카메라가 1 ~ 6번 시점을 돈다
 // 데이터 에셋이 비어 있으면 런타임 기본값(스킬 19종, 기본 수치)으로 동작한다.
 // 메뉴 Spellbound > 1. Setup Battle Scene 이 에셋 · 프리팹 · 씬 참조를 자동으로 채운다.
 
@@ -98,6 +101,16 @@ namespace SpellboundVR.Core
         public bool localAfkEnabled = true;
         public bool showDebugPanels = true;
 
+        [Header("전시 시연")]
+        [Tooltip("true: 메타 UI 없이 연습 3스킬 → 6인 시연 서버 경기 (서버는 6인 고정 · 끝나지 않는 경기). 명령줄 -demo / -nodemo")]
+        public bool demoMode = true;
+        [Tooltip("에디터 Play: 연습 뒤 서버 없이 이 PC 안에서 6인 시연 경기 (1번 자리 = 나, 나머지 AI). 끄면 에디터도 시연 서버에 접속")]
+        public bool demoOfflineInEditor = true;
+
+        /// <summary>이번 실행에서 연습을 마쳤는가 — 씬을 다시 읽어도 남는다 (연습 → 서버 경기)</summary>
+        private static bool s_practiceDone;
+        private bool _practice;
+
         [Header("메타 UI (C01~C13)")]
         [Tooltip("true: 로그인 · 로비 · 마법서 · 매칭 등 게임 밖 화면을 먼저 띄우고, 대전을 시작하면 전투로 들어간다. false: 바로 봇전 (전투만 테스트)")]
         public bool metaUi = true;
@@ -142,7 +155,14 @@ namespace SpellboundVR.Core
             ResolveSceneReferences();
             _resolvedMode = ResolveMode();
             _allowAllRunes = recognizeAllRunes;
-            Debug.Log($"[GameBootstrap] 실행 모드: {_resolvedMode}");
+            Debug.Log($"[GameBootstrap] 실행 모드: {_resolvedMode}{(demoMode ? " (전시 시연)" : "")}");
+
+            if (demoMode && _resolvedMode != BootMode.DedicatedServer)
+            {
+                if (!s_practiceDone) StartPractice();
+                else BeginBattle(new int[DeckData.SlotCount], online: !(Application.isEditor && demoOfflineInEditor), allowAllRunes: false, ArenaMode.Polygon); // 슬롯은 로테이션이 채운다
+                return;
+            }
 
             if (_resolvedMode != BootMode.DedicatedServer && metaUi)
             {
@@ -194,12 +214,92 @@ namespace SpellboundVR.Core
             _matchRules = rules;
             if (mode == ArenaMode.Duel) return;
             _matchRules = Instantiate(rules); // 에셋 원본을 바꾸지 않도록 사본 사용
-            if (mode == ArenaMode.Polygon) _matchRules.ApplyPolygonRules();
+            if (mode == ArenaMode.Polygon && demoMode)
+            {
+                _matchRules.ApplyDemoRules();
+                arenaLayout.Geometry.FilledPolygon = true; // 가운데를 채운 정육각형 — 모든 상대에게 레인
+            }
+            else if (mode == ArenaMode.Polygon) _matchRules.ApplyPolygonRules();
             else _matchRules.ApplyFfaRules();
         }
 
-        /// <summary>경기 종류별 Fusion 세션 — 서버 하나가 한 종류만 연다 (RunServer.bat · RunServer1v1.bat · RunServerPolygon.bat)</summary>
-        private string SessionFor(ArenaMode mode) => mode == ArenaMode.Duel ? sessionName : mode == ArenaMode.Polygon ? sessionName + "-poly" : sessionName + "-ffa";
+        /// <summary>경기 종류별 Fusion 세션 — 서버 하나가 한 종류만 연다 (RunServer.bat · RunServer1v1.bat · RunServerPolygon.bat · RunServerDemo.bat)</summary>
+        private string SessionFor(ArenaMode mode) => demoMode ? sessionName + "-demo"
+            : mode == ArenaMode.Duel ? sessionName : mode == ArenaMode.Polygon ? sessionName + "-poly" : sessionName + "-ffa";
+
+        /// <summary>연습 모드: 이 기기 안 로컬 6인 전장, 스킬 3개 (로테이션 · 웨이브 없음, 쿨타임 짧게), AI 는 서 있는 과녁</summary>
+        private void StartPractice()
+        {
+            _practice = true;
+            localDeck = new int[DeckData.SlotCount];
+            for (int i = 0; i < PracticeGuide.Skills.Length; i++) localDeck[i] = PracticeGuide.Skills[i];
+            SetArenaMode(ArenaMode.Polygon);
+            _matchRules.SkillRotation = false;
+            _matchRules.FirstWaveDelay = 1e9f;
+            _matchRules.NormalCooldown = 0.5f;
+            _matchRules.HighPowerCooldown = 0.5f;
+            _matchRules.CountdownSeconds = 1f;
+            _allowAllRunes = false;
+            StartClient(networked: false);
+            _localHost.Simulation.BotsPassive = true;
+        }
+
+        [Tooltip("시연: 헤드셋을 이만큼(초) 벗어 두었다가 다시 쓰면 다음 사람으로 보고 연습부터 다시 (0 = 안 함)")]
+        public float demoNewVisitorSeconds = 20f;
+        private float _pausedAt = -1f;
+
+        /// <summary>Quest 는 헤드셋을 벗으면 앱이 멈춘다 — 오래 벗었다 다시 쓰면 새 관람객이니 서버 자리를 AI 에게 돌려주고 연습부터</summary>
+        private void OnApplicationPause(bool paused)
+        {
+            if (!demoMode || _resolvedMode == BootMode.DedicatedServer || demoNewVisitorSeconds <= 0f) return;
+            if (paused)
+            {
+                _pausedAt = Time.realtimeSinceStartup;
+                return;
+            }
+            if (_pausedAt < 0f || Time.realtimeSinceStartup - _pausedAt < demoNewVisitorSeconds) return;
+            _pausedAt = -1f;
+            Debug.Log("[GameBootstrap] 시연: 오래 벗었다 다시 씀 → 새 관람객, 연습부터");
+            if (_clientConnector != null) _clientConnector.Leave();
+            RestartDemo();
+        }
+
+        [Tooltip("시연: 게임 오버 화면을 보여 주는 시간 (초) — 끝나면 연습부터 다시 (다음 관람객)")]
+        public float demoGameOverSeconds = 8f;
+
+        /// <summary>시연 처음부터 (연습 → 경기)</summary>
+        private void RestartDemo()
+        {
+            s_practiceDone = false;
+            UnityEngine.SceneManagement.SceneManager.LoadScene(UnityEngine.SceneManagement.SceneManager.GetActiveScene().buildIndex);
+        }
+
+        /// <summary>시연: 경기 중 서버와 끊겼다 — 씬을 다시 읽어 연습 없이 바로 다시 접속한다 (자리는 AI 가 잇고, 다시 들어가면 빈 AI 자리를 넘겨받는다)</summary>
+        private void HandleConnectionLost()
+        {
+            if (GetComponent<GameOverView>() != null) return;
+            _session?.Events.RaiseLocalRejection("연결이 끊겼습니다 — 다시 접속합니다");
+            SetBattleInputEnabled(false);
+            Invoke(nameof(ReloadOnline), 2f);
+        }
+
+        private void ReloadOnline() => UnityEngine.SceneManagement.SceneManager.LoadScene(UnityEngine.SceneManagement.SceneManager.GetActiveScene().buildIndex); // s_practiceDone 그대로 → 바로 접속
+
+        /// <summary>내가 쓰러졌다 — 서버는 이미 내 자리를 AI 에게 넘겼다. 접속을 끊고 게임 오버 화면 뒤 처음부터</summary>
+        private void HandleLocalGameOver()
+        {
+            if (GetComponent<GameOverView>() != null) return;
+            SetBattleInputEnabled(false);
+            if (_clientConnector != null) _clientConnector.Leave();
+            gameObject.AddComponent<GameOverView>().Show(head, demoGameOverSeconds, RestartDemo);
+        }
+
+        /// <summary>연습을 마쳤다 — 씬을 다시 읽으면 Awake 가 서버 시연 경기로 들어간다</summary>
+        private void HandlePracticeComplete()
+        {
+            s_practiceDone = true;
+            UnityEngine.SceneManagement.SceneManager.LoadScene(UnityEngine.SceneManagement.SceneManager.GetActiveScene().buildIndex);
+        }
 
         /// <summary>경기 중 메뉴를 여는 동안 룬 그리기 · 조준 · 이동 입력을 멈춘다 (경기 자체는 계속된다)</summary>
         public void SetBattleInputEnabled(bool enabled)
@@ -370,6 +470,8 @@ namespace SpellboundVR.Core
                 if (args[i] == "-duel") serverArenaMode = ArenaMode.Duel;
                 if (args[i] == "-ffa") serverArenaMode = ArenaMode.Ffa4;
                 if (args[i] == "-polygon") serverArenaMode = ArenaMode.Polygon;
+                if (args[i] == "-demo") demoMode = true;
+                if (args[i] == "-nodemo") demoMode = false;
             }
 #if UNITY_SERVER
             return BootMode.DedicatedServer;
@@ -408,6 +510,7 @@ namespace SpellboundVR.Core
             var deck = new DeckData(localDeck);
             _session = new ClientSession(_matchRules, spellCatalog, runeLibrary, arenaLayout, events, deck);
             _deckManager = new EightSlotDeckManager(deck, events);
+            events.OnSlotSpellChanged += _deckManager.SetSpell; // 시연 로테이션: 서버 슬롯 스킬을 따라 룬 후보를 바꾼다 (HUD 보다 먼저 구독)
 
             ISpellInputSource input = CreateInput();
             _input = input;
@@ -449,6 +552,11 @@ namespace SpellboundVR.Core
             presentation.AddComponent<DamageTextView>().Initialize(_session, head);
             presentation.AddComponent<BlindOverlayView>().Initialize(_session, head);
             var hud = gameObject.AddComponent<BattleHudView>();
+            if (demoMode)
+            {
+                hud.demoLayout = true;
+                hud.worldScale = 0.0007f; // 처음 쓰는 사람도 룬 그림이 보이게 (폭 0.7m, 눈 아래라 전장을 가리지 않는다)
+            }
             if (!(input is HandTrackingInput))
             {
                 // 데스크톱 화면(헤드셋 없음): 고개를 숙일 수 없으니 시점을 아래로 기울이고 HUD는 화면 하단에 작게
@@ -459,7 +567,20 @@ namespace SpellboundVR.Core
             }
             hud.localPosition += head.parent != null ? head.localPosition : Vector3.zero; // 시작 시 머리 높이 기준
             hud.Initialize(_session, head.parent != null ? head.parent : playerRig);
-            gameObject.AddComponent<BattleCoach>().Initialize(_session, hud);
+            if (demoMode)
+            {
+                var rigParent = head.parent != null ? head.parent : playerRig;
+                events.OnLocalGameOver += HandleLocalGameOver;
+                var guide = gameObject.AddComponent<SkillGuideView>();
+                guide.Initialize(_session, input, cast, hud, head);
+                if (_practice)
+                {
+                    guide.cardPicking = false; // 연습은 PracticeGuide 가 가이드를 직접 띄운다
+                    var practice = gameObject.AddComponent<PracticeGuide>();
+                    practice.localPosition += head.parent != null ? head.localPosition : Vector3.zero;
+                    practice.Initialize(_session, cast, input, guide, rigParent, HandlePracticeComplete);
+                }
+            }
             gameObject.AddComponent<SpellboundVR.Audio.BattleAudio>().Initialize(_session, input, cast, platform, head);
             if (input is MediaPipeHandInput tracker)
             {
@@ -477,6 +598,11 @@ namespace SpellboundVR.Core
             if (networked)
             {
                 _clientConnector = gameObject.AddComponent<ClientConnector>();
+                if (demoMode)
+                {
+                    _clientConnector.maxRetries = int.MaxValue; // 시연: 서버가 켜질 때까지 계속 찾는다
+                    _clientConnector.OnConnectionLost += HandleConnectionLost;
+                }
                 _clientConnector.Connect(SessionFor(_arenaMode), _session, deck.ToArray(), LocalPlayerName);
                 if (showDebugPanels)
                 {
@@ -552,9 +678,10 @@ namespace SpellboundVR.Core
             Application.runInBackground = true;
             SpellboundVR.Audio.SoundManager.Enabled = false; // 서버 창은 소리를 내지 않는다
 
+            if (demoMode) serverArenaMode = ArenaMode.Polygon; // 시연 서버는 6인 고정 다인전
             SetArenaMode(serverArenaMode);
             _serverSim = CreateSimulation(localMode: false);
-            _serverSim.ConfigureBotManualKeys(true, false);
+            _serverSim.ConfigureBotManualKeys(!demoMode, false); // 시연 서버의 숫자 키는 옵저버 시점 전환
 
             // 서버 창 표시용 (Home 시점) — 판정과 무관
             var view = new NetworkGameEventPublisher(arenaLayout.Geometry);
@@ -570,7 +697,9 @@ namespace SpellboundVR.Core
             presentation.AddComponent<DamageTextView>().Initialize(_session, head);
 
             // 서버 창 카메라: 대기 중엔 Home 뒤 시점, 경기가 시작되면 위에서 비스듬히 내려다보는 사이드뷰 (V로 전환)
-            gameObject.AddComponent<ServerSpectatorCamera>().Initialize(arenaLayout.Geometry, playerRig, head, view);
+            var observer = gameObject.AddComponent<ServerSpectatorCamera>();
+            observer.Initialize(arenaLayout.Geometry, playerRig, head, view);
+            if (demoMode) observer.BeginObserver(); // 시연: 1 ~ 6번 시점을 돌아가며
 
             _serverLauncher = gameObject.AddComponent<FusionServerLauncher>();
             _serverLauncher.StartServer(SessionFor(_arenaMode), serverPort, matchStatePrefab, playerPrefab, _serverSim, view);

@@ -53,6 +53,9 @@ namespace SpellboundVR.UI
             BuildMap(hud);
         }
 
+        /// <summary>정N각형 지도를 숨긴다 (시연 스킬창)</summary>
+        public void HideMap() => _map.gameObject.SetActive(false);
+
         private static EnemyCard BuildCard(RectTransform hud, int index)
         {
             // HUD 오른쪽 위 (1:1 의 상대 카드 · 상대 방어 자리)

@@ -1,5 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <!-- 컴파일 확인용: 봇 · 전투 · AiStrategyLink 를 진짜 UnityEngine DLL 로 컴파일 (Unity 에디터 없이). 실행하지 않는다.
+  <!-- 컴파일 확인용: 봇 · 전투 · 백엔드 클라이언트를 진짜 UnityEngine DLL 로 컴파일 (Unity 에디터 없이). 실행하지 않는다.
        dotnet build -p:UnityManaged="C:\Program Files\Unity\Hub\Editor\<버전>\Editor\Data\Managed" -->
   <PropertyGroup>
     <TargetFramework>netstandard2.1</TargetFramework>
@@ -17,6 +17,6 @@
     <Compile Include="$(P)Combat/**/*.cs;$(P)Spells/**/*.cs;$(P)Contracts/**/*.cs;$(P)Bot/**/*.cs;$(P)Deck/**/*.cs" />
     <Compile Include="$(P)Arena/ArenaGeometry.cs;$(P)Core/MatchRuleConfig.cs;$(P)Core/TeamUtil.cs;$(P)Utils/DeterministicRandom.cs" />
     <Compile Include="$(P)Network/Authority/**/*.cs;$(P)Network/Events/IMatchEventSink.cs;$(P)Network/Sync/MatchSnapshot.cs" />
-    <Compile Include="$(P)Backend/BackendClient.cs;$(P)Backend/BackendDtos.cs;$(P)Backend/WebGLBridge.cs;$(P)Backend/PresenceService.cs;$(P)Backend/AiStrategyLink.cs" />
+    <Compile Include="$(P)Backend/BackendClient.cs;$(P)Backend/BackendDtos.cs;$(P)Backend/WebGLBridge.cs;$(P)Backend/PresenceService.cs" />
   </ItemGroup>
 </Project>

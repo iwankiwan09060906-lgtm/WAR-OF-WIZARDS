@@ -122,6 +122,14 @@ namespace SpellboundVR.Arena
         /// <summary>다인전: 2명이 남았을 때 마주 보는 거리 (1:1 전장 길이, m)</summary>
         public float PolygonDuelLength { get; }
 
+        /// <summary>
+        /// 시연 전장: 정N각형 안이 채워져 있어 대각선도 소환 · 설치 · 웨이브가 다닌다 (모든 상대에게 레인).
+        /// 소환 · 설치 위치는 조준선의 절반까지 고를 수 있다 (PlacementMaxDepth)
+        /// </summary>
+        public bool FilledPolygon { get; set; }
+        /// <summary>소환 · 설치를 놓을 수 있는 가장 먼 깊이 (0 ~ 1, 시연 전장은 조준선의 절반)</summary>
+        public float PlacementMaxDepth => FilledPolygon ? 0.5f : 1f;
+
         public bool IsDuel => Mode == ArenaMode.Duel;
         public bool IsPolygon => Mode == ArenaMode.Polygon;
         /// <summary>다인전에 2명만 남아 1:1 전장으로 바뀐 상태</summary>
@@ -248,6 +256,7 @@ namespace SpellboundVR.Arena
         {
             if (!IsPolygon || PolygonDuelStage) return true;
             if (lane < 0 || lane >= PolygonDuelLaneBase || !TouchesLane(team, lane)) return false;
+            if (FilledPolygon) return RingIndex(team) >= 0 && RingIndex(LaneTarget(team, lane)) >= 0; // 가운데가 채워진 시연 전장: 모든 상대에게
             int i = RingIndex(team), j = RingIndex(LaneTarget(team, lane));
             if (i < 0 || j < 0) return false;
             int off = ((j - i) % _ringCount + _ringCount) % _ringCount;

@@ -29,6 +29,8 @@ namespace SpellboundVR.Combat
             h.Winner = (byte)(_phase == MatchPhase.Ended ? _outcome.Winner : MatchWinner.None);
             h.EndReason = (byte)_outcome.Reason;
             h.Duration = _phase == MatchPhase.Ended ? _duration : _matchTime;
+            h.JoinSeat = (byte)NextTakeover(out float joinIn);
+            h.JoinIn = joinIn;
 
             for (int t = 0; t < TeamUtil.TeamCount; t++)
             {
@@ -52,6 +54,7 @@ namespace SpellboundVR.Combat
                 ps.PenX = (sbyte)Mathf.RoundToInt(Mathf.Clamp(p.Preview.PenX, -1f, 1f) * 100f);
                 ps.PenY = (sbyte)Mathf.RoundToInt(Mathf.Clamp(p.Preview.PenY, -1f, 1f) * 100f);
                 ps.PenStroke = (byte)p.Preview.Stroke;
+                ps.Deaths = (byte)p.Deaths;
                 s.Names[t] = Names[t];
                 ps.AfkSecondsLeft = _phase == MatchPhase.Playing ? AfkMonitor.SecondsLeft(p, _matchTime, Rules) : -1f;
 
@@ -163,6 +166,9 @@ namespace SpellboundVR.Combat
                 SelfColumn = TeamUtil.ToLocalColumn(team, self.WorldColumn),
                 OpponentColumn = ColumnToward(team, enemy),
                 MatchTimeSeconds = _matchTime,
+                ColumnMask = ColumnMask(team, false),
+                SpawnColumnMask = ColumnMask(team, true),
+                PlacementMaxDepth = Arena.PlacementMaxDepth,
                 SelfSlotReadyMask = mask,
                 SelfTowerAlive = Defense.AllTowersStanding(team),
                 SelfNexusAlive = Defense.NexusAlive(team),
@@ -172,6 +178,20 @@ namespace SpellboundVR.Combat
                 NearestIncomingProjectileColumn = incoming > 0 ? TeamUtil.ToLocalColumn(team, nearestCol) : Column.Center,
                 NearestIncomingProjectileEta = incoming > 0 ? eta : -1f,
             };
+        }
+
+        /// <summary>봇 관찰: 지금 쓸 수 있는 열 비트 (spawn: 소환 · 설치가 가능한 열만)</summary>
+        private byte ColumnMask(Team team, bool spawn)
+        {
+            byte mask = 0;
+            for (int c = 0; c < Arena.ColumnSlots; c++)
+            {
+                if (!Arena.ColumnValid(team, (Column)c)) continue;
+                int lane = Arena.ResolveLane(team, (Column)c);
+                if (!IsLaneOpen(team, lane) || (spawn && !Arena.IsSpawnLane(team, lane))) continue;
+                mask |= (byte)(1 << c);
+            }
+            return mask;
         }
 
         /// <summary>그 상대를 치려면 조준할 내 열 — 1:1 은 상대가 선 열, 개인전은 그 상대로 가는 레인</summary>

@@ -1,5 +1,7 @@
 # 개인전 2~4명 · 공식 팀 계정 · AI 전략 코치(VLM) · 서버 MediaPipe
 
+> AI 전략 코치(VLM · `/api/ai/*`)와 AI 학습은 삭제했다 — 봇은 Unity 랜덤 두뇌(`TimerRandomBrain`)만 쓴다. 아래 AI 부분은 기록용.
+
 백엔드(`Backend/wow_server.py`)에 추가한 기능과 API. 기존 1:1 응답 칸은 그대로 두고 새 칸만 더했다. Unity 4인 개인전은 [`Docs/Battle/Ffa4.md`](../Battle/Ffa4.md).
 
 ```text

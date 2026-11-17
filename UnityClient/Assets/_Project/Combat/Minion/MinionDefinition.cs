@@ -94,7 +94,7 @@ namespace SpellboundVR.Combat
                     // 미니언 3~4기를 한 번에 베는 탱커형 근접 (도끼 휘두르기 반경 2.4m)
                     d.IsSummon = true;
                     d.MaxHp = 1100f; d.Damage = 65f; d.AttackInterval = 1.6f; d.AttackRange = 1.5f;
-                    d.MoveSpeed = 1.5f; d.DetectRange = 7f; d.BodyRadius = 0.8f;
+                    d.MoveSpeed = 2.4f; d.DetectRange = 7f; d.BodyRadius = 0.8f;
                     d.SplashRadius = 2.4f; d.StructureDamageMultiplier = 1.5f; d.TowerTargetPriority = 0;
                     d.Lifetime = 40f;
                     break;
@@ -102,7 +102,7 @@ namespace SpellboundVR.Combat
                     // 공중 원거리 화염 (작은 범위)
                     d.IsSummon = true;
                     d.MaxHp = 450f; d.Damage = 45f; d.AttackInterval = 2.0f; d.AttackRange = 6f;
-                    d.MoveSpeed = 1.8f; d.DetectRange = 9f; d.BodyRadius = 0.8f;
+                    d.MoveSpeed = 2.8f; d.DetectRange = 9f; d.BodyRadius = 0.8f;
                     d.SplashRadius = 1.5f; d.FlightHeight = 3.5f; d.TowerTargetPriority = 1;
                     d.Lifetime = 40f;
                     break;

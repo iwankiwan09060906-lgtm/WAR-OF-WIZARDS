@@ -8,7 +8,9 @@
 //     · 시전 거절 사유 · AFK 경고 · 돌파 알림 · 가운데 큰 글자(카운트다운 · FIGHT · 결과)
 //   프로토타입의 마나 · 킬 수 · 궁극기 충전은 이 게임 규칙에 없어서 옮기지 않았다.
 //   4인 개인전: 상대 카드 · 상대 방어 대신 FfaHudPanel(세 상대 · 전장 지도), Power Up 칸은 마나 폭풍 타이머
-//   AI 코치(BattleCoach) · 입력 상태 칸: HUD 오른쪽 아래
+//   입력 상태 칸: HUD 오른쪽 아래
+//   전시 시연(demoLayout): 방어 줄을 빼고 스킬창을 큰 카드 4장 한 줄로 (처음 쓰는 사람도 룬 그림이 잘 보이게) — 카드 스킬은 서버 로테이션을 따라 바뀐다.
+//     입장 알림(다른 사람이 AI 자리를 넘겨받기 3초 전) · 부활 알림을 띄운다. 스킬창을 내려다보면 검지 포인터가 카드를 가리키고, 핀치하면 SkillGuideView 가 큰 룬 가이드를 띄운다 (TryPointAtSlots).
 
 using SpellboundVR.Contracts;
 using SpellboundVR.Core;
@@ -31,6 +33,11 @@ namespace SpellboundVR.UI
         public float tiltDegrees = 57f;
         [Tooltip("캔버스 1px = 이 값(m). 0.0006 → 폭 0.6m")]
         public float worldScale = 0.0006f;
+        [Tooltip("전시 시연: 큰 스킬 카드 4장 · 방어 줄 없음 · 입장 / 부활 알림")]
+        public bool demoLayout;
+
+        /// <summary>시연 스킬창 카드 수 (MatchRuleConfig.RotationSlots)</summary>
+        public const int DemoSlots = 4;
 
         private static readonly Color Dim = new Color(0.55f, 0.5f, 0.7f, 1f);
 
@@ -99,6 +106,12 @@ namespace SpellboundVR.UI
         private int _lastShieldSecond = -1;
         private float _matchTime;
         private int _stage;
+        private RectTransform _canvasRt;
+        private readonly Vector2[] _slotPos = new Vector2[DeckData.SlotCount];
+        private Vector2 _slotSize;
+        private Text _notice;
+        private bool _wasJoining;
+        private int SlotCount => demoLayout ? DemoSlots : DeckData.SlotCount;
 
         public void Initialize(ClientSession session, Transform parent)
         {
@@ -128,7 +141,12 @@ namespace SpellboundVR.UI
             _session.Events.OnPlayerEliminated -= HandleEliminated;
             _events.OnMatchStarted -= HandleMatchStarted;
             _events.OnMatchEnded -= HandleMatchEnded;
-            if (_session != null) _session.Events.OnPhaseInfo -= HandlePhase;
+            if (_session != null)
+            {
+                _session.Events.OnPhaseInfo -= HandlePhase;
+                _session.Events.OnSlotSpellChanged -= HandleSlotSpell;
+                _session.Events.OnPlayerRespawned -= HandleRespawned;
+            }
         }
 
         private void Subscribe()
@@ -151,6 +169,8 @@ namespace SpellboundVR.UI
             _events.OnMatchStarted += HandleMatchStarted;
             _events.OnMatchEnded += HandleMatchEnded;
             _session.Events.OnPhaseInfo += HandlePhase;
+            _session.Events.OnSlotSpellChanged += HandleSlotSpell;
+            _session.Events.OnPlayerRespawned += HandleRespawned;
         }
 
         // ── 레이아웃 ─────────────────────────────────────────
@@ -170,6 +190,7 @@ namespace SpellboundVR.UI
             scaler.dynamicPixelsPerUnit = 1.5f;
             var rt = (RectTransform)root.transform;
             rt.sizeDelta = new Vector2(CanvasWidth, CanvasHeight);
+            _canvasRt = rt;
 
             // 바탕: 반투명 짙은 보라 판 + 보라 테두리 + 모서리 ㄱ자
             Sliced(rt, "Bg", Vector2.zero, new Vector2(CanvasWidth, CanvasHeight),
@@ -180,9 +201,10 @@ namespace SpellboundVR.UI
             if (!Ffa) _enemyHp = HpCard(rt, 335f, "Enemy", UiTheme.Hex(0xf87171), UiTheme.Enemy, out _enemyBar, out _);
             BuildTimer(rt);
 
-            // 둘째 줄: 방어 계층
-            _myDefense = DefenseGroup(rt, -250f, "내 방어");
+            // 둘째 줄: 방어 계층 (시연은 뺀다 — 쓰러져도 부활)
+            if (!demoLayout) _myDefense = DefenseGroup(rt, -250f, "내 방어");
             if (Polygon) _poly = new PolygonHudPanel(rt, _session);
+            if (_poly != null && demoLayout) _poly.HideMap();
             else if (Ffa) _ffa = new FfaHudPanel(rt, _session);
             else _enemyDefense = DefenseGroup(rt, 250f, "상대 방어");
             BuildCoach(rt);
@@ -192,23 +214,31 @@ namespace SpellboundVR.UI
             BuildPosition(rt, new Vector2(0f, 142f));
             _status = Label(rt, "Status", new Vector2(330f, 142f), new Vector2(300f, 34f), 20, TextAnchor.MiddleRight, UiTheme.CyanLight, true);
 
-            // 8슬롯 2 × 4 (§13.2)
-            float cellW = 232f, cellH = 104f, gap = 10f;
-            for (int i = 0; i < DeckData.SlotCount; i++)
+            // 8슬롯 2 × 4 (§13.2) — 시연은 같은 자리에 두 줄 높이 카드 4장
+            float cellW = 232f, cellH = demoLayout ? 218f : 104f, gap = 10f;
+            _slotSize = new Vector2(cellW, cellH);
+            for (int i = 0; i < SlotCount; i++)
             {
                 int row = i / 4;
                 int col = i % 4;
-                var pos = new Vector2(-1.5f * (cellW + gap) + col * (cellW + gap), 58f - row * (cellH + gap));
-                BuildSlot(rt, i, pos, new Vector2(cellW, cellH));
+                _slotPos[i] = new Vector2(-1.5f * (cellW + gap) + col * (cellW + gap), demoLayout ? 1f : 58f - row * (cellH + gap));
+                BuildSlot(rt, i, _slotPos[i], _slotSize, _session.LocalDeck[i]);
             }
 
             _message = Label(rt, "Message", new Vector2(0f, -150f), new Vector2(960f, 40f), 24, TextAnchor.MiddleCenter, UiTheme.Orange, true);
             Glow(_message, UiTheme.Alpha(Color.black, 0.8f));
             _afk = Label(rt, "Afk", new Vector2(0f, -192f), new Vector2(960f, 40f), 26, TextAnchor.MiddleCenter, UiTheme.Enemy, true);
             Glow(_afk, UiTheme.Alpha(Color.black, 0.8f));
+            if (demoLayout)
+            {
+                // 입장 알림 — 시연은 AFK 기권이 없어 그 자리를 쓴다
+                _notice = Label(rt, "JoinNotice", new Vector2(0f, -192f), new Vector2(960f, 44f), 28, TextAnchor.MiddleCenter, UiTheme.Amber, true);
+                Glow(_notice, UiTheme.Alpha(Color.black, 0.9f));
+            }
             var hint = Label(rt, "Hint", new Vector2(Ffa ? 100f : 0f, -280f), new Vector2(Ffa ? 760f : 960f, 30f), Ffa ? 14 : 16, TextAnchor.MiddleCenter, UiTheme.Alpha(UiTheme.PurpleLight, 0.6f), false);
             string moveHand = MetaState.Settings.MoveHandName;
-            hint.text = Polygon ? "가리키는 쪽 상대를 공격 (소환은 양옆 이웃)   ·   " + moveHand + " 휘두르기로 피하기   ·   왼손 메뉴 제스처 = 경기 메뉴"
+            hint.text = demoLayout ? "검지로 카드를 가리키고 핀치 = 그리는 법   ·   그리기 › 주먹 › 검지로 가리켜 3초   ·   " + moveHand + " 휘두르기로 피하기"
+                      : Polygon ? "가리키는 쪽 상대를 공격 (소환은 양옆 이웃)   ·   " + moveHand + " 휘두르기로 피하기   ·   왼손 메뉴 제스처 = 경기 메뉴"
                       : Ffa ? "왼쪽 · 가운데 · 오른쪽을 가리키면 그쪽 상대를 공격   ·   " + moveHand + " 휘두르기로 피하기   ·   왼손 메뉴 제스처 = 경기 메뉴"
                             : "핀치 룬 › 주먹 › 검지 3초   ·   손바닥 취소   ·   " + moveHand + " 휘두르기 이동   ·   왼손 메뉴 제스처 = 경기 메뉴";
 
@@ -344,22 +374,22 @@ namespace SpellboundVR.UI
             PaintPosition(-1);
         }
 
-        private void BuildSlot(RectTransform rt, int i, Vector2 pos, Vector2 size)
+        private void BuildSlot(RectTransform rt, int i, Vector2 pos, Vector2 size, int spellId)
         {
-            int spellId = _session.LocalDeck[i];
             var def = spellId > 0 ? _session.Catalog.Get(spellId) : null;
             string code = spellId > 0 ? SpellIds.Code(spellId) : "";
             var card = Sliced(rt, "Slot" + (i + 1), pos, size, null);
             var crt = card.rectTransform;
 
             // 룬 그리는 방법 (시작 점 · 획 번호 · 방향 화살표) + 원형 쿨타임 가림
-            float icon = size.y - 22f;
+            // 시연 카드: 위에 큰 룬 그림, 아래에 이름
+            float icon = demoLayout ? size.y - 72f : size.y - 22f;
             var art = string.IsNullOrEmpty(code) ? null : UiKit.RuneGuide(crt, spellId, code, icon);
             Image mask = null;
             Text sec = null;
             if (art != null)
             {
-                Place(art, new Vector2(-size.x / 2f + 12f + icon / 2f, 0f), new Vector2(icon, icon));
+                Place(art, demoLayout ? new Vector2(0f, size.y / 2f - 8f - icon / 2f) : new Vector2(-size.x / 2f + 12f + icon / 2f, 0f), new Vector2(icon, icon));
                 mask = UiKit.Panel(art, new Color(0.02f, 0.01f, 0.06f, 0.72f), null, "Cooldown");
                 mask.sprite = UiTheme.Circle();
                 mask.type = UnityEngine.UI.Image.Type.Filled;
@@ -368,7 +398,7 @@ namespace SpellboundVR.UI
                 mask.fillClockwise = false;
                 mask.fillAmount = 0f;
                 UiKit.Stretch(mask.rectTransform);
-                sec = Label(art, "Seconds", Vector2.zero, new Vector2(icon, icon), 24, TextAnchor.MiddleCenter, Color.white, true);
+                sec = Label(art, "Seconds", Vector2.zero, new Vector2(icon, icon), demoLayout ? 44 : 24, TextAnchor.MiddleCenter, Color.white, true);
                 sec.font = UiTheme.Display;
                 sec.gameObject.AddComponent<Outline>().effectColor = new Color(0f, 0f, 0f, 0.9f);
             }
@@ -383,9 +413,18 @@ namespace SpellboundVR.UI
             float textX = -size.x / 2f + icon + 24f;
             float textW = size.x - icon - 32f;
             string display = string.IsNullOrEmpty(code) ? "-" : MetaSkills.TryGet(code, out var info) ? info.Name : def != null ? def.DisplayName : code;
-            var name = Label(crt, "Name", new Vector2(textX + textW / 2f, 18f), new Vector2(textW, 34f), 23, TextAnchor.MiddleLeft, UiTheme.Text, true);
+            Text name, infoText;
+            if (demoLayout)
+            {
+                name = Label(crt, "Name", new Vector2(0f, -size.y / 2f + 42f), new Vector2(size.x - 12f, 32f), 26, TextAnchor.MiddleCenter, UiTheme.Text, true);
+                infoText = Label(crt, "Info", new Vector2(0f, -size.y / 2f + 16f), new Vector2(size.x - 12f, 24f), 17, TextAnchor.MiddleCenter, UiTheme.Text2, true);
+            }
+            else
+            {
+                name = Label(crt, "Name", new Vector2(textX + textW / 2f, 18f), new Vector2(textW, 34f), 23, TextAnchor.MiddleLeft, UiTheme.Text, true);
+                infoText = Label(crt, "Info", new Vector2(textX + textW / 2f, -20f), new Vector2(textW, 30f), 16, TextAnchor.MiddleLeft, UiTheme.Text2, true);
+            }
             name.text = display;
-            var infoText = Label(crt, "Info", new Vector2(textX + textW / 2f, -20f), new Vector2(textW, 30f), 16, TextAnchor.MiddleLeft, UiTheme.Text2, true);
 
             _slots[i] = new SlotView
             {
@@ -498,16 +537,80 @@ namespace SpellboundVR.UI
             }
         }
 
+        /// <summary>서버가 슬롯 스킬을 바꿨다 (시연 로테이션) — 카드를 새 스킬로 다시 만든다</summary>
+        private void HandleSlotSpell(int slot, int spellId)
+        {
+            if (slot < 0 || slot >= SlotCount || _slots[slot].Card == null) return;
+            Destroy(_slots[slot].Card.gameObject);
+            BuildSlot(_canvasRt, slot, _slotPos[slot], _slotSize, spellId);
+        }
+
+        /// <summary>레이(PC 마우스)가 맞는 스킬 카드 (빈 슬롯 제외)</summary>
+        public bool TryGetSlotOnRay(Ray ray, out int slot, out int spellId)
+        {
+            slot = -1;
+            spellId = 0;
+            for (int i = 0; i < SlotCount; i++)
+            {
+                ref var v = ref _slots[i];
+                if (v.Card == null || v.Empty) continue;
+                var rt = v.Card.rectTransform;
+                if (!new Plane(rt.forward, rt.position).Raycast(ray, out float d)) continue;
+                Vector2 local = rt.InverseTransformPoint(ray.GetPoint(d));
+                Vector2 half = rt.rect.size * 0.5f;
+                if (Mathf.Abs(local.x) > half.x || Mathf.Abs(local.y) > half.y) continue;
+                slot = i;
+                spellId = _session.LocalDeck[i];
+                return true;
+            }
+            return false;
+        }
+
+        /// <summary>스킬창 판 (시연 포인터를 그 위에 그린다 — SkillGuideView)</summary>
+        public RectTransform CanvasRect => _canvasRt;
+
+        /// <summary>
+        /// 레이가 스킬창 판에 닿으면 그 점(캔버스 로컬)과 가장 가까운 카드 (빈 슬롯 제외) — 시연 스킬창 포인터.
+        /// 카드 사이 틈을 가리켜도 가까운 카드를 고른다 (손 떨림 · 핀치하며 손가락이 움직임). 판 밖이면 false
+        /// </summary>
+        public bool TryPointAtSlots(Ray ray, out Vector2 local, out int slot, out int spellId)
+        {
+            local = default;
+            slot = -1;
+            spellId = 0;
+            if (_canvasRt == null || !new Plane(_canvasRt.forward, _canvasRt.position).Raycast(ray, out float d)) return false;
+            local = _canvasRt.InverseTransformPoint(ray.GetPoint(d));
+            if (Mathf.Abs(local.x) > CanvasWidth * 0.5f || Mathf.Abs(local.y) > CanvasHeight * 0.5f) return false;
+            float best = float.MaxValue;
+            for (int i = 0; i < SlotCount; i++)
+            {
+                if (_slots[i].Card == null || _slots[i].Empty) continue;
+                float dist = (local - _slotPos[i]).sqrMagnitude;
+                if (dist >= best) continue;
+                best = dist;
+                slot = i;
+                spellId = _session.LocalDeck[i];
+            }
+            return slot >= 0;
+        }
+
+        /// <summary>포인터가 가리키는 카드를 살짝 키운다 (-1 = 없음)</summary>
+        public void HighlightSlot(int slot)
+        {
+            for (int i = 0; i < SlotCount; i++)
+                if (_slots[i].Card != null) _slots[i].Card.rectTransform.localScale = Vector3.one * (i == slot ? 1.08f : 1f);
+        }
+
         private void HandleSlotState(int slot, SlotState state)
         {
-            if (slot < 0 || slot >= _slots.Length) return;
+            if (slot < 0 || slot >= SlotCount) return;
             _slots[slot].State = state;
             RefreshSlot(slot);
         }
 
         private void HandleCooldown(int slot, float duration)
         {
-            if (slot < 0 || slot >= _slots.Length) return;
+            if (slot < 0 || slot >= SlotCount) return;
             _slots[slot].CooldownEnd = Time.time + duration;
             _slots[slot].CooldownTotal = duration;
             _slots[slot].LastShownTenths = -1;
@@ -515,7 +618,7 @@ namespace SpellboundVR.UI
 
         private void HandleHighPower(int slot, int remaining)
         {
-            if (slot < 0 || slot >= _slots.Length) return;
+            if (slot < 0 || slot >= SlotCount || demoLayout) return; // 시연 로테이션은 횟수 제한이 없다
             _slots[slot].HighPowerUses = remaining;
             RefreshSlot(slot);
         }
@@ -751,10 +854,39 @@ namespace SpellboundVR.UI
             ShowMessage(attacker == Local ? "돌파! 아군 유닛이 상대 마법사를 공격합니다" : "경고: 적 유닛이 돌파했습니다!", UiTheme.Enemy);
         }
 
+        private void HandleRespawned(Team team)
+        {
+            if (team == Local) return; // 내 자리(입장 대기 중 AI)는 알리지 않는다 — 내가 쓰러지면 GameOverView
+            ShowMessage(TeamUtil.SeatNumber(team) + "번 쓰러짐 — 다시 일어났습니다", UiTheme.Amber);
+        }
+
+        /// <summary>시연 입장 알림 — 다른 사람이 AI 자리를 넘겨받기 몇 초 전, 내가 들어가는 중이면 큰 카운트다운</summary>
+        private void RefreshJoinNotice()
+        {
+            var s = _session.Events.Latest;
+            int seat = s != null ? s.Header.JoinSeat : 0;
+            bool mine = seat != 0 && _session.Events.HasLocalTeam && seat == TeamUtil.SeatNumber(Local);
+            if (mine)
+            {
+                _center.color = UiTheme.CyanLight;
+                ShowCenter("입장까지 " + Mathf.Max(1, Mathf.CeilToInt(s.Header.JoinIn)), -1f);
+                _notice.text = TeamUtil.SeatNumber(Local) + "번 AI 자리를 이어받습니다";
+            }
+            else if (seat != 0) _notice.text = "새로운 플레이어가 " + Mathf.Max(1, Mathf.CeilToInt(s.Header.JoinIn)) + "초 뒤 " + seat + "번 자리에 들어옵니다!";
+            else _notice.text = "";
+            if (_wasJoining && !mine)
+            {
+                _center.color = UiTheme.Text;
+                ShowCenter("입장!", 1.5f);
+                ShowMessage("핀치로 카드를 누르면 그리는 법이 나옵니다", UiTheme.CyanLight);
+            }
+            _wasJoining = mine;
+        }
+
         private void HandleMatchStarted(OpponentType opponent)
         {
             ShowCenter("FIGHT!", 1.5f);
-            ShowMessage(Ffa ? "마지막까지 살아남으세요!" : opponent == OpponentType.Bot ? "상대: 봇" : "상대: 사람", UiTheme.CyanLight);
+            ShowMessage(demoLayout ? "누구든 공격하세요 — 쓰러져도 부활합니다" : Ffa ? "마지막까지 살아남으세요!" : opponent == OpponentType.Bot ? "상대: 봇" : "상대: 사람", UiTheme.CyanLight);
             _afk.text = "";
         }
 
@@ -835,8 +967,9 @@ namespace SpellboundVR.UI
             float now = Time.time;
             if (_ffa != null) _ffa.Tick(_session.Events.Latest, Viewed);
             if (_poly != null) _poly.Tick(_session.Events.Latest, Viewed);
+            if (_notice != null) RefreshJoinNotice();
 
-            for (int i = 0; i < _slots.Length; i++)
+            for (int i = 0; i < SlotCount; i++)
             {
                 ref var s = ref _slots[i];
                 if (s.State != SlotState.Cooldown) continue;

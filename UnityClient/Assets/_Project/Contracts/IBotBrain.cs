@@ -26,6 +26,12 @@ namespace SpellboundVR.Contracts
         public Column SelfColumn;
         public Column OpponentColumn;
         public float MatchTimeSeconds;
+        /// <summary>bit c = 열 c 로 지금 공격할 수 있다 (1:1 · 4인 0 ~ 2, 다인전 상대마다 0 ~ 4). 0 이면 0 ~ 2 모두</summary>
+        public byte ColumnMask;
+        /// <summary>bit c = 열 c 에 소환 · 설치할 수 있다 (다인전은 이웃 변만, 시연 전장은 모든 상대)</summary>
+        public byte SpawnColumnMask;
+        /// <summary>소환 · 설치를 놓을 수 있는 가장 먼 깊이 0 ~ 1 (시연 전장은 0.5)</summary>
+        public float PlacementMaxDepth;
 
         /// <summary>bit i = 슬롯 i 가 Ready (§13.3). 덱 내용은 봇 생성 시 두뇌에 전달된다.</summary>
         public byte SelfSlotReadyMask;

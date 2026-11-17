@@ -229,9 +229,7 @@
       loginHistory: function () { return request('GET', '/api/admin/login-history'); },
       auditLogs: function () { return request('GET', '/api/admin/audit-logs'); },
       postNotice: function (title, body) { return request('POST', '/api/admin/notices', { title: title, body: body }); },
-      broadcast: function (message) { return request('POST', '/api/admin/live/broadcast', { message: message }); },
-      aiTrain: function () { return request('POST', '/api/ai/train', {}); },
-      aiDataset: function () { return request('POST', '/api/ai/dataset', {}); }
+      broadcast: function (message) { return request('POST', '/api/admin/live/broadcast', { message: message }); }
     },
 
     // ── 게임 연결 (매칭 → 게임 방 → Unity 접속 · 결과) ─────────────────
@@ -270,13 +268,8 @@
     // 시전 신호를 받을 Unity 주소 + 최근 신호 (게임 화면의 연결 표시용)
     async spellLink() { return request('GET', '/api/spells/recent'); },
 
-    // ── AI: VLM 전략 코치 · 서버 MediaPipe 손 추적 ─────────────────────
-    async aiStatus() { return request('GET', '/api/ai/status'); },
-    // body: { state: {deck, ready, selfHp, selfColumn, ...}, image?: 'data:image/jpeg;base64,...', matchId? }
-    async aiStrategy(body) { return request('POST', '/api/ai/strategy', body); },
-    // AI 학습 데이터: { gameId, matchId, state, action: {spellId, slot, column, followedAdvice}, image? }
-    async aiRecord(body) { return request('POST', '/api/ai/experience', body); },
-    async aiLearning() { return request('GET', '/api/ai/learning'); },
+    // ── 서버 MediaPipe 손 추적 ─────────────────────
+    async handStatus() { return request('GET', '/api/mediapipe/status'); },
     // body: { image: 카메라 프레임 data URL, t: performance.now(), candidates: [...], session }
     async handFrame(body) { return request('POST', '/api/mediapipe/frame', body); },
     async handReset(session) { return request('POST', '/api/mediapipe/reset', { session: session }).catch(function () { return null; }); }

@@ -16,8 +16,7 @@ Spring Boot 17개 Controller / Service / Repository / Dual DB 아키텍처를
   9. Google 로그인 (클라이언트 ID 설정 시), 룬 그림 인식(GestureTools/MediaPipe/wow_runes.py),
      시전 신호 → Unity (UDP 127.0.0.1:5067 + SSE 'spell')
  10. 1:1 · 3 · 4인 개인전 (한 경기 2~4명, 팀 없이 모두가 적) — 매칭 큐 · 게임 방 · 친선전 방, 빈자리는 봇
- 11. AI: VLM 전략 코치 (/api/ai/strategy, wow_ai.py) · 서버 MediaPipe 손 추적 (/api/mediapipe/*, wow_hands.py)
- 12. AI 학습: 경기 경험 수집 · 판 결과로 이름표 · 자동 학습 · VLM 미세조정 데이터셋 (/api/ai/experience · train · dataset, wow_learn.py)
+ 11. 서버 MediaPipe 손 추적 (/api/mediapipe/*, wow_hands.py)   (VLM 전략 코치 · AI 학습은 삭제 — 봇은 Unity 랜덤 두뇌)
 
 실행 방법:
   python wow_server.py [포트]
@@ -115,10 +114,7 @@ try:
 except Exception:  # 폴더가 없어도 서버는 뜬다 (룬 인식 API 만 503)
     wow_runes = None
 
-# AI: VLM 전략 코치(wow_ai.py, 외부 패키지 없이도 규칙 AI 로 동작) · 서버 MediaPipe 손 추적(wow_hands.py)
-import wow_ai  # noqa: E402
-import wow_board  # noqa: E402
-import wow_learn  # noqa: E402
+# 서버 MediaPipe 손 추적(wow_hands.py)
 try:
     import wow_hands
 except Exception:  # GestureTools/MediaPipe 가 없으면 손 추적 API 만 503
@@ -265,109 +261,6 @@ def get_config_float(conn, key, default):
         return float(get_config(conn, key, default))
     except (TypeError, ValueError):
         return float(default)
-
-
-def ai_config():
-    """AI 설정(ai.*) — 관리자 콘솔에서 바꾸면 다음 요청부터 바로 반영"""
-    try:
-        with get_db() as conn:
-            return {r["config_key"]: r["config_value"] for r in
-                    conn.execute("SELECT config_key, config_value FROM game_configs WHERE config_key LIKE 'ai.%'").fetchall()}
-    except Exception:
-        return {}
-
-
-def game_id_of(body):
-    """한 판 구분: gameId 가 있으면 그것, 없으면 게임 방 번호로 m{matchId}"""
-    g = str(body.get("gameId") or "").strip()[:40]
-    if not g and body.get("matchId"):
-        g = f"m{str(body.get('matchId'))[:20]}"
-    return g
-
-
-_TRAIN_STATE = {"labeled_at_train": 0, "running": False}
-
-
-def record_experience(conn, caller, kind, body, state, action=None, advice=None, image=None, reward=None):
-    """경기 경험 한 줄 (+ 화면 사진). 상황은 wow_ai.normalize_state 로 정리해서 저장한다. id 를 돌려준다."""
-    st = wow_ai.normalize_state(state if isinstance(state, dict) else {}, SKILLS)
-    act = action if isinstance(action, dict) else {}
-    act = {k: act[k] for k in ("spellId", "slot", "column", "depth", "move", "followedAdvice", "byOrders", "focus") if k in act}
-    if "spellId" in act:
-        act["spellId"] = str(act["spellId"]).upper()[:3]
-    adv = ""
-    if advice:
-        adv = json.dumps({k: advice.get(k) for k in ("cast", "move", "focus", "source", "threat")}, ensure_ascii=False)
-    match_id = 0
-    try:
-        match_id = int(body.get("matchId") or 0)
-    except (TypeError, ValueError):
-        pass
-    try:
-        reward = float(reward or 0)
-    except (TypeError, ValueError):
-        reward = 0.0
-    cur = conn.execute("""INSERT INTO ai_experiences (game_id, match_id, caller, player_id, kind, source, state_json, action_json,
-                                                      advice_json, reward, players, created_at)
-                          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                       (game_id_of(body), match_id, caller, int(caller[1:]) if caller.startswith("p") else None, kind,
-                        str(body.get("source") or "")[:20], json.dumps(st, ensure_ascii=False), json.dumps(act, ensure_ascii=False),
-                        adv, reward, st.get("players", 2), time.time()))
-    eid = cur.lastrowid
-    if image and get_config(conn, "ai.save_frames", "true").lower() == "true":
-        media, data = wow_ai.parse_image(image)       # 잘못된 그림이면 ValueError → 요청 400
-        saved = conn.execute("SELECT COUNT(*) AS n FROM ai_experiences WHERE image_path != ''").fetchone()["n"]
-        if data and saved < get_config_float(conn, "ai.max_frames", 5000):
-            ext = {"image/png": "png", "image/webp": "webp"}.get(media, "jpg")
-            os.makedirs(wow_learn.FRAMES_DIR, exist_ok=True)
-            name = f"{eid}.{ext}"
-            with open(os.path.join(wow_learn.FRAMES_DIR, name), "wb") as f:
-                f.write(base64.b64decode(data))
-            conn.execute("UPDATE ai_experiences SET image_path = ? WHERE id = ?", (f"frames/{name}", eid))
-    return eid
-
-
-def label_experiences(conn, caller, outcome, place=None, players=None, match_id=0, game_id=""):
-    """판 결과 → 그 판(게임 방 번호 또는 gameId)의 이 사람 경험 모두에 이름표. 쌓이면 자동으로 다시 학습한다."""
-    try:
-        place = int(place or 0)
-        players = int(players or 0)
-    except (TypeError, ValueError):
-        place, players = 0, 0
-    sets, args = "outcome = ?, place = ?", [outcome, place]
-    if players:
-        sets += ", players = ?"
-        args.append(players)
-    n = conn.execute(f"""UPDATE ai_experiences SET {sets} WHERE caller = ? AND outcome = ''
-                         AND ((match_id = ? AND match_id != 0) OR (game_id = ? AND game_id != ''))""",
-                     (*args, caller, match_id or 0, game_id or "")).rowcount
-    if n:
-        conn.commit()
-        maybe_train()
-    return n
-
-
-def maybe_train():
-    """이름표가 붙은 경험이 ai.train_every 만큼 늘면 뒤에서 다시 학습 (요청은 기다리지 않는다)"""
-    with get_db() as conn:
-        every = get_config_float(conn, "ai.train_every", 20)
-        labeled = conn.execute("SELECT COUNT(*) AS n FROM ai_experiences WHERE outcome != ''").fetchone()["n"]
-    if every <= 0 or _TRAIN_STATE["running"] or labeled - _TRAIN_STATE["labeled_at_train"] < every:
-        return
-
-    def run():
-        _TRAIN_STATE["running"] = True
-        try:
-            with get_db() as conn:
-                res = wow_learn.train(conn)
-            _TRAIN_STATE["labeled_at_train"] = labeled
-            print(f"[AI 학습] 경험 {res['samples']}개 · {res['games']}판으로 다시 학습했습니다.")
-        except Exception:
-            traceback.print_exc()
-        finally:
-            _TRAIN_STATE["running"] = False
-
-    threading.Thread(target=run, daemon=True).start()
 
 
 def is_npc_email(email):
@@ -617,26 +510,6 @@ def init_db():
         );
         CREATE INDEX IF NOT EXISTS idx_room_members ON room_members(room_code);
 
-        -- AI 학습용 경기 경험: 상황 · (화면) · 행동 · 보상, 판이 끝나면 결과 이름표 (wow_learn.py 가 배운다)
-        CREATE TABLE IF NOT EXISTS ai_experiences (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            game_id TEXT DEFAULT '',             -- 한 판 구분 (웹: 게임 방이면 m{matchId}, 아니면 클라이언트가 만든 값)
-            match_id INTEGER DEFAULT 0,
-            caller TEXT DEFAULT '',              -- p12 (플레이어) · server:7 (Unity 서버 봇)
-            player_id INTEGER DEFAULT NULL,
-            kind TEXT DEFAULT 'action',          -- advice (AI 가 추천) · action (실제 시전) · step (Unity 관찰 + 행동)
-            source TEXT DEFAULT '',
-            state_json TEXT DEFAULT '{}',
-            action_json TEXT DEFAULT '{}',
-            advice_json TEXT DEFAULT '',
-            image_path TEXT DEFAULT '',          -- Backend/ai_data/ 아래 상대 경로
-            reward REAL DEFAULT 0,               -- 즉시 보상 (준 피해 - 받은 피해 등, 보낸 쪽이 정함)
-            outcome TEXT DEFAULT '',             -- 판 결과 WIN · LOSE · DRAW (결과가 오면 채움)
-            place INTEGER DEFAULT 0,
-            players INTEGER DEFAULT 2,
-            created_at REAL DEFAULT 0
-        );
-        CREATE INDEX IF NOT EXISTS idx_ai_exp_game ON ai_experiences(game_id, player_id);
         """)
 
         # 예전 DB 파일에 새 컬럼 붙이기
@@ -704,21 +577,7 @@ def init_db():
             ("game.event_exp_multiplier", "1.0", "경험치/랭킹 이벤트 배율"),
             ("game.highpower_limit", "2", "덱 내 고위력 스킬 최대 장착 수"),
             ("game.highpower_casts", "3", "경기당 고위력 스킬 사용 제한 횟수"),
-            ("ai.vlm_provider", "auto", "전략 AI: auto(Claude 키 → Claude, 로컬 VLM 서버(run_server_vlm.bat)가 켜져 있으면 local, 아니면 규칙) · claude · ollama · local · rules"),
-            ("ai.vlm_model", "claude-opus-5-5", "전략 AI 가 쓰는 Claude 모델 ID"),
-            ("ai.vlm_effort", "low", "Claude 생각 깊이 (low · medium · high) — 낮을수록 빨리 답한다"),
-            ("ai.ollama_url", "http://127.0.0.1:11434", "로컬 VLM(Ollama) 주소 — ai.vlm_provider = ollama 일 때"),
-            ("ai.ollama_model", "qwen2.5vl:7b", "로컬 VLM(Ollama) 모델 이름 (그림을 읽는 모델)"),
-            ("ai.vlm_min_interval", "3", "같은 플레이어의 VLM 전략 요청 최소 간격(초) — 그 사이 요청은 규칙 AI 가 답한다"),
-            ("mediapipe.unity_udp", "127.0.0.1:5065", "서버 손 추적 결과를 보낼 Unity MediaPipeHandInput 주소 (요청에 forward 가 있을 때)"),
-            ("ai.local_url", "http://127.0.0.1:8790/v1", "이 게임으로 미세조정한 VLM 서버 (OpenAI 호환, ai.vlm_provider = local 일 때)"),
-            ("ai.local_model", "wow-vlm", "미세조정한 VLM 모델 이름"),
-            ("ai.save_frames", "true", "AI 학습용으로 게임 화면 사진을 Backend/ai_data/frames 에 저장 (VLM 미세조정 데이터)"),
-            ("ai.max_frames", "5000", "저장할 게임 화면 사진 최대 수"),
-            ("ai.train_every", "20", "결과 이름표가 붙은 경험이 이만큼 늘 때마다 자동으로 다시 학습 (0 = 자동 학습 끔)"),
-            ("ai.learn_min_samples", "5", "학습 결과를 믿고 스킬을 바꾸려면 같은 상황 표본이 이만큼 필요"),
-            ("ai.board_image", "true", "게임 화면 사진이 없으면 상황 · 유닛 점으로 전장 지도를 그려 VLM 에 넣는다 (미세조정 데이터셋도 같은 그림)"),
-            ("ai.local_schema", "true", "학습한 VLM(local) 요청에 response_format json_schema 를 넣는다 (llama-server 는 답 모양을 문법으로 강제)")
+            ("mediapipe.unity_udp", "127.0.0.1:5065", "서버 손 추적 결과를 보낼 Unity MediaPipeHandInput 주소 (요청에 forward 가 있을 때)")
         ]
         for cf in default_configs:
             c.execute("""
@@ -963,7 +822,7 @@ class WowHttpHandler(BaseHTTPRequestHandler):
         return conn.execute("SELECT * FROM players WHERE user_id = ?", (user["sub"],)).fetchone()
 
     def ai_caller(self):
-        """AI · 손 추적 요청을 보낸 쪽: 로그인한 플레이어 "p12" · Unity 서버(X-Server-Key) "server", 아니면 None"""
+        """손 추적 요청을 보낸 쪽: 로그인한 플레이어 "p12" · Unity 서버(X-Server-Key) "server", 아니면 None"""
         key = self.headers.get("X-Server-Key", "")
         if key and hmac.compare_digest(key, SERVER_KEY):
             return "server"
@@ -1050,21 +909,11 @@ class WowHttpHandler(BaseHTTPRequestHandler):
         if path == "/api/spells/recent":
             return self.send_json(200, {"unity": unity_spell_target(), "recent": list(SPELL_LOG)[::-1]})
 
-        # 0-4-1. AI 학습 현황 (/api/ai/learning) — 모은 경험 수 · 이름표 · 저장한 화면 · 배운 것 요약
-        if path == "/api/ai/learning":
-            with get_db() as conn:
-                row = conn.execute("""SELECT COUNT(*) AS total, SUM(outcome != '') AS labeled, SUM(image_path != '') AS frames,
-                                        COUNT(DISTINCT game_id) AS games FROM ai_experiences""").fetchone()
-            return self.send_json(200, {"experiences": row["total"] or 0, "labeled": row["labeled"] or 0, "frames": row["frames"] or 0,
-                                        "games": row["games"] or 0, "policy": wow_learn.summary(wow_learn.load_policy())})
-
-        # 0-4. AI 상태 — VLM 전략 코치가 무엇으로 답하는지 · 서버 MediaPipe 를 쓸 수 있는지
-        if path in ("/api/ai/status", "/api/mediapipe/status"):
+        # 0-4. 서버 MediaPipe 를 쓸 수 있는지
+        if path == "/api/mediapipe/status":
             hands = wow_hands.status() if wow_hands else {"image": {"available": False, "reason": "GestureTools/MediaPipe 없음"},
                                                          "landmarks": {"available": False}}
-            if path == "/api/mediapipe/status":
-                return self.send_json(200, hands)
-            return self.send_json(200, {"vlm": wow_ai.status(ai_config()), "mediapipe": hands})
+            return self.send_json(200, hands)
 
         # 1. 헬스 체크
         if path == "/api/health" or path == "/health":
@@ -1361,13 +1210,11 @@ class WowHttpHandler(BaseHTTPRequestHandler):
                 match_count = conn.execute("SELECT COUNT(*) as cnt FROM matches").fetchone()["cnt"]
                 gesture_count = conn.execute("SELECT COUNT(*) as cnt FROM gesture_samples").fetchone()["cnt"]
                 motion_count = conn.execute("SELECT COUNT(*) as cnt FROM motion_recordings").fetchone()["cnt"]
-                ai_count = conn.execute("SELECT COUNT(*) as cnt FROM ai_experiences").fetchone()["cnt"]
                 self.send_json(200, {
                     "totalUsers": user_count,
                     "totalMatches": match_count,
                     "gestureSamples": gesture_count,
                     "motionRecordings": motion_count,
-                    "aiExperiences": ai_count,
                     "activeSseClients": len(SSE_CLIENTS),
                     "dbStatus": "OK (SQLite Unified)"
                 })
@@ -1650,70 +1497,6 @@ class WowHttpHandler(BaseHTTPRequestHandler):
             broadcast_sse("spell", msg)
             return self.send_json(200, {"sent": True, "unity": udp, "message": msg})
 
-        # 3-2-1. AI 전략 코치 (/api/ai/strategy) — {state: 상황, image?: 게임 화면 data URL, provider?: rules|claude|ollama}
-        #        state 는 Unity BotObservation(PascalCase) 그대로도 된다. 로그인 토큰 또는 X-Server-Key(Unity 서버 · 봇)
-        if path == "/api/ai/strategy":
-            caller = self.ai_caller()
-            if caller is None:
-                return self.send_error_json(401, "로그인이 필요합니다. (Unity 서버는 X-Server-Key)")
-            if caller == "server" and body.get("botId") is not None:     # 서버 봇마다 요청 간격을 따로 잰다
-                caller = f"server:{str(body.get('botId'))[:16]}"
-            state = body.get("state") if isinstance(body.get("state"), dict) else {k: v for k, v in body.items() if k not in ("image", "provider")}
-            try:
-                res = wow_ai.strategy(state, SKILLS, ai_config(), image=body.get("image"), caller=caller,
-                                      provider=str(body.get("provider") or "") or None, brief=body.get("brief") is True)
-            except ValueError as e:
-                return self.send_error_json(400, str(e))
-            if body.get("record", True) is not False:       # 학습 데이터: 상황 + (화면) + AI 추천
-                with get_db() as conn:
-                    res["experienceId"] = record_experience(conn, caller, "advice", body, state, advice=res, image=body.get("image"))
-                    conn.commit()
-            return self.send_json(200, res)
-
-        # 3-2-1-1. AI 학습 데이터 (/api/ai/experience) — 웹 시전 · Unity 관찰 · 봇 행동 · 판 결과
-        #   {gameId|matchId, state, action{spellId, slot, column, depth, move, followedAdvice}, reward?, image?, source?}
-        #   {steps: [{state, action, reward}, ...]}   (Unity 묶음, 최대 100)
-        #   {gameId, outcome: WIN|LOSE|DRAW, place?, players?}   (게임 방이 없는 판의 결과 → 그 판 경험에 이름표)
-        if path == "/api/ai/experience":
-            caller = self.ai_caller()
-            if caller is None:
-                return self.send_error_json(401, "로그인이 필요합니다. (Unity 서버는 X-Server-Key)")
-            if caller == "server" and body.get("botId") is not None:
-                caller = f"server:{str(body.get('botId'))[:16]}"
-            steps = body.get("steps") if isinstance(body.get("steps"), list) else ([body] if body.get("action") or body.get("state") else [])
-            kind = "step" if caller.startswith("server") or isinstance(body.get("steps"), list) else "action"
-            ids = []
-            with get_db() as conn:
-                try:
-                    for s in steps[:100]:
-                        if not isinstance(s, dict):
-                            continue
-                        merged = dict(body, **s)
-                        ids.append(record_experience(conn, caller, kind,
-                                                     merged, merged.get("state") or {}, action=merged.get("action") or {},
-                                                     image=merged.get("image"), reward=merged.get("reward")))
-                except ValueError as e:
-                    return self.send_error_json(400, str(e))
-                labeled = 0
-                if str(body.get("outcome") or "").upper() in ("WIN", "LOSE", "DRAW"):
-                    labeled = label_experiences(conn, caller, str(body["outcome"]).upper(), body.get("place"), body.get("players"),
-                                                game_id=game_id_of(body))
-                conn.commit()
-            return self.send_json(200, {"recorded": len(ids), "ids": ids, "labeled": labeled})
-
-        # 3-2-1-2. AI 학습 현황 · 지금 학습 · 미세조정 데이터셋 (학습 · 데이터셋은 관리자)
-        if path in ("/api/ai/train", "/api/ai/dataset"):
-            user = self.get_auth_user()
-            if not user or user.get("role") != "ROLE_ADMIN":
-                return self.send_error_json(403, "관리자 권한이 필요합니다.")
-            with get_db() as conn:
-                if path.endswith("/train"):
-                    res = wow_learn.train(conn)
-                else:
-                    res = wow_learn.export_dataset(conn, wow_ai.SYSTEM_PROMPT, wow_ai.training_prompt,
-                                                   board_fn=wow_board.render if wow_ai.board_enabled(ai_config()) else None)
-            return self.send_json(200, res)
-
         # 3-2-2. 서버 MediaPipe 손 추적 (/api/mediapipe/frame · reset)
         #        frame: {image: 카메라 JPEG data URL | hands: {right, left 랜드마크 21점}, t: ms, candidates: [룬 후보],
         #                mirror: true, session: "이름", forward: true(→ Unity MediaPipeHandInput UDP)}
@@ -1816,8 +1599,6 @@ class WowHttpHandler(BaseHTTPRequestHandler):
                 if not p:
                     return self.send_error_json(404, "플레이어가 없습니다.")
                 saved = record_match_result(conn, p, mode, result, opponent, duration, casts, dmg_dealt, dmg_taken)
-                if game_id_of(body):        # 봇 연습 · 1:1 친선전도 그 판 경험에 이름표 (AI 학습)
-                    label_experiences(conn, f"p{p['id']}", result, body.get("place"), body.get("players"), game_id=game_id_of(body))
                 conn.commit()
             return self.send_json(200, saved)
 
@@ -1915,7 +1696,6 @@ class WowHttpHandler(BaseHTTPRequestHandler):
                                  (result, place, saved["ratingDelta"], seat["id"]))
                     conn.execute("UPDATE match_sessions SET updated_at = ? WHERE id = ?", (now, match_id))
                     close_session_if_reported(conn, match_id)
-                    label_experiences(conn, f"p{p['id']}", result, place, n, match_id=match_id, game_id=game_id_of(body))
                 conn.commit()
                 s = conn.execute("SELECT * FROM match_sessions WHERE id = ?", (match_id,)).fetchone()
                 view = session_view(conn, s, p["id"])
@@ -2854,7 +2634,7 @@ def lan_addresses():
 # ─────────────────────────────────────────────────────────────────────────────
 GAME_SERVER_DIR = os.path.join(os.path.dirname(SERVER_DIR), "Builds", "Server")
 GAME_SERVER_EXE = "SpellboundServer.exe"
-GAME_SERVER_MODES = (("-ffa", "server.log"), ("-duel", "server_1v1.log"), ("-polygon", "server_poly.log"))   # 서버 하나가 한 종류만 연다
+GAME_SERVER_MODES = (("-ffa", "server.log"), ("-duel", "server_1v1.log"), ("-polygon", "server_poly.log"))   # 서버 하나가 한 종류만 연다 (전시 시연 서버는 StartServer.bat)
 
 
 def _job_that_ends_with_me():
@@ -2889,7 +2669,7 @@ def _keep_game_server(exe, mode, log, adopt):
             time.sleep(3)
             continue
         started = time.time()
-        process = subprocess.Popen([exe, "-server", mode, "-batchmode", "-nographics", "-logFile", os.path.join(GAME_SERVER_DIR, log)],
+        process = subprocess.Popen([exe, "-server", mode, "-nodemo", "-batchmode", "-nographics", "-logFile", os.path.join(GAME_SERVER_DIR, log)],
                                    cwd=GAME_SERVER_DIR, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         adopt(process)
         process.wait()
@@ -2951,11 +2731,6 @@ def main():
     print(f"    - Google 로그인 (웹): {'켜짐' if google_client_id() else '꺼짐 (Backend/google_client_id.txt 에 클라이언트 ID)'}")
     print(f"    - Google 기기 로그인 (Unity · Quest): {google_device_client_id() or '꺼짐'}")
     print(f"    - 룬 인식기: {'GestureTools/MediaPipe/wow_runes.py' if wow_runes else '없음 (룬 인식 API 503)'}")
-    vlm = wow_ai.status(ai_config())
-    print(f"    - AI 전략 코치 · 하이브리드 봇 (/api/ai/strategy): {vlm['provider']} ({vlm['model']})"
-          + (" — 로컬 VLM 켜짐 " + vlm["local"]["url"] if vlm["local"]["available"]
-             else " — 로컬 VLM 꺼짐 (켜려면 run_server_vlm.bat, 켜지면 10초 안에 자동으로 씀)")
-          + ("" if vlm["claude"]["available"] else f" · Claude 끔: {vlm['claude']['reason']}"))
     hands = wow_hands.status() if wow_hands else None
     print("    - 서버 MediaPipe 손 추적 (/api/mediapipe/frame): "
           + ("없음" if hands is None else "카메라 프레임 + 랜드마크" if hands["image"]["available"]

@@ -38,7 +38,7 @@ MonoBehaviour:
   LaneEndDepth: 1
   StatusEffectId: S08_Shield
   EffectDuration: 8
-  ShieldAmount: 180
+  ShieldAmount: 350
   RegenDelay: 3
   RegenPerSecond: 12
   AttackMultiplier: 1

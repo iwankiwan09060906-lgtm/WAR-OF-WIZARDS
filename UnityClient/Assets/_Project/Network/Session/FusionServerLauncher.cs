@@ -53,7 +53,7 @@ namespace SpellboundVR.Network
                 GameMode = GameMode.Server,
                 SessionName = sessionName,
                 SceneManager = sceneManager,
-                PlayerCount = 4,
+                PlayerCount = 10, // 시연: 6자리 + 자리가 없을 때 관전
             };
             if (port > 0) args.Address = NetAddress.Any(port);
 

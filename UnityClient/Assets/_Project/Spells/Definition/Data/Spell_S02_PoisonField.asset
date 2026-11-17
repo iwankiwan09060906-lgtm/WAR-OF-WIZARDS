@@ -22,7 +22,7 @@ MonoBehaviour:
   Behavior: 5
   FocusCategory: 0
   Dodgeable: 0
-  BaseDamage: 12
+  BaseDamage: 18
   Radius: 2.5
   MaxDepth: 1
   ProjectileSpeed: 20
@@ -37,8 +37,8 @@ MonoBehaviour:
   OffMapFlightSeconds: 1.3
   OffMapVisualScale: 1
   TickInterval: 0.5
-  TickDamageRamp: 2
-  MaxTickDamage: 30
+  TickDamageRamp: 3
+  MaxTickDamage: 44
   FieldHalfDepth: 6
   LaneStartDepth: 0
   LaneEndDepth: 1

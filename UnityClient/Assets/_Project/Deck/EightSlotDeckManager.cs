@@ -42,6 +42,14 @@ namespace SpellboundVR.Deck
 
         public int GetSpellId(int slot) => Deck[slot];
 
+        /// <summary>서버가 슬롯 스킬을 바꿨다 (시연 스킬 로테이션) — 덱을 고치고 룬 후보를 다시 만들게 한다</summary>
+        public void SetSpell(int slot, int spellId)
+        {
+            if (slot < 0 || slot >= DeckData.SlotCount || Deck[slot] == spellId) return;
+            Deck[slot] = spellId;
+            OnChanged?.Invoke();
+        }
+
         public int FindSlot(int spellId) => Deck.IndexOf(spellId);
 
         public int GetHighPowerUses(int slot) => slot >= 0 && slot < DeckData.SlotCount ? _highPowerUses[slot] : -1;

@@ -56,6 +56,12 @@ namespace SpellboundVR.Network
         public event Action<int, VfxPart, Vector3, int> OnSpellFxLane;
         /// <summary>4인 개인전 탈락: 진영, 순위</summary>
         public event Action<Team, int> OnPlayerEliminated;
+        /// <summary>내 슬롯의 스킬이 바뀜 (시연 스킬 로테이션 · 넘겨받은 AI 슬롯): slot, spellId (0 = 빈 슬롯)</summary>
+        public event Action<int, int> OnSlotSpellChanged;
+        /// <summary>시연: 쓰러졌다 그 자리에서 부활함</summary>
+        public event Action<Team> OnPlayerRespawned;
+        /// <summary>시연: 내가(사람) 쓰러졌다 — 게임 오버, 내 자리는 AI 가 이었다</summary>
+        public event Action OnLocalGameOver;
 
         private readonly MatchSnapshot _prev = new MatchSnapshot();
         private ArenaGeometry _arena;
@@ -160,6 +166,11 @@ namespace SpellboundVR.Network
                 ref var pp = ref _prev.Players[t];
                 if (!full && p.Place != 0 && pp.Place == 0 && !_arena.IsDuel && phase == MatchPhase.Playing)
                     OnPlayerEliminated?.Invoke(team, p.Place);
+                if (!full && p.Deaths != pp.Deaths)
+                {
+                    if (team == LocalTeam && pp.IsBot == 0) OnLocalGameOver?.Invoke(); // 사람이던 내 자리가 쓰러졌다 (AI 가 앉아 있던 입장 대기 중은 아님)
+                    else OnPlayerRespawned?.Invoke(team);
+                }
                 if (full || Mathf.Abs(p.AttackMultiplier - pp.AttackMultiplier) > 0.001f) OnAttackMultiplierChanged?.Invoke(team, p.AttackMultiplier);
                 if (full || p.Hp != pp.Hp || p.MaxHp != pp.MaxHp) OnHpChanged?.Invoke(team, p.Hp, p.MaxHp);
                 if (full || p.WorldColumn != pp.WorldColumn) OnPositionChanged?.Invoke(team, ToLocalColumn(p.WorldColumn));
@@ -204,7 +215,9 @@ namespace SpellboundVR.Network
             {
                 ref var sl = ref s.Slot(LocalTeam, i);
                 ref var ps = ref _prev.Slot(LocalTeam, i);
-                if (full || sl.State != ps.State) OnSlotStateChanged?.Invoke(i, (SlotState)sl.State);
+                // 스킬이 먼저 — 상태 · 쿨타임 표시는 바뀐 스킬 카드에 그린다
+                if (full || sl.SpellId != ps.SpellId) OnSlotSpellChanged?.Invoke(i, sl.SpellId);
+                if (full || sl.SpellId != ps.SpellId || sl.State != ps.State) OnSlotStateChanged?.Invoke(i, (SlotState)sl.State);
                 bool cdStarted = sl.State == (byte)SlotState.Cooldown &&
                                  (full || ps.State != (byte)SlotState.Cooldown || Mathf.Abs(sl.CooldownEndTime - ps.CooldownEndTime) > 0.01f);
                 if (cdStarted)

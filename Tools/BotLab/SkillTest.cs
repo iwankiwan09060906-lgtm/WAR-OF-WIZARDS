@@ -30,8 +30,6 @@ internal static class SkillTest
     private static BotConfig Config(float windup)
     {
         var cfg = BotConfig.CreateDefault();
-        cfg.UseServerStrategy = false;
-        cfg.ReportExperience = false;
         cfg.CastWindupSeconds = windup;
         cfg.CastWindupJitter = 0f; // 시간 검사가 흔들리지 않게 — 실패 · 흔들림은 BotFailsSometimes 에서
         cfg.CastFailChance = 0f;
@@ -307,7 +305,8 @@ internal static class SkillTest
         Check(near.Hp < nearHp && far.Hp == farHp, $"프리즈: 내 앞부터 얼어붙는다 (가까운 {nearHp:0}→{near.Hp:0} / 먼 {farHp:0}→{far.Hp:0})");
         for (int i = 0; i < 60; i++) sim.Tick(dt);
         Check(far.Hp < farHp, $"프리즈: 물결이 끝까지 퍼진다 ({farHp:0} → {far.Hp:0})");
-        Check(far.FrozenUntil > sim.MatchTime + 7f, $"프리즈: 10초 동안 언다 (남은 {far.FrozenUntil - sim.MatchTime:0.0}초)");
+        float freeze = SpellCatalog.CreateDefault().Get(SpellIds.H01_Freeze).EffectDuration;
+        Check(far.FrozenUntil > sim.MatchTime + freeze * 0.7f, $"프리즈: {freeze:0}초 동안 언다 (남은 {far.FrozenUntil - sim.MatchTime:0.0}초)");
         var enemy = sim.GetPlayer(Team.Away);
         float enemyHp = enemy.Hp;
         Cast(sim, Team.Home, SpellIds.H01_Freeze, Column.Center, 0f);
@@ -472,7 +471,9 @@ internal static class SkillTest
         for (int i = 0; i < 300; i++) sim.Tick(dt);
         Check(home.Hp >= homeHp, $"반사: 결계를 켠 쪽은 피해가 없다 ({homeHp:0} → {home.Hp:0})");
         Check(away.Hp < awayHp, $"반사: 공격자가 같은 스킬을 되돌려 맞는다 ({awayHp:0} → {away.Hp:0})");
-        Check(awayHp - away.Hp < 300f, $"반사: 여러 발이어도 한 번만 되돌린다 (피해 {awayHp - away.Hp:0})");
+        var gatling = SpellCatalog.CreateDefault().Get(SpellIds.S07_Gatling);
+        float volley = gatling.BaseDamage * gatling.ShotCount; // 한 번 되돌린 양 — 두 번이면 이 2배
+        Check(awayHp - away.Hp < volley * 1.5f, $"반사: 여러 발이어도 한 번만 되돌린다 (피해 {awayHp - away.Hp:0}, 한 번 {volley:0})");
     }
 
     /// <summary>경기 시작 0.5초 뒤 슬롯 0 을 한 번 쓴다 (봇 덱은 랜덤)</summary>

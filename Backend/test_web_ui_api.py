@@ -293,11 +293,7 @@ def run_checks(unity):
 
     ffa_checks(admin["accessToken"])
     poly_checks(admin["accessToken"])
-    # auto 는 로컬 VLM 서버(8790)가 켜져 있으면 그걸 쓴다 → 검사는 이 PC 의 llama-server 와 상관없게 닿지 않는 주소로
-    call("PUT", "/api/admin/configs/ai.local_url", {"value": "http://127.0.0.1:9/v1"}, admin["accessToken"])
     ai_checks(tok)
-    learn_checks(tok, admin["accessToken"])
-    unity_link_checks()
 
     print("[룬 그림 인식 · Unity 시전 신호]")
     rng = random.Random(5)
@@ -485,29 +481,7 @@ TINY_JPEG = ("/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAA0JCgsKCA0LCgsODg0PEyAVExISEyccHh
 
 
 def ai_checks(tok):
-    print("[AI 전략 코치 (VLM · 규칙) · 서버 MediaPipe 손 추적]")
-    st, s, _ = call("GET", "/api/ai/status")
-    check("AI 상태: 키 없으면 규칙 AI", st == 200 and s["vlm"]["provider"] == "rules" and s["mediapipe"]["landmarks"]["available"])
-    obs = {"SelfHp": 820, "SelfColumn": 1, "MatchTimeSeconds": 75, "SelfSlotReadyMask": 0b1011, "OpponentTowerAlive": True,
-           "deck": ["S03", "S04", "S08", "H01"], "IncomingProjectileCount": 1, "NearestIncomingProjectileColumn": 1,
-           "NearestIncomingProjectileEta": 0.8,
-           "lanes": [{"allies": 1, "enemies": 4}, {"allies": 2, "enemies": 1}, {"allies": 0, "enemies": 0}]}
-    st, r, _ = call("POST", "/api/ai/strategy", {"state": obs})
-    check("전략은 로그인 필요", st == 401)
-    st, r, _ = call("POST", "/api/ai/strategy", {"state": obs}, tok)
-    check("Unity BotObservation 그대로 → 피하고 적이 몰린 왼쪽에 화살 세례", st == 200 and r["source"] == "rules"
-          and r["move"]["direction"] == -1 and r["cast"]["spellId"] == "S04" and r["cast"]["column"] == 0, str(r))
-    check("못 쓰는 슬롯(2번 쉴드)은 고르지 않음", 2 not in r["state"]["readySlots"] and r["cast"]["slot"] != 2)
-    ffa = dict(obs, players=4, opponents=[{"nickname": "Kael", "hp": 900, "column": 0}, {"nickname": "Nyx", "hp": 300, "column": 2, "towerAlive": False},
-                                          {"nickname": "Bot (990)", "hp": 600, "column": 1}])
-    req = urllib.request.Request(BASE + "/api/ai/strategy", data=json.dumps({"state": ffa, "botId": 7}).encode(),
-                                 headers={"Content-Type": "application/json", "X-Server-Key": "wow-server-secret-key-2026"}, method="POST")
-    with urllib.request.urlopen(req, timeout=10) as resp:
-        r = json.loads(resp.read())
-    check("Unity 서버 키로 봇 전략 · 4인 개인전은 타워가 무너진 상대를 노림", r["cast"]["slot"] >= 0 and r["focus"].startswith("Nyx"), r["focus"])
-    st, r, _ = call("POST", "/api/ai/strategy", {"state": obs, "image": "data:image/png;base64,@@@"}, tok)
-    check("잘못된 그림은 400", st == 400)
-
+    print("[서버 MediaPipe 손 추적]")
     st, hs, _ = call("GET", "/api/mediapipe/status")
     check("MediaPipe 상태 (랜드마크 입력은 항상)", st == 200 and hs["landmarks"]["available"] is True)
     st, r, _ = call("POST", "/api/mediapipe/frame", {"hands": {}})
@@ -547,146 +521,6 @@ def ai_checks(tok):
         check("카메라 프레임 → MediaPipe (손 없음)", st == 200 and r["source"] == "image" and r["right"]["tracked"] is False, str(r))
     else:
         check("mediapipe 없는 파이썬이면 프레임은 503 + 안내", st == 503 and "run_server_ai.bat" in r["message"], str(r))
-
-
-def learn_checks(tok, admin_tok):
-    print("[AI 학습: 경험 모으기 · 결과 이름표 · 학습 · 데이터셋 · 학습한 VLM]")
-    st, L, _ = call("GET", "/api/ai/learning")
-    check("전략 요청도 경험으로 저장 (advice)", st == 200 and L["experiences"] >= 1 and L["policy"]["trained"] is False)
-    scene = {"deck": ["S03", "S04", "S06", "S08"], "ready": [True, True, True, True], "selfHp": 900, "selfColumn": 1, "time": 90,
-             "lanes": [{"allies": 1, "enemies": 4}, {"allies": 1, "enemies": 1}, {"allies": 0, "enemies": 0}]}
-    for g in range(12):                      # 번개(S06)를 쓴 판은 이기고, 화살 세례(S04)를 쓴 판은 진다
-        win = g % 2 == 0
-        game = f"learn{g}"
-        for k in range(2):
-            body = {"gameId": game, "source": "test", "state": scene,
-                    "action": {"spellId": "S06" if win else "S04", "slot": 2 if win else 1, "column": 0}}
-            if win and g == 0 and k == 0:
-                body["image"] = "data:image/jpeg;base64," + TINY_JPEG
-            st, r, _ = call("POST", "/api/ai/experience", body, tok)
-            assert st == 200 and r["recorded"] == 1, (st, r)
-        st, r, _ = call("POST", "/api/ai/experience", {"gameId": game, "outcome": "WIN" if win else "LOSE"}, tok)
-        assert r["labeled"] == 2, r
-    st, L, _ = call("GET", "/api/ai/learning")
-    check("경험 · 결과 이름표 · 화면 사진 저장", L["labeled"] >= 24 and L["frames"] >= 1 and L["games"] >= 12, str(L))
-    st, r, _ = call("POST", "/api/ai/train", {}, tok)
-    check("학습은 관리자만", st == 403)
-    st, r, _ = call("POST", "/api/ai/train", {}, admin_tok)
-    check("학습: 12판 · 이긴 스킬이 위로", st == 200 and r["trained"] and r["games"] >= 12 and r["topSpells"][0]["spellId"] == "S06", str(r))
-    st, r, _ = call("POST", "/api/ai/strategy", {"state": scene, "record": False}, tok)
-    check("규칙 AI 가 학습 결과로 수를 바꿈 (화살 세례 → 번개)", r["cast"]["spellId"] == "S06" and r["learned"]["confident"]
-          and "학습" in r["cast"]["reason"], str(r["cast"]))
-    st, r, _ = call("POST", "/api/ai/dataset", {}, admin_tok)
-    check("VLM 미세조정 데이터셋 (이긴 판만 · 그림 포함)", st == 200 and r["lines"] >= 12 and r["withImage"] >= 1, str(r))
-    with open(os.path.join(r["dir"], "wow_vlm_sft.jsonl"), encoding="utf-8") as f:
-        first = json.loads(f.readline())
-    with open(os.path.join(r["dir"], "dataset_info.json"), encoding="utf-8") as f:
-        info = json.load(f)
-    check("데이터셋 형식 (system · user · assistant JSON · <image> · dataset_info)",
-          [m["role"] for m in first["messages"]] == ["system", "user", "assistant"]
-          and json.loads(first["messages"][2]["content"])["cast"]["spellId"] == "S06"
-          and info["wow_vlm"]["formatting"] == "sharegpt" and (first.get("images") is None or first["messages"][1]["content"].startswith("<image>")),
-          first["messages"][2]["content"][:200] + " | " + str(first.get("images")) + " | " + first["messages"][1]["content"][:60])
-    call("POST", "/api/ai/experience", {"gameId": "legacy1", "state": scene, "action": {"spellId": "S03", "slot": 0, "column": 1}}, tok)
-    before = call("GET", "/api/ai/learning")[1]["labeled"]
-    call("POST", "/api/matches", {"mode": "bot", "result": "WIN", "opponent": "Bot", "gameId": "legacy1"}, tok)
-    check("봇 연습 결과(/api/matches + gameId)도 그 판 경험에 이름표", call("GET", "/api/ai/learning")[1]["labeled"] == before + 1)
-
-    # 이 게임으로 미세조정한 VLM 자리 (OpenAI 호환 서버) — 가짜 서버로 요청 · 응답 모양 확인
-    import threading
-    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-    seen = {}
-
-    class FakeVlm(BaseHTTPRequestHandler):
-        def log_message(self, *a):
-            pass
-
-        def do_POST(self):
-            seen["path"] = self.path
-            seen["body"] = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))))
-            answer = {"summary": "왼쪽 레인 정리", "threat": "medium", "plan": ["번개 왼쪽"], "focus": "", "observations": [],
-                      "cast": {"slot": 2, "spellId": "S06", "column": 0, "depth": 0.4, "reason": "학습한 모델"},
-                      "move": {"direction": 0, "reason": ""}}
-            data = json.dumps({"model": "wow-vlm", "choices": [{"message": {"role": "assistant",
-                                                                            "content": "```json\n" + json.dumps(answer, ensure_ascii=False) + "\n```"}}]}).encode()
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Content-Length", str(len(data)))
-            self.end_headers()
-            self.wfile.write(data)
-
-    fake = ThreadingHTTPServer(("127.0.0.1", 0), FakeVlm)
-    threading.Thread(target=fake.serve_forever, daemon=True).start()
-    call("PUT", "/api/admin/configs/ai.local_url", {"value": f"http://127.0.0.1:{fake.server_port}/v1"}, admin_tok)
-    st, r, _ = call("POST", "/api/ai/strategy", {"state": scene, "provider": "local", "image": "data:image/jpeg;base64," + TINY_JPEG,
-                                                 "record": False}, tok)
-    user_content = seen.get("body", {}).get("messages", [{}, {}])[1].get("content", [])
-    check("학습한 VLM(local): /v1/chat/completions · 그림 · 학습 결과를 프롬프트에", seen.get("path") == "/v1/chat/completions"
-          and user_content[0]["type"] == "image_url" and "learned" in user_content[1]["text"], str(seen.get("path")))
-    check("학습한 VLM 답 사용", st == 200 and r["source"] == "local" and r["cast"]["spellId"] == "S06" and r["usedImage"], str(r.get("fallbackReason")))
-    # 하이브리드 봇: 사진 없이 → 전장 지도를 그려 VLM 에 · 짧은 답(brief) 스키마 · 답에 작전(orders)이 없으면 힌트 작전
-    bot_scene = dict(scene, units=[{"c": 0, "d": 0.3, "e": 1}, {"c": 0, "d": 0.35, "e": 1}, {"c": 1, "d": 0.4, "e": 0}],
-                     botPick=[{"slot": 2, "spellId": "S06", "column": 0, "depth": 0.3, "score": 3.2, "why": "S06 왼쪽 레인"}])
-    call("PUT", "/api/admin/configs/ai.vlm_min_interval", {"value": "0"}, admin_tok)      # 바로 앞 요청과 3초 간격 제한 끄기
-    st, r, _ = call("POST", "/api/ai/strategy", {"state": bot_scene, "provider": "local", "brief": True, "record": False}, tok)
-    body = seen.get("body", {})
-    img = body.get("messages", [{}, {}])[1].get("content", [{}])[0]
-    fmt = body.get("response_format", {}).get("json_schema", {}).get("schema", {})
-    check("봇 요청: 전장 지도(PNG) · brief 스키마(작전 포함) · botHint 를 프롬프트에",
-          img.get("type") == "image_url" and img["image_url"]["url"].startswith("data:image/png;base64,") and r.get("imageKind") == "board"
-          and set(fmt.get("required", [])) == {"threat", "orders", "cast", "move"} and "botHint" in body["messages"][1]["content"][1]["text"], str(fmt))
-    check("작전(orders) 응답 — VLM 이 안 주면 힌트 작전", st == 200 and r["orders"]["stance"] in ("defend", "balanced", "push")
-          and isinstance(r["orders"]["prefer"], list) and 3 <= r["orders"]["seconds"] <= 15, str(r.get("orders")))
-    fake.shutdown()
-
-
-def unity_link_checks():
-    """UnityClient/Assets/_Project/Backend/AiStrategyLink.cs 가 JsonUtility 로 만드는 모양 그대로 보낸다."""
-    print("[Unity AI 봇 연결 (AiStrategyLink 형식)]")
-    key = {"X-Server-Key": "wow-server-secret-key-2026"}
-
-    def post(path, body):
-        req = urllib.request.Request(BASE + path, data=json.dumps(body).encode(), method="POST",
-                                     headers=dict(key, **{"Content-Type": "application/json"}))
-        with urllib.request.urlopen(req, timeout=10) as r:
-            return json.loads(r.read())
-
-    state = {"deck": ["S03", "S04", "S06", "S08", "S11", "S13", "H01", "H02"], "ready": [True, True, False, True, True, True, False, True],
-             "selfHp": 640, "opponentHp": 900, "selfColumn": 1, "opponentColumn": 0, "time": 95.5,
-             "selfTowerAlive": True, "selfNexusAlive": True, "opponentTowerAlive": True, "opponentNexusAlive": True,
-             "incomingProjectileCount": 0, "nearestIncomingProjectileColumn": 1, "nearestIncomingProjectileEta": -1.0,
-             "lanes": [{"allies": 1, "enemies": 5, "enemyFront": 0.3, "clusterDepth": 0.35},
-                       {"allies": 2, "enemies": 1, "enemyFront": 0.6, "clusterDepth": 0.6},
-                       {"allies": 0, "enemies": 0, "enemyFront": 1.0, "clusterDepth": 0.5}], "players": 2, "mode": "bot"}
-    r = post("/api/ai/strategy", {"state": state, "botId": "a1b2c3d4-Home", "gameId": "bot-a1b2c3d4-1", "record": False})
-    check("봇 전략 요청 → cast(slot · spellId · column) · move 정수", isinstance(r["cast"]["slot"], int) and isinstance(r["move"]["direction"], int)
-          and (r["cast"]["slot"] < 0 or state["ready"][r["cast"]["slot"]]), str(r["cast"]))
-    hybrid = dict(state, units=[{"c": 0, "d": 0.3, "e": 1}] * 5 + [{"c": 1, "d": 0.5, "e": 0}],
-                  botPick=[{"slot": 4, "spellId": "S11", "column": 0, "depth": 0.2, "score": 3.8, "why": "S11 왼쪽 레인 보강"},
-                           {"slot": 2, "spellId": "S06", "column": 0, "depth": 0.3, "score": 2.0, "why": "쿨타임 중"}])
-    r = post("/api/ai/strategy", {"state": hybrid, "botId": "a1b2c3d4-Home", "gameId": "bot-a1b2c3d4-1", "record": False, "brief": True})
-    check("하이브리드: VLM 없으면 Unity 두뇌 1순위가 한 수 · 작전에 먼저 쓸 스킬로", r["cast"]["spellId"] == "S11" and r["botHinted"]
-          and r["orders"]["prefer"][:1] == ["S11"] and r["orders"]["lane"] == 0, str(r["cast"]) + str(r["orders"]))
-    ffa = dict(state, players=4, opponents=[
-        {"nickname": "2번", "seat": 2, "hp": 0, "column": 0, "towerAlive": False, "nexusAlive": False, "bot": True},
-        {"nickname": "3번", "seat": 3, "hp": 700, "column": 1, "towerAlive": True, "nexusAlive": True, "bot": True},
-        {"nickname": "4번", "seat": 4, "hp": 300, "column": 2, "towerAlive": False, "nexusAlive": True, "bot": True}])
-    r = post("/api/ai/strategy", {"state": ffa, "botId": "a1b2c3d4-Seat2", "gameId": "bot-a1b2c3d4-2", "record": False, "brief": True})
-    check("4인 개인전: 타워가 무너진 상대를 노리고 (focusColumn), 탈락한 상대의 레인은 쓰지 않는다",
-          r["orders"]["focusColumn"] == 2 and r["orders"]["lane"] != 0 and r["cast"]["column"] != 0, str(r["orders"]) + str(r["cast"]))
-    import wow_ai, wow_board
-    wow_skills = [(0, c, c, "", "Normal", 0, "Column", 0, 0, 0, 0, "") for c in ffa["deck"]]
-    norm = wow_ai.normalize_state(ffa, wow_skills)
-    png = wow_board.render(norm)
-    check("4인 개인전 전장 지도 그림 (레인마다 상대 진영)", png[:8] == b"\x89PNG\r\n\x1a\n" and png != wow_board.render(wow_ai.normalize_state(state, wow_skills)))
-    fix = wow_ai.clean_orders({"lane": 0, "focusColumn": 0, "stance": "push", "prefer": [], "hold": [], "seconds": 8}, norm, {"stance": "push", "seconds": 8, "focusColumn": 1})
-    check("VLM 이 탈락한 상대를 찍으면 힌트의 상대로 · 닫힌 레인은 지운다", fix["focusColumn"] == 1 and fix["lane"] == -1, str(fix))
-    steps = [{"state": state, "action": {"spellId": "S11", "slot": 4, "column": 0, "depth": 0.2, "move": 0, "followedAdvice": False}, "reward": 0},
-             {"state": state, "action": {"spellId": "", "slot": -1, "column": -1, "depth": 0, "move": -1, "followedAdvice": False}, "reward": 0}]
-    r = post("/api/ai/experience", {"gameId": "bot-a1b2c3d4-1", "botId": "a1b2c3d4-Home", "source": "unity-bot", "steps": steps})
-    check("봇 판단 묶음 기록 (시전 · 이동)", r["recorded"] == 2)
-    r = post("/api/ai/experience", {"gameId": "bot-a1b2c3d4-1", "botId": "a1b2c3d4-Home", "outcome": "WIN", "place": 1, "players": 2})
-    check("경기 결과 → 그 봇 판의 경험에 이름표", r["labeled"] == 2)
 
 
 if __name__ == "__main__":

@@ -22,7 +22,7 @@ MonoBehaviour:
   Behavior: 7
   FocusCategory: 0
   Dodgeable: 0
-  BaseDamage: 32
+  BaseDamage: 46
   Radius: 1.2
   MaxDepth: 1
   ProjectileSpeed: 22
