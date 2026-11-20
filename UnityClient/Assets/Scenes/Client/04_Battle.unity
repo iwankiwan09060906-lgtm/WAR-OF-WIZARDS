@@ -1069,7 +1069,7 @@ MonoBehaviour:
   recognizeAllRunes: 1
   localDeck: 030000000700000008000000010000000b0000000d0000006500000068000000
   demoNewVisitorSeconds: 20
-  demoGameOverSeconds: 8
+  demoGameOverSeconds: 3
 --- !u!4 &165065891
 Transform:
   m_ObjectHideFlags: 0

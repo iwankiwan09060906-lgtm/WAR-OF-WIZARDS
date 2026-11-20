@@ -15,7 +15,7 @@ goto :eof
 
 :loop
 echo [*] 시연 서버 켜는 중... (로그: %DIR%\server_demo.log)
-"%EXE%" -server -demo -screen-fullscreen 0 -screen-width 1600 -screen-height 900 -logFile "%DIR%\server_demo.log"
+"%EXE%" -server -demo -screen-fullscreen 1 -logFile "%DIR%\server_demo.log"
 
 :wait
 if not exist "%DIR%\.building" goto restart

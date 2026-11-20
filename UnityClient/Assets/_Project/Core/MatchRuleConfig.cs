@@ -156,7 +156,7 @@ namespace SpellboundVR.Core
         public void ApplyDemoRules()
         {
             ApplyPolygonRules();
-            PlayerMaxHp *= 2f;        // 시연: 다인전(3배)의 2배 — 한 사람이 오래 체험하도록
+            PlayerMaxHp = 4000f;      // 시연: 고정 4000
             DemoEndless = true;
             SkillRotation = true;
             MeleePerLane = 1;

@@ -15,6 +15,7 @@ using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using SpellboundVR.Core;
 using UnityEditor;
+using UnityEditor.Build;
 using UnityEditor.Build.Reporting;
 using UnityEditor.SceneManagement;
 using UnityEngine;
@@ -92,6 +93,16 @@ namespace SpellboundVR.EditorTools
             BuildQuest(BootMode.FusionClient, "Spellbound.apk", clean: true);
         }
 
+        /// <summary>Meta 개발자 대시보드 업로드용 — Development 끔, Version Code 자동 +1, PC 서버 접속(FusionClient), 서버 주소 굽기</summary>
+        [MenuItem("Spellbound/Build/Quest APK (Release, 스토어 업로드용)", priority = 38)]
+        public static void BuildQuestRelease()
+        {
+            PlayerSettings.Android.bundleVersionCode++; // 대시보드는 같은 Version Code 를 두 번 받지 않는다
+            AssetDatabase.SaveAssets();
+            Debug.Log("[Spellbound Build] Release Version Code = " + PlayerSettings.Android.bundleVersionCode + " (패키지 " + PlayerSettings.GetApplicationIdentifier(NamedBuildTarget.Android) + ")");
+            BuildQuest(BootMode.FusionClient, "Spellbound_Release.apk", release: true);
+        }
+
         [MenuItem("Spellbound/Build/Quest APK (Offline vs Bot)", priority = 41)]
         public static void BuildQuestOffline()
         {
@@ -126,7 +137,7 @@ namespace SpellboundVR.EditorTools
                     "@echo off\r\nstart \"Spellbound Server Polygon\" \"%~dp0SpellboundServer.exe\" -server -polygon -nodemo -screen-fullscreen 0 -screen-width 1280 -screen-height 720 -logFile \"%~dp0server_poly.log\"\r\n");
                 // 전시 시연: 6인 고정 · 끝나지 않는 경기 · 옵저버 창 (StartServer.bat 은 꺼지면 다시 켠다)
                 File.WriteAllText(Path.Combine(dir, "RunServerDemo.bat"),
-                    "@echo off\r\nstart \"Spellbound Demo Server\" \"%~dp0SpellboundServer.exe\" -server -demo -screen-fullscreen 0 -screen-width 1600 -screen-height 900 -logFile \"%~dp0server_demo.log\"\r\n");
+                    "@echo off\r\nstart \"Spellbound Demo Server\" \"%~dp0SpellboundServer.exe\" -server -demo -screen-fullscreen 1 -logFile \"%~dp0server_demo.log\"\r\n");
                 Debug.Log("[Spellbound Build] 서버 빌드 완료: " + exe + " (RunServerDemo.bat = 전시 시연, RunServer.bat = 4인 개인전, RunServer1v1.bat = 1:1, RunServerPolygon.bat = 다인전)");
             }
         }
@@ -139,17 +150,17 @@ namespace SpellboundVR.EditorTools
             using (var process = System.Diagnostics.Process.Start(info)) process.WaitForExit(5000);
         }
 
-        private static void BuildQuest(BootMode mode, string fileName, bool clean = false)
+        private static void BuildQuest(BootMode mode, string fileName, bool clean = false, bool release = false)
         {
             string dir = Path.Combine(RepoRoot, "Builds", "Quest");
             Directory.CreateDirectory(dir);
             string url = WriteServerAddress();
             if (url == null) Debug.LogWarning("[Spellbound Build] 이 PC의 LAN 주소를 찾지 못해 Quest에서 C01 '주소 변경'으로 직접 넣어야 합니다.");
-            if (Build(BuildTarget.Android, BuildTargetGroup.Android, Path.Combine(dir, fileName), mode, clean))
+            if (Build(BuildTarget.Android, BuildTargetGroup.Android, Path.Combine(dir, fileName), mode, clean, release))
                 Debug.Log("[Spellbound Build] Quest APK 빌드 완료: " + Path.Combine(dir, fileName) + (url != null ? "  (백엔드 " + url + ")" : ""));
         }
 
-        private static bool Build(BuildTarget target, BuildTargetGroup group, string output, BootMode mode, bool clean = false)
+        private static bool Build(BuildTarget target, BuildTargetGroup group, string output, BootMode mode, bool clean = false, bool release = false)
         {
             var scene = EditorSceneManager.OpenScene(SpellboundSetupWizard.BattleScenePath, OpenSceneMode.Single);
             var bootstrap = Object.FindFirstObjectByType<GameBootstrap>();
@@ -175,7 +186,7 @@ namespace SpellboundVR.EditorTools
                     locationPathName = output,
                     target = target,
                     targetGroup = group,
-                    options = BuildOptions.Development | (clean ? BuildOptions.CleanBuildCache : BuildOptions.None),
+                    options = (release ? BuildOptions.None : BuildOptions.Development) | (clean ? BuildOptions.CleanBuildCache : BuildOptions.None),
                 };
                 var report = BuildPipeline.BuildPlayer(options);
                 bool ok = report.summary.result == BuildResult.Succeeded;

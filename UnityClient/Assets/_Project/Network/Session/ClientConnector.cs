@@ -88,18 +88,19 @@ namespace SpellboundVR.Network
             if (_runner != null)
             {
                 await _runner.Shutdown();
-                Destroy(_runner);
-                var oldScene = GetComponent<NetworkSceneManagerDefault>();
-                if (oldScene != null) Destroy(oldScene);
+                if (_runner != null) Destroy(_runner.gameObject); // Shutdown 이 이미 지웠을 수도 있다
                 await System.Threading.Tasks.Task.Yield();
             }
 
             _viewBound = false;
             _clientBound = false;
-            _runner = gameObject.AddComponent<NetworkRunner>();
+            // 러너는 자기 오브젝트에 — Fusion Shutdown 은 러너의 GameObject 를 지운다. GameBootstrap 과 같은 오브젝트였을 땐
+            // 게임 오버 · 나가기(Leave) 때 게임 전체가 지워져 화면이 멈췄다
+            var runnerGo = new GameObject("[NetworkRunner]");
+            _runner = runnerGo.AddComponent<NetworkRunner>();
             _runner.ProvideInput = false;
             _runner.AddCallbacks(this);
-            var sceneManager = gameObject.AddComponent<NetworkSceneManagerDefault>();
+            var sceneManager = runnerGo.AddComponent<NetworkSceneManagerDefault>();
 
             Status = "Connecting to '" + _sessionName + "'...";
             Debug.Log("[ClientConnector] " + Status);
@@ -190,7 +191,8 @@ namespace SpellboundVR.Network
             yield return ConnectLoop();
         }
 
-        private void OnApplicationQuit()
+        // 씬을 다시 읽거나 앱을 끌 때 — 러너가 따로 떨어진 오브젝트라 같이 정리한다
+        private void OnDestroy()
         {
             if (_runner != null && _runner.IsRunning) _runner.Shutdown();
         }

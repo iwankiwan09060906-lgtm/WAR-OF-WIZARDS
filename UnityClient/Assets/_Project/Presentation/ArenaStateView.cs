@@ -109,6 +109,8 @@ namespace SpellboundVR.Presentation
         public int projectilePrewarm = 24;
         [Tooltip("플레이어 크기 배율 — 상대 아바타 · 쉴드 (눈높이는 OVRCameraRig 높이)")]
         public float playerScale = 2f;
+        [Tooltip("서버 관전 창: 내 자리(Home)도 아바타로 그린다")]
+        public bool showAllAvatars;
         [Tooltip("타워 총알 속도 (m/s) — 마법 불꽃이 날아가는 게 보이도록 느리게 (사거리 약 10m → 약 0.8초)")]
         public float towerShotSpeed = 12f;
         [Tooltip("드래곤 비행 높이 (m)")]
@@ -1385,7 +1387,7 @@ namespace SpellboundVR.Presentation
             {
                 var a = _avatars[i];
                 ref var o = ref s.Players[(int)a.Team];
-                bool show = o.Present != 0 && a.Team != local && (int)a.Team != _hiddenAvatar &&
+                bool show = o.Present != 0 && (a.Team != local || showAllAvatars) && (int)a.Team != _hiddenAvatar &&
                             (!_arena.IsPolygon || _arena.HasTeam(a.Team)); // 다인전: 탈락한 자리는 전장에서 사라진다
                 if (a.Root.gameObject.activeSelf != show) a.Root.gameObject.SetActive(show);
                 if (!show) continue;
@@ -1400,6 +1402,7 @@ namespace SpellboundVR.Presentation
                 SetActive(a.Blind, (o.Flags & PlayerFlags.Blind) != 0 && !dead);
             }
 
+            if (showAllAvatars) return; // 내 몸 쉴드 · 결계는 아바타가 이미 보여 준다
             ref var me = ref s.Players[(int)local];
             Vector3 feet = _arena.ToWorld(_arena.PlayerPosition(local, me.WorldColumn), PlatformHeight);
             bool alive = me.Alive != 0;

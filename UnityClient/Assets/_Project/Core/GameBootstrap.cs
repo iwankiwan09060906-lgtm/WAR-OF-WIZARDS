@@ -246,26 +246,33 @@ namespace SpellboundVR.Core
 
         [Tooltip("시연: 헤드셋을 이만큼(초) 벗어 두었다가 다시 쓰면 다음 사람으로 보고 연습부터 다시 (0 = 안 함)")]
         public float demoNewVisitorSeconds = 20f;
-        private float _pausedAt = -1f;
+        private System.DateTime? _awaySince;
 
-        /// <summary>Quest 는 헤드셋을 벗으면 앱이 멈춘다 — 오래 벗었다 다시 쓰면 새 관람객이니 서버 자리를 AI 에게 돌려주고 연습부터</summary>
-        private void OnApplicationPause(bool paused)
+        /// <summary>Quest 는 헤드셋을 벗거나 홈으로 나가면 앱이 멈추거나(pause) 포커스를 잃는다 — 오래 떠났다 돌아오면 새 관람객이니 서버 자리를 AI 에게 돌려주고 연습부터</summary>
+        private void OnApplicationPause(bool paused) => HandleAway(paused);
+
+        private void OnApplicationFocus(bool focused) => HandleAway(!focused);
+
+        private void HandleAway(bool away)
         {
-            if (!demoMode || _resolvedMode == BootMode.DedicatedServer || demoNewVisitorSeconds <= 0f) return;
-            if (paused)
+            if (!demoMode || _resolvedMode == BootMode.DedicatedServer || demoNewVisitorSeconds <= 0f || Application.isEditor) return;
+            if (away)
             {
-                _pausedAt = Time.realtimeSinceStartup;
+                if (_awaySince == null) _awaySince = System.DateTime.UtcNow;
                 return;
             }
-            if (_pausedAt < 0f || Time.realtimeSinceStartup - _pausedAt < demoNewVisitorSeconds) return;
-            _pausedAt = -1f;
-            Debug.Log("[GameBootstrap] 시연: 오래 벗었다 다시 씀 → 새 관람객, 연습부터");
+            if (_awaySince == null) return;
+            // 벽시계로 잰다 — Time.realtimeSinceStartup 은 기기가 잠든 동안 멈춰서, 오래 벗어 두어도 짧게 나와 멈춘 경기 화면으로 돌아왔다
+            double seconds = (System.DateTime.UtcNow - _awaySince.Value).TotalSeconds;
+            _awaySince = null;
+            if (seconds < demoNewVisitorSeconds) return;
+            Debug.Log($"[GameBootstrap] 시연: {seconds:0}초 떠났다 돌아옴 → 새 관람객, 연습부터");
             if (_clientConnector != null) _clientConnector.Leave();
             RestartDemo();
         }
 
         [Tooltip("시연: 게임 오버 화면을 보여 주는 시간 (초) — 끝나면 연습부터 다시 (다음 관람객)")]
-        public float demoGameOverSeconds = 8f;
+        public float demoGameOverSeconds = 3f;
 
         /// <summary>시연 처음부터 (연습 → 경기)</summary>
         private void RestartDemo()
@@ -405,7 +412,8 @@ namespace SpellboundVR.Core
             {
                 case InputMode.HandTracking: return leftHandAnchor != null && rightHandAnchor != null;
                 case InputMode.Keyboard: return false;
-                default: return UnityEngine.XR.XRSettings.isDeviceActive && leftHandAnchor != null && rightHandAnchor != null;
+                // Quest(Android)는 언제나 손 — 헤드셋을 벗었다 다시 쓴 직후엔 XR 이 잠깐 꺼진 걸로 보여 키보드 입력으로 떨어졌다 (연습에서 그리기가 안 됨)
+                default: return (Application.platform == RuntimePlatform.Android || UnityEngine.XR.XRSettings.isDeviceActive) && leftHandAnchor != null && rightHandAnchor != null;
             }
         }
 
@@ -678,7 +686,11 @@ namespace SpellboundVR.Core
             Application.runInBackground = true;
             SpellboundVR.Audio.SoundManager.Enabled = false; // 서버 창은 소리를 내지 않는다
 
-            if (demoMode) serverArenaMode = ArenaMode.Polygon; // 시연 서버는 6인 고정 다인전
+            if (demoMode)
+            {
+                serverArenaMode = ArenaMode.Polygon; // 시연 서버는 6인 고정 다인전
+                Screen.SetResolution(Display.main.systemWidth, Display.main.systemHeight, FullScreenMode.FullScreenWindow); // 관전 화면은 전체화면 (bat 의 창 모드 인자 · 저장된 해상도 무시)
+            }
             SetArenaMode(serverArenaMode);
             _serverSim = CreateSimulation(localMode: false);
             _serverSim.ConfigureBotManualKeys(!demoMode, false); // 시연 서버의 숫자 키는 옵저버 시점 전환
@@ -692,6 +704,7 @@ namespace SpellboundVR.Core
             else presentation.AddComponent<DuelArenaView>().Initialize(_session);
             presentation.AddComponent<VFXPlayer>().Initialize(_session, vfxCatalog);
             var serverArena = presentation.AddComponent<ArenaStateView>();
+            serverArena.showAllAvatars = true; // 서버 창은 Home(1번) 시점 기준이라 1번 AI 아바타가 숨겨졌다
             serverArena.Initialize(_session, vfxCatalog, head);
             presentation.AddComponent<CastPreviewView>().Initialize(_session, serverArena, head, vfxCatalog);
             presentation.AddComponent<DamageTextView>().Initialize(_session, head);

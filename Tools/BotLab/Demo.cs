@@ -216,7 +216,7 @@ internal static class Demo
         Console.WriteLine($"  대기열: 19번 시전 → {tried.Count}종, 칸 스킬 변경 알림 {changes}번");
 
         // 사람이 쓰러지면: 클라이언트는 게임 오버, 자리는 AI 가 풀피로 잇는다 (6자리 유지)
-        Check(sim.GetPlayer(Team.Home).MaxHp >= 6000f, $"시연 체력 = 다인전의 2배 ({sim.GetPlayer(Team.Home).MaxHp})");
+        Check(Mathf.Approximately(sim.GetPlayer(Team.Home).MaxHp, 4000f), $"시연 체력 = 4000 ({sim.GetPlayer(Team.Home).MaxHp})");
         bool over = false;
         events.OnLocalGameOver += () => over = true;
         sim.DebugSetHp(Team.Home, 0f);

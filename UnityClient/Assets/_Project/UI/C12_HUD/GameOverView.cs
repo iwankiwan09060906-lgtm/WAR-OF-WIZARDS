@@ -1,4 +1,4 @@
-// 시연 게임 오버 — 내가 쓰러지면 눈앞에 "GAME OVER" 판을 띄우고 몇 초 뒤 onFinished (GameBootstrap 이 연습부터 다시 = 다음 관람객).
+// 시연 게임 오버 — 내가 쓰러지면 시야 전체를 검게 덮고 "GAME OVER" 를 띄운 뒤 몇 초 뒤 onFinished (GameBootstrap 이 연습부터 다시 = 다음 관람객).
 //   내 자리는 서버가 이미 AI 에게 넘겼다 (MatchSimulation.TickDemoRespawn).
 
 using System;
@@ -9,8 +9,10 @@ namespace SpellboundVR.UI
 {
     public sealed class GameOverView : MonoBehaviour
     {
-        public float distance = 1.2f;
-        public float width = 0.9f;
+        [Tooltip("눈앞 거리 (m) — 스킬창 · 전장보다 가깝게")]
+        public float distance = 0.6f;
+        [Tooltip("글씨 판 폭 (m)")]
+        public float width = 0.45f;
 
         private Transform _head;
         private Text _countdown;
@@ -24,16 +26,22 @@ namespace SpellboundVR.UI
             _endAt = Time.time + seconds;
 
             var go = new GameObject("GameOver", typeof(RectTransform));
-            go.transform.SetParent(transform, false);
+            go.transform.SetParent(head, false); // 머리에 붙여 고개를 돌려도 검은 화면
             go.AddComponent<Canvas>().renderMode = RenderMode.WorldSpace;
             go.AddComponent<CanvasScaler>().dynamicPixelsPerUnit = 1.5f;
             var rt = (RectTransform)go.transform;
             rt.sizeDelta = new Vector2(1000f, 460f);
             rt.localScale = Vector3.one * (width / 1000f);
-            Vector3 fwd = Vector3.ProjectOnPlane(head.forward, Vector3.up);
-            if (fwd.sqrMagnitude < 1e-4f) fwd = Vector3.forward;
-            rt.position = head.position + fwd.normalized * distance;
-            rt.rotation = Quaternion.LookRotation(fwd.normalized, Vector3.up);
+            rt.localPosition = new Vector3(0f, 0f, distance);
+            rt.localRotation = Quaternion.identity;
+
+            // 시야 전체를 덮는 검은 판 (0.6m 앞 약 3.6m — Quest 시야각보다 넓다)
+            var black = UiKit.Panel(rt, Color.black, null, "Black");
+            black.raycastTarget = false;
+            var brt = black.rectTransform;
+            brt.anchorMin = brt.anchorMax = brt.pivot = new Vector2(0.5f, 0.5f);
+            brt.anchoredPosition = Vector2.zero;
+            brt.sizeDelta = new Vector2(8000f, 8000f);
 
             var bg = UiKit.Panel(rt, Color.white, UiTheme.Cut(new Color(10 / 255f, 2 / 255f, 8 / 255f, 0.92f), UiTheme.Alpha(UiTheme.Enemy, 0.8f), 18, 3), "Bg");
             bg.type = Image.Type.Sliced;
