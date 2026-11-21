@@ -99,6 +99,8 @@ namespace SpellboundVR.UI
         private int _lastShieldSecond = -1;
         private float _matchTime;
         private int _stage;
+        private RectTransform _canvasRt;
+        private readonly Vector2[] _slotPos = new Vector2[DeckData.SlotCount];
 
         public void Initialize(ClientSession session, Transform parent)
         {
@@ -170,6 +172,7 @@ namespace SpellboundVR.UI
             scaler.dynamicPixelsPerUnit = 1.5f;
             var rt = (RectTransform)root.transform;
             rt.sizeDelta = new Vector2(CanvasWidth, CanvasHeight);
+            _canvasRt = rt;
 
             // 바탕: 반투명 짙은 보라 판 + 보라 테두리 + 모서리 ㄱ자
             Sliced(rt, "Bg", Vector2.zero, new Vector2(CanvasWidth, CanvasHeight),
@@ -198,8 +201,8 @@ namespace SpellboundVR.UI
             {
                 int row = i / 4;
                 int col = i % 4;
-                var pos = new Vector2(-1.5f * (cellW + gap) + col * (cellW + gap), 58f - row * (cellH + gap));
-                BuildSlot(rt, i, pos, new Vector2(cellW, cellH));
+                _slotPos[i] = new Vector2(-1.5f * (cellW + gap) + col * (cellW + gap), 58f - row * (cellH + gap));
+                BuildSlot(rt, i, _slotPos[i], new Vector2(cellW, cellH));
             }
 
             _message = Label(rt, "Message", new Vector2(0f, -150f), new Vector2(960f, 40f), 24, TextAnchor.MiddleCenter, UiTheme.Orange, true);
@@ -208,7 +211,7 @@ namespace SpellboundVR.UI
             Glow(_afk, UiTheme.Alpha(Color.black, 0.8f));
             var hint = Label(rt, "Hint", new Vector2(Ffa ? 100f : 0f, -280f), new Vector2(Ffa ? 760f : 960f, 30f), Ffa ? 14 : 16, TextAnchor.MiddleCenter, UiTheme.Alpha(UiTheme.PurpleLight, 0.6f), false);
             string moveHand = MetaState.Settings.MoveHandName;
-            hint.text = Polygon ? "가리키는 쪽 상대를 공격 (소환은 양옆 이웃)   ·   " + moveHand + " 휘두르기로 피하기   ·   왼손 메뉴 제스처 = 경기 메뉴"
+            hint.text = Polygon ? "가리키는 쪽 상대를 공격 · 소환   ·   카드를 보고 핀치 = 그리는 법   ·   " + moveHand + " 휘두르기로 피하기   ·   왼손 메뉴 제스처 = 경기 메뉴"
                       : Ffa ? "왼쪽 · 가운데 · 오른쪽을 가리키면 그쪽 상대를 공격   ·   " + moveHand + " 휘두르기로 피하기   ·   왼손 메뉴 제스처 = 경기 메뉴"
                             : "핀치 룬 › 주먹 › 검지 3초   ·   손바닥 취소   ·   " + moveHand + " 휘두르기 이동   ·   왼손 메뉴 제스처 = 경기 메뉴";
 
@@ -496,6 +499,59 @@ namespace SpellboundVR.UI
                 _posCells[i].color = on ? UiTheme.Cyan : UiTheme.Alpha(UiTheme.Purple, 0.6f);
                 _posLabels[i].color = on ? Color.white : Dim;
             }
+        }
+
+        /// <summary>레이(PC 마우스)가 맞는 스킬 카드 (빈 슬롯 제외) — SkillGuideView</summary>
+        public bool TryGetSlotOnRay(Ray ray, out int slot, out int spellId)
+        {
+            slot = -1;
+            spellId = 0;
+            for (int i = 0; i < _slots.Length; i++)
+            {
+                ref var v = ref _slots[i];
+                if (v.Card == null || v.Empty) continue;
+                var rt = v.Card.rectTransform;
+                if (!new Plane(rt.forward, rt.position).Raycast(ray, out float d)) continue;
+                Vector2 local = rt.InverseTransformPoint(ray.GetPoint(d));
+                Vector2 half = rt.rect.size * 0.5f;
+                if (Mathf.Abs(local.x) > half.x || Mathf.Abs(local.y) > half.y) continue;
+                slot = i;
+                spellId = _session.LocalDeck[i];
+                return true;
+            }
+            return false;
+        }
+
+        /// <summary>스킬창 판 (SkillGuideView 가 포인터를 그 위에 그린다)</summary>
+        public RectTransform CanvasRect => _canvasRt;
+
+        /// <summary>레이가 스킬창 판에 닿으면 그 점(캔버스 로컬)과 가장 가까운 카드 (빈 슬롯 제외). 판 밖이면 false</summary>
+        public bool TryPointAtSlots(Ray ray, out Vector2 local, out int slot, out int spellId)
+        {
+            local = default;
+            slot = -1;
+            spellId = 0;
+            if (_canvasRt == null || !new Plane(_canvasRt.forward, _canvasRt.position).Raycast(ray, out float d)) return false;
+            local = _canvasRt.InverseTransformPoint(ray.GetPoint(d));
+            if (Mathf.Abs(local.x) > CanvasWidth * 0.5f || Mathf.Abs(local.y) > CanvasHeight * 0.5f) return false;
+            float best = float.MaxValue;
+            for (int i = 0; i < _slots.Length; i++)
+            {
+                if (_slots[i].Card == null || _slots[i].Empty) continue;
+                float dist = (local - _slotPos[i]).sqrMagnitude;
+                if (dist >= best) continue;
+                best = dist;
+                slot = i;
+                spellId = _session.LocalDeck[i];
+            }
+            return slot >= 0;
+        }
+
+        /// <summary>포인터가 가리키는 카드를 살짝 키운다 (-1 = 없음)</summary>
+        public void HighlightSlot(int slot)
+        {
+            for (int i = 0; i < _slots.Length; i++)
+                if (_slots[i].Card != null) _slots[i].Card.rectTransform.localScale = Vector3.one * (i == slot ? 1.08f : 1f);
         }
 
         private void HandleSlotState(int slot, SlotState state)

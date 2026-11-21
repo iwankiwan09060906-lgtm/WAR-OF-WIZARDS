@@ -22,7 +22,15 @@ namespace SpellboundVR.Spells.Executor
         public void Execute(in SpellCastRequest request, Team casterTeam)
         {
             int lane = _world.Arena.ResolveLane(casterTeam, request.TargetColumn);
-            Vector2 pos = _world.Arena.SpawnPosition(casterTeam, lane);
+            var arena = _world.Arena;
+            Vector2 pos = arena.SpawnPosition(casterTeam, lane);
+            if (arena.FilledPolygon)
+            {
+                // 시연 전장: 조준한 깊이에 내린다 (조준선의 절반까지, 발판 앞보다 가깝게는 안 된다)
+                var frame = arena.GetLane(casterTeam, lane);
+                float along = Mathf.Clamp(request.TargetDepth * frame.Length, arena.SpawnDepth, frame.Length * arena.PlacementMaxDepth);
+                pos = frame.Point(along);
+            }
             float hp = SpellDamage.HpFocus(_def, _world.CastFocus);
             if (_def.FromOffMap)
             {

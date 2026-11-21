@@ -5,6 +5,8 @@
 //   · 2번 · 4번 발판을 1번 발판을 복제해 세우고, 3번 발판은 개인전 거리로 옮긴다 (TeamArt 가 보는 사람 기준 색을 입힌다)
 //   · 발판 번호판 · 마나 폭풍이 시작되면 레인 테두리가 보라색으로 빛난다
 //   · 장식: 레인 사이 빈 삼각형마다 낮은 폐허 섬, 마름모 바깥마다 성채 섬, 심연에 떠다니는 바위 (충돌체 없음 · 레인 밖)
+// 시연 전장(ArenaGeometry.FilledPolygon): 정N각형 안을 통째로 돌 바닥으로 채우고(발판까지 덮는 깎은 다각형 섬), 모든 두 자리 사이가 레인
+//   (대각선도 소환 · 웨이브 길) — 레인 선은 평소엔 숨기고 그 레인을 조준하는 동안만 보인다. 가운데 심연 · 룬 핵 · 레인 벽 · 바닥 문양은 없다.
 // 다인전(정N각형)도 이 컴포넌트가 그린다: 변 레인 = 돌다리(벽 · 등불), 대각선 = 가운데 심연을 가로지르는 빛줄기(직접 공격 길),
 //   (대각선 빛줄기는 평소엔 숨기고, 내가 그 상대를 조준하는 동안만 보인다), 가운데 아래에 떠 있는 룬 핵, 변 바깥마다 성채 섬, 자리마다 1번 발판 복제. 탈락으로 링이 바뀌면 통째로 다시 짓는다
 //   (클라이언트는 스냅샷으로 링을 맞춘다 — 그래서 다른 표시보다 먼저 돈다). 2명이 남으면 1:1 처럼 넓은 다리 하나에 레인 3개.
@@ -51,6 +53,8 @@ namespace SpellboundVR.Presentation
             public int Lane;
             public float Half;
             public bool Slab, Walls;
+            /// <summary>바닥 문양을 놓는 레인 (시연 전장은 바깥 변만)</summary>
+            public bool Glyphs;
         }
 
         /// <summary>장식 섬을 놓을 바깥쪽 한 곳 — 두 발판 사이 바깥 (inner = 4인 개인전 안쪽 삼각형 폐허)</summary>
@@ -167,7 +171,7 @@ namespace SpellboundVR.Presentation
             if (!_arena.IsPolygon)
             {
                 for (int t = 0; t < _arena.TeamCount; t++) _seats.Add((Team)t);
-                for (int lane = 0; lane < _arena.LaneCount; lane++) _lanes.Add(new DrawnLane { Lane = lane, Half = half, Slab = true, Walls = true });
+                for (int lane = 0; lane < _arena.LaneCount; lane++) _lanes.Add(new DrawnLane { Lane = lane, Half = half, Slab = true, Walls = true, Glyphs = true });
                 return;
             }
             int n = _arena.RingCount;
@@ -177,13 +181,23 @@ namespace SpellboundVR.Presentation
                 for (int c = 0; c < TeamUtil.ColumnCount; c++)
                 {
                     bool middle = c == 1;
-                    _lanes.Add(new DrawnLane { Lane = ArenaGeometry.PolygonDuelLaneBase + c, Half = middle ? _arena.BandHalfWidth : half, Slab = middle, Walls = middle });
+                    _lanes.Add(new DrawnLane { Lane = ArenaGeometry.PolygonDuelLaneBase + c, Half = middle ? _arena.BandHalfWidth : half, Slab = middle, Walls = middle, Glyphs = true });
                 }
+                return;
+            }
+            if (_arena.FilledPolygon)
+            {
+                // 바닥은 BuildFilledFloor 가 통째로 — 레인은 테두리만 (바깥 변 + 대각선 모두)
+                for (int i = 0; i < n; i++)
+                    for (int j = i + 1; j < n; j++)
+                    {
+                        _lanes.Add(new DrawnLane { Lane = _arena.LaneBetween(_arena.RingTeam(i), _arena.RingTeam(j)), Half = half });
+                    }
                 return;
             }
             for (int i = 0; i < n; i++)
             {
-                _lanes.Add(new DrawnLane { Lane = _arena.LaneBetween(_arena.RingTeam(i), _arena.RingTeam(i + 1)), Half = half, Slab = true, Walls = true });
+                _lanes.Add(new DrawnLane { Lane = _arena.LaneBetween(_arena.RingTeam(i), _arena.RingTeam(i + 1)), Half = half, Slab = true, Walls = true, Glyphs = true });
                 for (int j = i + 2; j < n; j++)
                     if (!(i == 0 && j == n - 1)) _chords.Add(_arena.LaneBetween(_arena.RingTeam(i), _arena.RingTeam(j)));
             }
@@ -218,6 +232,11 @@ namespace SpellboundVR.Presentation
         private void BuildGround()
         {
             float spacing = _arena.ColumnSpacing;
+            if (_arena.FilledPolygon && !_arena.PolygonDuelStage)
+            {
+                BuildFilledFloor(spacing * 3f + 3f, _arena.NexusDepth + spacing + 4f);
+                return;
+            }
             foreach (var team in _seats)
             {
                 Vector2 fwd = _arena.SeatForward(team);
@@ -234,6 +253,86 @@ namespace SpellboundVR.Presentation
             mark.transform.SetParent(_content, false);
             mark.transform.position = _arena.ToWorld(_arena.Center, 0.03f);
             mark.transform.localScale = new Vector3(spacing * 1.6f, 0.01f, spacing * 1.6f);
+        }
+
+        /// <summary>
+        /// 시연 전장: 자리마다 발판 판(폭 seatWidth · 길이 seatLength, 일반 다인전 발판과 같은 크기)의 바깥 두 모서리를 꼭짓점으로 하는
+        /// 깎은 다각형 하나로 정N각형 안을 채운다 (모든 꼭짓점이 한 원 위라 볼록). 윗면 = 지면(0), 옆면 = 아래로 좁아지는 절벽
+        /// </summary>
+        private void BuildFilledFloor(float seatWidth, float seatLength)
+        {
+            Vector2 c = _arena.Center;
+            var corners = new List<Vector2>(_seats.Count * 2);
+            float back = seatLength * 0.5f - _arena.NexusDepth * 0.5f; // 발판 판의 뒤 끝 (BasePosition 뒤쪽 거리)
+            foreach (var team in _seats)
+            {
+                Vector2 b = _arena.BasePosition(team), f = _arena.SeatForward(team), r = _arena.SeatRight(team);
+                corners.Add(b - f * back - r * seatWidth * 0.5f - c);
+                corners.Add(b - f * back + r * seatWidth * 0.5f - c);
+            }
+            corners.Sort((x, y) => Mathf.Atan2(x.y, x.x).CompareTo(Mathf.Atan2(y.y, y.x)));
+            float radius = 0f;
+            foreach (var p in corners) radius = Mathf.Max(radius, p.magnitude);
+            // 장식 · 떠다니는 바위가 바닥을 뚫지 않게 막는 판 (외접 정사각형)
+            _slabs.Add(new Slab { Center = c, Dir = Vector2.up, HalfWidth = radius, HalfLength = radius });
+
+            var go = new GameObject("FilledFloor", typeof(MeshFilter), typeof(MeshRenderer));
+            go.transform.SetParent(_content, false);
+            go.transform.SetPositionAndRotation(_arena.ToWorld(c), Quaternion.LookRotation(_arena.ToWorldDirection(Vector2.up), Vector3.up)); // 로컬 x = u, z = v
+            var mesh = FilledMesh(corners, radius);
+            _meshes.Add(mesh);
+            go.GetComponent<MeshFilter>().sharedMesh = mesh;
+            var renderer = go.GetComponent<MeshRenderer>();
+            renderer.sharedMaterials = new[] { _rock, _stone };
+            renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        }
+
+        /// <summary>볼록 다각형 윗면(서브메시 1, 가운데에서 부채꼴) + 아래로 좁아지는 옆면(서브메시 0) — CliffMesh 와 같은 재질 · UV 규칙</summary>
+        private static Mesh FilledMesh(List<Vector2> corners, float radius)
+        {
+            int n = corners.Count;
+            float shrink = Mathf.Max(0.1f, (radius - CliffInset) / Mathf.Max(0.01f, radius));
+            var verts = new List<Vector3>(n * 5 + 1);
+            var uvs = new List<Vector2>(n * 5 + 1);
+            var sides = new List<int>(n * 6);
+            var cap = new List<int>(n * 3);
+            verts.Add(Vector3.zero);
+            uvs.Add(Vector2.zero);
+            for (int i = 0; i < n; i++)
+            {
+                verts.Add(new Vector3(corners[i].x, 0f, corners[i].y));
+                uvs.Add(corners[i] / UvMeters);
+            }
+            for (int i = 0; i < n; i++)
+            {
+                int a = 1 + i, b = 1 + (i + 1) % n;
+                if (Vector3.Cross(verts[a] - verts[0], verts[b] - verts[0]).y > 0f) cap.AddRange(new[] { 0, a, b }); // 위를 향하게
+                else cap.AddRange(new[] { 0, b, a });
+            }
+            for (int i = 0; i < n; i++)
+            {
+                Vector3 t0 = verts[1 + i], t1 = verts[1 + (i + 1) % n];
+                Vector3 b0 = new Vector3(t0.x * shrink, -CliffDepth, t0.z * shrink), b1 = new Vector3(t1.x * shrink, -CliffDepth, t1.z * shrink);
+                int k = verts.Count;
+                float run = Vector3.Distance(t0, t1) / UvMeters;
+                verts.Add(t0); verts.Add(t1); verts.Add(b1); verts.Add(b0);
+                uvs.Add(new Vector2(0f, 0f)); uvs.Add(new Vector2(run, 0f));
+                uvs.Add(new Vector2(run, -CliffDepth / UvMeters)); uvs.Add(new Vector2(0f, -CliffDepth / UvMeters));
+                Vector3 outward = (t0 + t1) * 0.5f;
+                Vector3 normal = Vector3.Cross(t1 - t0, b0 - t0);
+                if (Vector3.Dot(normal, outward) > 0f) sides.AddRange(new[] { k, k + 1, k + 2, k, k + 2, k + 3 });
+                else sides.AddRange(new[] { k, k + 2, k + 1, k, k + 3, k + 2 });
+            }
+            var mesh = new Mesh { name = "FilledPolygon" };
+            mesh.SetVertices(verts);
+            mesh.SetUVs(0, uvs);
+            mesh.subMeshCount = 2;
+            mesh.SetTriangles(sides, 0);
+            mesh.SetTriangles(cap, 1);
+            mesh.RecalculateNormals();
+            mesh.RecalculateTangents();
+            mesh.RecalculateBounds();
+            return mesh;
         }
 
         /// <summary>다인전: 정N각형 가운데 아래에 떠 있는 룬 핵 — 대각선 빛줄기가 그 위를 지나간다 (지면 아래라 시야를 막지 않는다)</summary>
@@ -265,8 +364,16 @@ namespace SpellboundVR.Presentation
             float half = _arena.LaneHalfWidth;
             _laneSlabs.Add(d.Slab ? _slabs.Count : -1);
             if (d.Slab) AddSlab("Lane" + d.Lane, frame.Point(frame.Length * 0.5f), frame.Dir, d.Half * 2f + 3f, frame.Length);
-            Strip("Lane" + d.Lane + "_L", frame.Point(frame.Length * 0.5f, -half), rotation, frame.Length);
-            Strip("Lane" + d.Lane + "_R", frame.Point(frame.Length * 0.5f, half), rotation, frame.Length);
+            var left = Strip("Lane" + d.Lane + "_L", frame.Point(frame.Length * 0.5f, -half), rotation, frame.Length);
+            var right = Strip("Lane" + d.Lane + "_R", frame.Point(frame.Length * 0.5f, half), rotation, frame.Length);
+            if (!_arena.FilledPolygon || _arena.PolygonDuelStage) return;
+            // 시연 전장: 레인 선은 평소엔 숨기고, 그 레인을 조준하는 동안만 보인다 (ShowAimedChord)
+            var group = new GameObject("Lane" + d.Lane).transform;
+            group.SetParent(_content, false);
+            left.SetParent(group, true);
+            right.SetParent(group, true);
+            group.gameObject.SetActive(false);
+            _chordBeams[d.Lane] = group.gameObject;
         }
 
         /// <summary>다인전 대각선 — 이웃이 아닌 두 사람을 잇는 직접 공격 길. 바닥 없이 심연 위를 지나는 옅은 빛줄기 (조준하는 동안만 보인다)</summary>
@@ -350,13 +457,14 @@ namespace SpellboundVR.Presentation
             return mesh;
         }
 
-        private void Strip(string name, Vector2 at, Quaternion rotation, float length)
+        private Transform Strip(string name, Vector2 at, Quaternion rotation, float length)
         {
             var strip = FallbackVisuals.Primitive(PrimitiveType.Cube, name, FallbackVisuals.Transparent(new Color(Edge.r, Edge.g, Edge.b, 0.75f)));
             strip.transform.SetParent(_content, false);
             strip.transform.SetPositionAndRotation(_arena.ToWorld(at, 0.02f), rotation);
             strip.transform.localScale = new Vector3(0.14f, 0.02f, length);
             _edges.Add(strip.GetComponent<Renderer>());
+            return strip.transform;
         }
 
         /// <summary>레인 가장자리 지점이 다른 덩어리(교차로 · 발판) 위인가 — 자기 레인 판은 빼고 본다 (가장자리는 늘 자기 판 위다)</summary>
@@ -581,6 +689,7 @@ namespace SpellboundVR.Presentation
             int n = 0;
             foreach (var d in _lanes)
             {
+                if (!d.Glyphs) continue;
                 var frame = _arena.GetLane(Team.Home, d.Lane);
                 float yaw = Mathf.Atan2(frame.Dir.x, frame.Dir.y) * Mathf.Rad2Deg;
                 for (float along = GlyphStep; along < frame.Length - GlyphStep * 0.5f; along += GlyphStep, n++)
@@ -666,7 +775,8 @@ namespace SpellboundVR.Presentation
                 {
                     var team = (Team)t;
                     GameObject go;
-                    if (source != null)
+                    if (_arena.FilledPolygon) go = CleanPad(team); // 시연: 채운 바닥 위에 씬 발판 모델 대신 낮은 돌 원판 + 팀 색 테두리
+                    else if (source != null)
                     {
                         go = Instantiate(source, _root);
                         foreach (var art in go.GetComponentsInChildren<TeamArt>(true)) art.team = team;
@@ -685,6 +795,25 @@ namespace SpellboundVR.Presentation
                 if (away != null) away.SetActive(false);
             }
         }
+
+        /// <summary>시연 전장의 이동 칸 하나 — 바닥에서 살짝 솟은 돌 원판, 둘레에 팀 색 테두리 (피벗 = 바닥 가운데)</summary>
+        private GameObject CleanPad(Team team)
+        {
+            float d = _arena.ColumnSpacing * 0.8f;
+            var pad = new GameObject("Pad");
+            pad.transform.SetParent(_root, false);
+            var rim = FallbackVisuals.Primitive(PrimitiveType.Cylinder, "Rim", FallbackVisuals.Transparent(UiColor(FallbackVisuals.TeamColor(team), 0.6f)));
+            rim.transform.SetParent(pad.transform, false);
+            rim.transform.localPosition = new Vector3(0f, 0.01f, 0f);
+            rim.transform.localScale = new Vector3(d * 1.08f, 0.01f, d * 1.08f);
+            var disc = FallbackVisuals.Primitive(PrimitiveType.Cylinder, "Disc", _stone);
+            disc.transform.SetParent(pad.transform, false);
+            disc.transform.localPosition = new Vector3(0f, 0.04f, 0f);
+            disc.transform.localScale = new Vector3(d, 0.04f, d);
+            return pad;
+        }
+
+        private static Color UiColor(Color c, float a) => new Color(c.r, c.g, c.b, a);
 
         /// <summary>다인전: 링에 있는 자리의 발판만 그 자리 세 칸에 놓는다</summary>
         private void PlacePolygonPlatforms()

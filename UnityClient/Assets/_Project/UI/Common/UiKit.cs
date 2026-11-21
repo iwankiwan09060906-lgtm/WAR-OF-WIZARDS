@@ -601,6 +601,31 @@ namespace SpellboundVR.UI
             return rt;
         }
 
+        /// <summary>따라 그리기용 룬 실루엣 (굵고 흐린 흰 획 + 획 시작 초록 점, 여러 획이면 점 옆 번호). 디자인이 없으면 RuneGuide</summary>
+        public static RectTransform RuneSilhouette(Transform parent, int spellId, string code, float size)
+        {
+            var sprite = UiTheme.RuneSilhouette(spellId, out var starts);
+            if (sprite == null) return RuneGuide(parent, spellId, code, size);
+            var rt = Node(parent, "Silhouette_" + code);
+            Size(rt, size, size);
+            var art = Panel(rt, Color.white, sprite, "Art");
+            art.raycastTarget = false;
+            art.preserveAspect = true;
+            Stretch((RectTransform)art.transform);
+            if (starts != null && starts.Length > 1)
+                for (int i = 0; i < starts.Length; i++)
+                {
+                    var n = Label(rt, (i + 1).ToString(), Mathf.Max(12, (int)(size * 0.07f)), Color.white, true, TextAnchor.MiddleCenter);
+                    var nrt = n.rectTransform;
+                    nrt.anchorMin = nrt.anchorMax = nrt.pivot = new Vector2(0.5f, 0.5f);
+                    nrt.anchoredPosition = (starts[i] - new Vector2(0.5f, 0.5f)) * size + new Vector2(size * 0.06f, size * 0.06f); // 초록 점 오른쪽 위
+                    nrt.sizeDelta = new Vector2(size * 0.12f, size * 0.12f);
+                    n.raycastTarget = false;
+                    n.gameObject.AddComponent<Outline>().effectColor = new Color(0f, 0f, 0f, 0.9f);
+                }
+            return rt;
+        }
+
         /// <summary>룬 그리는 방법 (둥근 슬롯) — 초록 점에서 시작해 화살표 쪽으로, 여러 획이면 점 위 번호 순서. 디자인이 없으면 발동 마법진</summary>
         public static RectTransform RuneGuide(Transform parent, int spellId, string code, float size)
         {

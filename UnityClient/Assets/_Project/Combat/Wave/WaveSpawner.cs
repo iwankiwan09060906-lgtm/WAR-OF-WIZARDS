@@ -1,6 +1,7 @@
 // §15 미니언 웨이브 — 15초마다 각 진영 레인 3개에 Melee ×1 + Ranged ×1씩 (총 6), 3번째 웨이브마다 Brute ×1 (waveIndex % 3 == 0, 레인 순환)
 // 유닛은 스폰 시 열(레인)을 배정받는다. 상한 도달 시 그 진영 웨이브는 스킵(누적 금지).
 // 4인 개인전: 살아 있는 상대에게 가는 레인에만 나온다 (진영당 최대 3레인 — 1:1 과 같은 수).
+// 다인전(가운데를 채운 정N각형, ArenaGeometry.FilledPolygon): 살아 있는 상대 모두에게 레인마다 나온다.
 
 using SpellboundVR.Contracts;
 using UnityEngine;
@@ -48,7 +49,7 @@ namespace SpellboundVR.Combat
                 return;
             }
 
-            for (int c = 0; c < 3; c++)
+            for (int c = 0; c < sim.Arena.ColumnSlots; c++) // 다인전은 상대마다 열 (시연 전장은 모든 상대에게 레인)
             {
                 if (!sim.Arena.ColumnValid(team, (Contracts.Column)c)) continue; // 다인전 3명: 가운데 열은 없다
                 int lane = sim.Arena.IsDuel ? c : sim.Arena.ResolveLane(team, (Contracts.Column)c);

@@ -84,6 +84,12 @@ namespace SpellboundVR.Input
         public event Action<SpellCastRequest> OnCastRequested;
         public event Action<CastCancelReason> OnCancelled;
 
+        /// <summary>
+        /// 대기 중 핀치를 다른 곳이 먼저 쓴다 (true = 그리기 시작 안 함) — 스킬창 카드를 핀치로 눌러 룬 가이드 열기 (SkillGuideView)
+        /// </summary>
+        public Func<bool> PinchFilter;
+        private bool _pinchFiltered;
+
         public void Initialize(ClientSession session, ISpellInputSource input, EightSlotDeckManager deck)
         {
             Unsubscribe();
@@ -157,12 +163,23 @@ namespace SpellboundVR.Input
                 return;
             }
             if (State != CastState.Idle) return; // RuneReady 이후의 핀치는 무시
+            if (PinchFilter != null && PinchFilter())
+            {
+                _pinchFiltered = true;
+                return;
+            }
             SetState(CastState.Drawing);
             _session.Client?.ReportActivity(); // §10 활동 = 룬 드로잉 시작
         }
 
         private void HandlePinchEnded(Vector2[] stroke)
         {
+            if (_pinchFiltered)
+            {
+                _pinchFiltered = false;
+                _input.EndRune(); // 카드를 누른 핀치는 획이 아니다
+                return;
+            }
             if (State != CastState.Drawing) return;
             if (!_input.IsRightHandTracked)
             {

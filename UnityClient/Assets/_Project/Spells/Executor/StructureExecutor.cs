@@ -65,7 +65,8 @@ namespace SpellboundVR.Spells.Executor
             var frame = arena.GetLane(team, lane);
             float min = Spacing;                                   // 내 발판 바로 앞
             float max = Mathf.Max(min, frame.Length - arena.TowerDepth - Spacing); // 상대 타워 앞
-            float along = def.SummonKind == MinionKind.SummonHut
+            if (arena.FilledPolygon) max = Mathf.Max(min, frame.Length * arena.PlacementMaxDepth); // 시연 전장: 조준선의 절반까지
+            float along = def.SummonKind == MinionKind.SummonHut || arena.FilledPolygon
                 ? Mathf.Clamp(Mathf.Clamp01(request.TargetDepth) * frame.Length, min, max)
                 : frame.Along(world.GetPlacementPosition(team, lane));
             int replaced = world.CountTeamUnits(team, def.SummonKind, out int oldest) >= MaxCount(def.SummonKind) ? oldest : 0;

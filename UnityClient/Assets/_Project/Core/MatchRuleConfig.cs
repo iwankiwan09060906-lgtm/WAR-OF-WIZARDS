@@ -138,6 +138,8 @@ namespace SpellboundVR.Core
         {
             ApplyFfaRules();
             PlayerMaxHp *= PolygonPlayerHpScale;
+            // 채운 정N각형은 상대 모두에게 웨이브 — 6진영 × 상한이 유닛 풀(MatchSnapshot.MaxUnits 176) 안에 들게
+            MaxAliveUnitsPerTeam = Mathf.Min(MaxAliveUnitsPerTeam, 28);
         }
 
         public void ApplyFfaRules()

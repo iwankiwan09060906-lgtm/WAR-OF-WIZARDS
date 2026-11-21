@@ -191,6 +191,7 @@ namespace SpellboundVR.Core
         {
             _arenaMode = mode;
             arenaLayout.SetMode(mode);
+            arenaLayout.Geometry.FilledPolygon = mode == ArenaMode.Polygon; // 다인전: 가운데를 채운 정N각형 — 모든 상대에게 레인 (대각선도 소환 · 웨이브)
             _matchRules = rules;
             if (mode == ArenaMode.Duel) return;
             _matchRules = Instantiate(rules); // 에셋 원본을 바꾸지 않도록 사본 사용
@@ -460,6 +461,7 @@ namespace SpellboundVR.Core
             hud.localPosition += head.parent != null ? head.localPosition : Vector3.zero; // 시작 시 머리 높이 기준
             hud.Initialize(_session, head.parent != null ? head.parent : playerRig);
             gameObject.AddComponent<BattleCoach>().Initialize(_session, hud);
+            if (_arenaMode == ArenaMode.Polygon) gameObject.AddComponent<SkillGuideView>().Initialize(_session, input, cast, hud, head); // 카드 핀치 · 10초 쉬면 룬 실루엣 가이드
             gameObject.AddComponent<SpellboundVR.Audio.BattleAudio>().Initialize(_session, input, cast, platform, head);
             if (input is MediaPipeHandInput tracker)
             {

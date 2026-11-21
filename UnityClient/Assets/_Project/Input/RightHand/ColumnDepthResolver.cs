@@ -58,7 +58,14 @@ namespace SpellboundVR.Input
             result.WorldColumn = lane;
             result.LocalColumn = local;
 
-            if (targeting == SpellTargeting.Area)
+            if (placement && arena.FilledPolygon)
+            {
+                // 시연 전장: 소환수 · 설치물은 조준선 위 가리킨 곳 (조준선의 절반까지)
+                depth = Mathf.Clamp(depth, MinAreaDepth, arena.PlacementMaxDepth);
+                result.Depth = depth;
+                result.MarkerPosition = arena.ToWorld(frame.Point(depth * frame.Length), 0.05f);
+            }
+            else if (targeting == SpellTargeting.Area)
             {
                 depth = Mathf.Clamp(depth, MinAreaDepth, Mathf.Clamp01(maxDepth));
                 result.Depth = depth;
